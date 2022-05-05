@@ -6,17 +6,22 @@
   
   <title>InterceptInApp | Joseph&#39;s Work Note</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="在手機上如何攔截到 http RequestMotivation  在開發 App 的過程中，最常會遇到的幾個問題是   在 Native App 中 鑲嵌的 Api Request 是否有送出到 Server Side 在 Native App 中 發送 Request 的格式以及原始資料是什麼?(假定你想要觀看別人的 App 運作)  PreRequires (https:&#x2F;&#x2F;www.char">
+  <meta name="description" content="在手機上如何攔截到 http Request 在開發 App 的過程中，最常會遇到的幾個問題是   在 Native App 中 鑲嵌的 Api Request 是否有送出到 Server Side 在 Native App 中 發送 Request 的格式以及原始資料是什麼?(假定你想要觀看別人的 App 運作)  PreRequires Charles 攔截 Http Request Wifi">
 <meta property="og:type" content="article">
 <meta property="og:title" content="InterceptInApp">
 <meta property="og:url" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/index.html">
 <meta property="og:site_name" content="Joseph&#39;s Work Note">
-<meta property="og:description" content="在手機上如何攔截到 http RequestMotivation  在開發 App 的過程中，最常會遇到的幾個問題是   在 Native App 中 鑲嵌的 Api Request 是否有送出到 Server Side 在 Native App 中 發送 Request 的格式以及原始資料是什麼?(假定你想要觀看別人的 App 運作)  PreRequires (https:&#x2F;&#x2F;www.char">
+<meta property="og:description" content="在手機上如何攔截到 http Request 在開發 App 的過程中，最常會遇到的幾個問題是   在 Native App 中 鑲嵌的 Api Request 是否有送出到 Server Side 在 Native App 中 發送 Request 的格式以及原始資料是什麼?(假定你想要觀看別人的 App 運作)  PreRequires Charles 攔截 Http Request Wifi">
 <meta property="og:locale" content="zh_TW">
 <meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/01.png">
 <meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/02.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/03.jpg">
+<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/04.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/05.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/06.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/07.png">
 <meta property="article:published_time" content="2022-05-05T14:21:35.000Z">
-<meta property="article:modified_time" content="2022-05-05T14:58:28.148Z">
+<meta property="article:modified_time" content="2022-05-05T16:14:40.827Z">
 <meta property="article:author" content="Joseph M Tsai">
 <meta property="article:tag" content="Intecept Request">
 <meta property="article:tag" content="App Debug">
@@ -101,8 +106,7 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <h1 id="在手機上如何攔截到-http-Request"><a href="#在手機上如何攔截到-http-Request" class="headerlink" title="在手機上如何攔截到 http Request"></a>在手機上如何攔截到 http Request</h1><p>Motivation</p>
-<blockquote>
+        <h1 id="在手機上如何攔截到-http-Request"><a href="#在手機上如何攔截到-http-Request" class="headerlink" title="在手機上如何攔截到 http Request"></a>在手機上如何攔截到 http Request</h1><blockquote>
 <p>在開發 App 的過程中，最常會遇到的幾個問題是</p>
 </blockquote>
 <ol>
@@ -110,23 +114,39 @@
 <li>在 Native App 中 發送 Request 的格式以及原始資料是什麼?<br>(假定你想要觀看別人的 App 運作)</li>
 </ol>
 <h2 id="PreRequires"><a href="#PreRequires" class="headerlink" title="PreRequires"></a>PreRequires</h2><ol>
-<li>(<a target="_blank" rel="noopener" href="https://www.charlesproxy.com/)[Charles]">https://www.charlesproxy.com/)[Charles]</a> 攔截 Http Request</li>
-<li>Wifi</li>
+<li><a target="_blank" rel="noopener" href="https://www.charlesproxy.com/">Charles</a> 攔截 Http Request</li>
+<li>Wifi with App Device</li>
 </ol>
 <h3 id="Steps"><a href="#Steps" class="headerlink" title="Steps"></a>Steps</h3><p>打開 Charles 後</p>
 <ol>
-<li>先去 Proxy &#x3D;&gt;Proxy Setting<br>指定你想要的 port 以及把設定都打勾</li>
-</ol>
+<li><p>先去 Proxy &#x3D;&gt;Proxy Setting<br>指定你想要的 port 以及把設定都打勾</p>
 <img src="/2022/05/05/InterceptInApp/01.png" class="" title="Proxy Setting">
-
-<ol start="2">
-<li>Help&#x3D;&gt; Local IP Address<br>確定自己的 IP<img src="/2022/05/05/InterceptInApp/02.png" class="" title="IP Setting"></li>
+</li>
+<li><p>Help&#x3D;&gt; Local IP Address<br>確定自己的 IP</p>
+<img src="/2022/05/05/InterceptInApp/02.png" class="" title="IP Setting">
+</li>
+<li><p>回到手機 填上你的 Proxy 根據 1 &amp;2 的 ip &amp; port</p>
+<img src="/2022/05/05/InterceptInApp/03.jpg" class="" title="Phone Setting">
+</li>
+<li><p>接著應該會跳出下圖 點選 Allow (如果選錯的話請重開 Charles 並且讓手機重新連線)</p>
+<img src="/2022/05/05/InterceptInApp/04.png" class=""></li>
+<li><p>那接著就可以選取你手機上面的 App 去觀察 Request</p>
+<img src="/2022/05/05/InterceptInApp/05.png" class="">
+</li>
+<li><p>接著去 Charles 這裡就可以點開 Request 觀察</p>
+<img src="/2022/05/05/InterceptInApp/06.png" class="">
+<img src="/2022/05/05/InterceptInApp/07.png" class=""></li>
 </ol>
+<h3 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h3><p>從一些小地方可以看到 在 App 開發中 為了讓 User 不一直重複登入</p>
+<p>會發給類似 Token 的東西 以及 Device ID 去判斷此帳號是否登入</p>
+<p>萬一被有心人士透過不可靠的 Wifi 攔截</p>
+<p>就可以拿到此人相關的資訊</p>
+<p>我們也可以透過 Postman ….方式直接拿取 App 背後的 Api 資訊</p>
 
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/05/InterceptInApp/" data-id="cl2t4vfc000008womfogt0sax" data-title="InterceptInApp" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/05/InterceptInApp/" data-id="cl2t7lfw8000090nb8gm87ehc" data-title="InterceptInApp" class="article-share-link">Share</a>
       
       
       
