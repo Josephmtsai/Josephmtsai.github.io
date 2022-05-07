@@ -4,30 +4,24 @@
   <meta charset="utf-8">
   
   
-  <title>InterceptInApp | Joseph&#39;s Work Note</title>
+  <title>UC Browser Support | Joseph&#39;s Work Note</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="在手機上如何攔截到 http Request 在開發 App 的過程中，最常會遇到的幾個問題是   在 Native App 中 鑲嵌的 Api Request 是否有送出到 Server Side 在 Native App 中 發送 Request 的格式以及原始資料是什麼?(假定你想要觀看別人的 App 運作)  PreRequires Charles 攔截 Http Request Wifi">
+  <meta name="description" content="背景在開發 Global 的網頁的時候，通常會去評估各種網頁的支援度，如果沒有通常會請放 Upgrade your Browser. 因為 UC Browser 在中國大陸其實還是有一些比較舊的手機在使用，剛好在開發 Vue 的時候遇到一些問題順便記錄下來 使用的 Framework and config  Vue 3 with Vite Tailwind CSS 3 (Dark Mode)  想">
 <meta property="og:type" content="article">
-<meta property="og:title" content="InterceptInApp">
-<meta property="og:url" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/index.html">
+<meta property="og:title" content="UC Browser Support">
+<meta property="og:url" content="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/index.html">
 <meta property="og:site_name" content="Joseph&#39;s Work Note">
-<meta property="og:description" content="在手機上如何攔截到 http Request 在開發 App 的過程中，最常會遇到的幾個問題是   在 Native App 中 鑲嵌的 Api Request 是否有送出到 Server Side 在 Native App 中 發送 Request 的格式以及原始資料是什麼?(假定你想要觀看別人的 App 運作)  PreRequires Charles 攔截 Http Request Wifi">
+<meta property="og:description" content="背景在開發 Global 的網頁的時候，通常會去評估各種網頁的支援度，如果沒有通常會請放 Upgrade your Browser. 因為 UC Browser 在中國大陸其實還是有一些比較舊的手機在使用，剛好在開發 Vue 的時候遇到一些問題順便記錄下來 使用的 Framework and config  Vue 3 with Vite Tailwind CSS 3 (Dark Mode)  想">
 <meta property="og:locale" content="zh_TW">
-<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/01.png">
-<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/02.png">
-<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/03.jpg">
-<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/04.png">
-<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/05.png">
-<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/06.png">
-<meta property="og:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/07.png">
-<meta property="article:published_time" content="2022-05-05T14:21:35.000Z">
+<meta property="article:published_time" content="2022-05-07T15:38:50.000Z">
 <meta property="article:modified_time" content="2022-05-07T15:58:25.851Z">
 <meta property="article:author" content="Joseph M Tsai">
-<meta property="article:tag" content="Intecept Request">
-<meta property="article:tag" content="App Debug">
-<meta property="article:tag" content="Web Debug">
+<meta property="article:tag" content="UC Browser">
+<meta property="article:tag" content="Tailwind CSS">
+<meta property="article:tag" content="Vite">
+<meta property="article:tag" content="Vue3">
+<meta property="article:tag" content="Tailwind CSS Dark Mode">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://josephmtsai.github.io/2022/05/05/InterceptInApp/01.png">
   
     <link rel="alternate" href="/atom.xml" title="Joseph's Work Note" type="application/atom+xml">
   
@@ -84,10 +78,10 @@
 </header>
 
       <div class="outer">
-        <section id="main"><article id="post-InterceptInApp" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+        <section id="main"><article id="post-UCBrowserSupport" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2022/05/05/InterceptInApp/" class="article-date">
-  <time class="dt-published" datetime="2022-05-05T14:21:35.000Z" itemprop="datePublished">2022-05-05</time>
+    <a href="/2022/05/07/UCBrowserSupport/" class="article-date">
+  <time class="dt-published" datetime="2022-05-07T15:38:50.000Z" itemprop="datePublished">2022-05-07</time>
 </a>
     
   </div>
@@ -98,7 +92,7 @@
         
   
     <h1 class="p-name article-title" itemprop="headline name">
-      InterceptInApp
+      UC Browser Support
     </h1>
   
 
@@ -106,49 +100,66 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <h1 id="在手機上如何攔截到-http-Request"><a href="#在手機上如何攔截到-http-Request" class="headerlink" title="在手機上如何攔截到 http Request"></a>在手機上如何攔截到 http Request</h1><blockquote>
-<p>在開發 App 的過程中，最常會遇到的幾個問題是</p>
+        <h1 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h1><p>在開發 Global 的網頁的時候，通常會去評估各種網頁的支援度，如果沒有通常會請放 Upgrade your Browser.</p>
+<p>因為 UC Browser 在中國大陸其實還是有一些比較舊的手機在使用，剛好在開發 Vue 的時候遇到一些問題順便記錄下來</p>
+<p>使用的 Framework and config</p>
+<ul>
+<li>Vue 3 with Vite</li>
+<li>Tailwind CSS 3 (Dark Mode)</li>
+</ul>
+<p>想要支援舊版的 UC Browsr</p>
+<h1 id="瀏覽器支援度"><a href="#瀏覽器支援度" class="headerlink" title="瀏覽器支援度"></a>瀏覽器支援度</h1><p>一開始以為是 ES module 導致 Build 出來有問題<br><a target="_blank" rel="noopener" href="https://caniuse.com/es6-module">ES Module</a></p>
+<p><a target="_blank" rel="noopener" href="https://caniuse.com/es6-module-dynamic-import">Dynamic Import</a></p>
+<p>所以針對這點我們有安裝了<a target="_blank" rel="noopener" href="https://www.npmjs.com/package/@vitejs/plugin-legacy">plugin-legacy plugin</a></p>
+<p>但是還是遇到問題，基本上 UC 瀏覽器 13 以上 legacy plugin 才有用，但是當下發現 CSS 有跑版.. 然後回頭去看發現有這行敘述</p>
+<blockquote>
+<p>Now instead of dark:{class} classes being applied based on prefers-color-scheme,<br>they will be applied whenever dark class is present earlier in the HTML tree.</p>
 </blockquote>
-<ol>
-<li>在 Native App 中 鑲嵌的 Api Request 是否有送出到 Server Side</li>
-<li>在 Native App 中 發送 Request 的格式以及原始資料是什麼?<br>(假定你想要觀看別人的 App 運作)</li>
-</ol>
-<h2 id="PreRequires"><a href="#PreRequires" class="headerlink" title="PreRequires"></a>PreRequires</h2><ol>
-<li><a target="_blank" rel="noopener" href="https://www.charlesproxy.com/">Charles</a> 攔截 Http Request</li>
-<li>Wifi with App Device</li>
-</ol>
-<h3 id="Steps"><a href="#Steps" class="headerlink" title="Steps"></a>Steps</h3><p>打開 Charles 後</p>
-<ol>
-<li><p>先去 Proxy &#x3D;&gt;Proxy Setting<br>指定你想要的 port 以及把設定都打勾</p>
-<img src="/2022/05/05/InterceptInApp/01.png" class="" title="Proxy Setting">
-</li>
-<li><p>Help&#x3D;&gt; Local IP Address<br>確定自己的 IP</p>
-<img src="/2022/05/05/InterceptInApp/02.png" class="" title="IP Setting">
-</li>
-<li><p>回到手機 填上你的 Proxy 根據 1 &amp;2 的 ip &amp; port</p>
-<img src="/2022/05/05/InterceptInApp/03.jpg" class="" title="Phone Setting">
-</li>
-<li><p>接著應該會跳出下圖 點選 Allow (如果選錯的話請重開 Charles 並且讓手機重新連線)</p>
-<img src="/2022/05/05/InterceptInApp/04.png" class=""></li>
-<li><p>那接著就可以選取你手機上面的 App 去觀察 Request</p>
-<img src="/2022/05/05/InterceptInApp/05.png" class="">
-</li>
-<li><p>接著去 Charles 這裡就可以點開 Request 觀察</p>
-<img src="/2022/05/05/InterceptInApp/06.png" class="">
-<img src="/2022/05/05/InterceptInApp/07.png" class=""></li>
-</ol>
-<h3 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h3><p>從一些小地方可以看到 在 App 開發中 為了讓 User 不一直重複登入</p>
-<p>會發給類似 Token 的東西 以及 Device ID 去判斷此帳號是否登入</p>
-<p>我們也可以透過 Postman ….方式直接拿取 App 背後的 Api 資訊</p>
+<p>再回頭去查詢發現 其實到最新版本的 UC 瀏覽器才有支援這個設定….<br><a target="_blank" rel="noopener" href="https://caniuse.com/?search=prefers-color-scheme">prefers-color-scheme</a></p>
+<table>
+<thead>
+<tr>
+<th>UC Browser Version</th>
+<th>Vite</th>
+<th>Vite with Legacy Code</th>
+<th>CSS OK?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>11.2.0</td>
+<td>X</td>
+<td>X</td>
+<td>X</td>
+</tr>
+<tr>
+<td>11.3.8</td>
+<td>X</td>
+<td>X</td>
+<td>X</td>
+</tr>
+<tr>
+<td>13.0.5</td>
+<td>X</td>
+<td>O</td>
+<td>X(Display Wrong)</td>
+</tr>
+<tr>
+<td>13.4.0</td>
+<td>O</td>
+<td>O</td>
+<td>O</td>
+</tr>
+</tbody></table>
+<h2 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h2><p>Caniuse 的資訊不是最新的 實際支援的瀏覽器還是需要實測才知道… 如果用比較新的 framework 之類還是要考慮舊版的瀏覽器支援度<br>不然這個畫面都會是白色的.</p>
 
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/05/InterceptInApp/" data-id="cl2w1w9b000009gov57nf9y7s" data-title="InterceptInApp" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="cl2w1w9b500019gov4lgh05tw" data-title="UC Browser Support" class="article-share-link">Share</a>
       
       
       
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li></ul>
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
 
     </footer>
   </div>
@@ -156,15 +167,11 @@
     
 <nav id="article-nav">
   
-    <a href="/2022/05/07/UCBrowserSupport/" id="article-nav-newer" class="article-nav-link-wrap">
-      <strong class="article-nav-caption">Newer</strong>
-      <div class="article-nav-title">
-        
-          UC Browser Support
-        
-      </div>
-    </a>
   
+    <a href="/2022/05/05/InterceptInApp/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">InterceptInApp</div>
+    </a>
   
 </nav>
 
