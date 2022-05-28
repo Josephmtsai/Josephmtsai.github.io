@@ -9,8 +9,6 @@ tags:
   - Tailwind CSS Dark Mode
 ---
 
-# 背景
-
 在開發 Global 的網頁的時候，通常會去評估各種網頁的支援度，如果沒有通常會請放 Upgrade your Browser.
 
 因為 UC Browser 在中國大陸其實還是有一些比較舊的手機在使用，剛好在開發 Vue 的時候遇到一些問題順便記錄下來

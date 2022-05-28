@@ -1,5 +1,5 @@
 ---
-title: PiniaWritingHint
+title: Pinia Writing Hint in Vue3
 date: 2022-05-28 11:15:55
 tags:
   - Pinia
@@ -8,8 +8,6 @@ tags:
   - Vue3
   - Proxy
 ---
-
-# Pinia Writing Hint in Vue3
 
 在 Vue3 使用 Pinia 做狀態管理的時候，有可能會把狀態宣告成巢狀的 Object 結構
 ex: 使用者的資料
