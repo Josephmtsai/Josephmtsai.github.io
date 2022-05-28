@@ -36,16 +36,13 @@ Pinia 存取的結構:
 **Not Working Sample**
 
 1. rootStore.data.Status
-
-   > 直接把 rootStore 的屬性取出是無法做 reactive
+   直接把 rootStore 的屬性取出是無法做 reactive
 
 2. data.value.Profile.Phone
-
-   > 透過 storeToRefs 拉出的屬性值**注意只有屬性值不會 reactive**
+   透過 storeToRefs 拉出的屬性值**注意只有屬性值不會 reactive**
 
 3. rootStore.phoneNumber
-   > 直接把 rootStore 的 Getter 取出是無法做 reactive
-   > Code Sample
+   直接把 rootStore 的 Getter 取出是無法做 reactive
 
 ## 為什麼會這樣呢?
 
@@ -56,18 +53,18 @@ Pinia 存取的結構:
 其實他文件上面有提到兩點很重要的
 
 - When you assign or destructure a reactive object's property to a local variable, the reactivity is "disconnected" because access to the local variable no longer triggers the get / set proxy traps.
-  > 意思是當你把 reactiv object 的屬性值單獨取出他就會 disconnected 因為 value update 不會被 proxy 的 get set 觸發到
-  > 這就是對應到剛剛的問題 1 2 3
+  意思是當你把 reactiv object 的屬性值單獨取出他就會 disconnected 因為 value update 不會被 proxy 的 get set 觸發到
+  這就是對應到剛剛的問題 1 2 3
 - The returned proxy from reactive(), although behaving just like the original, has a different identity if we compare it to the original using the === operator.
-  > 當你重新把 reactive object 在 assign 出去 他會視為是不同的物件
+  當你重新把 reactive object 在 assign 出去 他會視為是不同的物件
 
 [reactive work in vue](https://vuejs.org/guide/extras/reactivity-in-depth.html#how-reactivity-works-in-vue)
 
-### 那要怎麼處理呢?
+### How to Fix It?
 
 1. 使用 getter method 透過 storeToRefs 取出單一的屬性值
-   > Getters are exactly the equivalent of computed values for the state of a Store.
-   > [getter](https://pinia.vuejs.org/core-concepts/getters.html)
+   Getters are exactly the equivalent of computed values for the state of a Store.
+   [Reference](https://pinia.vuejs.org/core-concepts/getters.html)
 2. 單獨把屬性值透過 computed 包裝起來
 3. 使用 watchEffect
 
