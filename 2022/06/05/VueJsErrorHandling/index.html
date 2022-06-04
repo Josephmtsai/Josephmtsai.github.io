@@ -4,17 +4,30 @@
   <meta charset="utf-8">
   
   
-  <title>Joseph&#39;s Work Note</title>
+  <title>VueErrorHandling | Joseph&#39;s Work Note</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="front-end,seo,back-end">
-<meta property="og:type" content="website">
-<meta property="og:title" content="Joseph&#39;s Work Note">
-<meta property="og:url" content="https://josephmtsai.github.io/index.html">
+  <meta name="description" content="一般前端開發最常遇到的問題有四塊:我們 會針對 3 多做一些說明  Syntax errortemplate 裡面有一些錯誤的 syntax ,可能多加了一個 TAG 或是沒有 close tag .可以透過安裝一些 extension or pre commit 去檢查 Runtime error: 執行階段遇到的錯誤例如少引用的 components… 可以透過安裝一些 extension 幫">
+<meta property="og:type" content="article">
+<meta property="og:title" content="VueErrorHandling">
+<meta property="og:url" content="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/index.html">
 <meta property="og:site_name" content="Joseph&#39;s Work Note">
-<meta property="og:description" content="front-end,seo,back-end">
+<meta property="og:description" content="一般前端開發最常遇到的問題有四塊:我們 會針對 3 多做一些說明  Syntax errortemplate 裡面有一些錯誤的 syntax ,可能多加了一個 TAG 或是沒有 close tag .可以透過安裝一些 extension or pre commit 去檢查 Runtime error: 執行階段遇到的錯誤例如少引用的 components… 可以透過安裝一些 extension 幫">
 <meta property="og:locale" content="zh_TW">
+<meta property="og:image" content="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/01.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/02.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/03.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/04.png">
+<meta property="article:published_time" content="2022-06-05T12:20:04.000Z">
+<meta property="article:modified_time" content="2022-06-04T16:21:09.133Z">
 <meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Vue3">
+<meta property="article:tag" content="Error Handling">
+<meta property="article:tag" content="Debug">
+<meta property="article:tag" content="Log">
+<meta property="article:tag" content="Error">
+<meta property="article:tag" content="Source Map">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/01.png">
   
   
     <link rel="shortcut icon" href="/favicon.png">
@@ -65,9 +78,7 @@
 </header>
 
       <div class="outer">
-        <section id="main">
-  
-    <article id="post-VueJsErrorHandling" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+        <section id="main"><article id="post-VueJsErrorHandling" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2022/06/05/VueJsErrorHandling/" class="article-date">
   <time class="dt-published" datetime="2022-06-05T12:20:04.000Z" itemprop="datePublished">2022-06-05</time>
@@ -80,8 +91,8 @@
       <header class="article-header">
         
   
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2022/06/05/VueJsErrorHandling/">VueErrorHandling</a>
+    <h1 class="p-name article-title" itemprop="headline name">
+      VueErrorHandling
     </h1>
   
 
@@ -144,303 +155,19 @@
     </footer>
   </div>
   
-</article>
-
-
-
+    
+<nav id="article-nav">
   
-    <article id="post-VueMounted" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2022/05/28/VueMounted/" class="article-date">
-  <time class="dt-published" datetime="2022-05-28T12:52:42.000Z" itemprop="datePublished">2022-05-28</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
   
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2022/05/28/VueMounted/">Vue Created Mounted example</a>
-    </h1>
+    <a href="/2022/05/28/VueMounted/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">Vue Created Mounted example</div>
+    </a>
   
+</nav>
 
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <p>最近遇到一個 Issue，我們本來有跟 Partner 整合一個功能，做法是類似先 Inject 對方的 js，<br>接著去指定一個 element 讓他生成到對應的頁面位置，因為當初開發的時候大家都是新手 邊做邊學，<br>一開始把 init script 的方法放到 created function，會造成一個問題是 element 都還沒有被掛到 html 上面就先呼叫 init script<br>有可能會無法生成畫面，但是神奇的是 當初寫沒有發現問題，等到有一天可能 Partner 突然有改 JS 的流程，造成我們整個頁面壞掉。<br>所以又再回頭去 review code 才發現應該要放到 mounted</p>
-<img src="/2022/05/28/VueMounted/01.png" class="" title="Sample">
-
-<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">&lt;script</span><br><span class="line">  <span class="keyword">async</span></span><br><span class="line">  id=<span class="string">&#x27;__ada&#x27;</span></span><br><span class="line">  data-handle=<span class="string">&#x27;&lt;YOUR-BOT-HANDLE&gt;&#x27;</span></span><br><span class="line">  src=<span class="string">&#x27;https://xxx.xxx.com/embed2.js&#x27;</span></span><br><span class="line">&gt;&lt;/script&gt;</span><br></pre></td></tr></table></figure>
-
-<p>正確就是要放到 mounted 上面</p>
-<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">default</span> &#123;</span><br><span class="line">  <span class="title function_">created</span>(<span class="params"></span>) &#123;</span><br><span class="line">    <span class="comment">//element not create</span></span><br><span class="line">  &#125;,</span><br><span class="line">  <span class="title function_">mounted</span>(<span class="params"></span>) &#123;</span><br><span class="line">    <span class="comment">//element created</span></span><br><span class="line">  &#125;,</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-
-<p>這裡附上 Kuro Hsu 的 Vue2 vs Vue 3 Life cycle 參考</p>
-<img src="/2022/05/28/VueMounted/02.png" class="" title="Compare">
-<p><a target="_blank" rel="noopener" href="https://book.vue.tw/CH1/1-7-lifecycle.html">Reference</a></p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="cl4031alz000595n957672ys5" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
-
-    </footer>
-  </div>
   
 </article>
-
-
-
-  
-    <article id="post-PiniaWritingHint" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2022/05/28/PiniaWritingHint/" class="article-date">
-  <time class="dt-published" datetime="2022-05-28T03:15:55.000Z" itemprop="datePublished">2022-05-28</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2022/05/28/PiniaWritingHint/">Pinia Writing Hint in Vue3</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <p>在 Vue3 使用 Pinia 做狀態管理的時候，有可能會把狀態宣告成巢狀的 Object 結構<br>ex: 使用者的資料</p>
-<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">data</span>: &#123;</span><br><span class="line">        <span class="title class_">UpdateTime</span>: <span class="number">0</span>,</span><br><span class="line">        <span class="title class_">Name</span>: <span class="string">&quot;&quot;</span>,</span><br><span class="line">        <span class="title class_">Status</span>: <span class="string">&quot;Active&quot;</span>,</span><br><span class="line">        <span class="title class_">Profile</span>: &#123; <span class="title class_">Email</span>: <span class="string">&quot;&quot;</span>, <span class="title class_">Phone</span>: <span class="number">0</span> &#125;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
-
-<p>因為有可能不是每次都要把所有使用者資料撈出來，會遇到一些寫法問題 請參考範例</p>
-<p><a target="_blank" rel="noopener" href="https://codesandbox.io/s/sad-fermat-p3ig62">Code Sample</a></p>
-<img src="/2022/05/28/PiniaWritingHint/01.png" class="" title="Sample">
-<p>Pinia 存取的結構:</p>
-<img src="/2022/05/28/PiniaWritingHint/02.png" class="" title="Sample">
-
-<p>這裡有發現有幾種寫法就算 Pinia 狀態有改變，畫面上面的值沒有跟著連動</p>
-<p><strong>Not Working Sample</strong></p>
-<ol>
-<li><p>rootStore.data.Status<br>直接把 rootStore 的屬性取出是無法做 reactive</p>
-</li>
-<li><p>data.value.Profile.Phone<br>透過 storeToRefs 拉出的屬性值<strong>注意只有屬性值不會 reactive</strong></p>
-</li>
-<li><p>rootStore.phoneNumber<br>直接把 rootStore 的 Getter 取出是無法做 reactive</p>
-</li>
-</ol>
-<h2 id="為什麼會這樣呢"><a href="#為什麼會這樣呢" class="headerlink" title="為什麼會這樣呢?"></a>為什麼會這樣呢?</h2><p>後面有回頭去看 Vue 3 reactive 用法</p>
-<p>其實 reactive 是使用 proxy 做的</p>
-<p>其實他文件上面有提到兩點很重要的</p>
-<ul>
-<li>When you assign or destructure a reactive object’s property to a local variable, the reactivity is “disconnected” because access to the local variable no longer triggers the get &#x2F; set proxy traps.<br>意思是當你把 reactiv object 的屬性值單獨取出他就會 disconnected 因為 value update 不會被 proxy 的 get set 觸發到<br>這就是對應到剛剛的問題 1 2 3</li>
-<li>The returned proxy from reactive(), although behaving just like the original, has a different identity if we compare it to the original using the &#x3D;&#x3D;&#x3D; operator.<br>當你重新把 reactive object 在 assign 出去 他會視為是不同的物件</li>
-</ul>
-<p><a target="_blank" rel="noopener" href="https://vuejs.org/guide/extras/reactivity-in-depth.html#how-reactivity-works-in-vue">reactive work in vue</a></p>
-<h3 id="How-to-Fix-It"><a href="#How-to-Fix-It" class="headerlink" title="How to Fix It?"></a>How to Fix It?</h3><ol>
-<li>使用 getter method 透過 storeToRefs 取出單一的屬性值<br>Getters are exactly the equivalent of computed values for the state of a Store.<br><a target="_blank" rel="noopener" href="https://pinia.vuejs.org/core-concepts/getters.html">Reference</a></li>
-<li>單獨把屬性值透過 computed 包裝起來</li>
-<li>使用 watchEffect</li>
-</ol>
-<p>以下是 working 的 sample</p>
-<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> &#123; data, phoneNumber &#125; = <span class="title function_">storeToRefs</span>(rootStore);</span><br><span class="line"><span class="keyword">const</span> computedTime = <span class="title function_">computed</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">  <span class="keyword">return</span> data.<span class="property">value</span>.<span class="property">UpdateTime</span>;</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
-
-<p>為什麼要特地說明這個呢? 因為在 vue 3 中 會很常使用 composition api, 並且把一些共用的邏輯抽成 composeble 的 code<br>相對 Pinia 也是 可能會需要單獨取某一些值出來，所以特地記錄這塊</p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/28/PiniaWritingHint/" data-id="cl4031alu000195n9enpy0y69" data-title="Pinia Writing Hint in Vue3" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-UCBrowserSupport" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2022/05/07/UCBrowserSupport/" class="article-date">
-  <time class="dt-published" datetime="2022-05-07T15:38:50.000Z" itemprop="datePublished">2022-05-07</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2022/05/07/UCBrowserSupport/">UC Browser Support</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <p>在開發 Global 的網頁的時候，通常會去評估各種網頁的支援度，如果沒有通常會請放 Upgrade your Browser.</p>
-<p>因為 UC Browser 在中國大陸其實還是有一些比較舊的手機在使用，剛好在開發 Vue 的時候遇到一些問題順便記錄下來</p>
-<p>使用的 Framework and config</p>
-<ul>
-<li>Vue 3 with Vite</li>
-<li>Tailwind CSS 3 (Dark Mode)</li>
-</ul>
-<p>想要支援舊版的 UC Browsr</p>
-<h1 id="瀏覽器支援度"><a href="#瀏覽器支援度" class="headerlink" title="瀏覽器支援度"></a>瀏覽器支援度</h1><p>一開始以為是 ES module 導致 Build 出來有問題<br><a target="_blank" rel="noopener" href="https://caniuse.com/es6-module">ES Module</a></p>
-<p><a target="_blank" rel="noopener" href="https://caniuse.com/es6-module-dynamic-import">Dynamic Import</a></p>
-<p>所以針對這點我們有安裝了<a target="_blank" rel="noopener" href="https://www.npmjs.com/package/@vitejs/plugin-legacy">plugin-legacy plugin</a></p>
-<p>但是還是遇到問題，基本上 UC 瀏覽器 13 以上 legacy plugin 才有用，但是當下發現 CSS 有跑版.. 然後回頭去看發現有這行敘述</p>
-<blockquote>
-<p>Now instead of dark:{class} classes being applied based on prefers-color-scheme,<br>they will be applied whenever dark class is present earlier in the HTML tree.</p>
-</blockquote>
-<p>再回頭去查詢發現 其實到最新版本的 UC 瀏覽器才有支援這個設定….<br><a target="_blank" rel="noopener" href="https://caniuse.com/?search=prefers-color-scheme">prefers-color-scheme</a></p>
-<table>
-<thead>
-<tr>
-<th>UC Browser Version</th>
-<th>Vite</th>
-<th>Vite with Legacy Code</th>
-<th>CSS OK?</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>11.2.0</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-</tr>
-<tr>
-<td>11.3.8</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-</tr>
-<tr>
-<td>13.0.5</td>
-<td>X</td>
-<td>O</td>
-<td>X(Display Wrong)</td>
-</tr>
-<tr>
-<td>13.4.0</td>
-<td>O</td>
-<td>O</td>
-<td>O</td>
-</tr>
-</tbody></table>
-<h2 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h2><p>Caniuse 的資訊不是最新的 實際支援的瀏覽器還是需要實測才知道… 如果用比較新的 framework 之類還是要考慮舊版的瀏覽器支援度<br>不然這個畫面都會是白色的.</p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="cl4031alx000395n957kl9d6d" data-title="UC Browser Support" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-InterceptInApp" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2022/05/05/InterceptInApp/" class="article-date">
-  <time class="dt-published" datetime="2022-05-05T14:21:35.000Z" itemprop="datePublished">2022-05-05</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2022/05/05/InterceptInApp/">在手機上如何攔截到 http Request</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <blockquote>
-<p>在開發 App 的過程中，最常會遇到的幾個問題是</p>
-</blockquote>
-<ol>
-<li>在 Native App 中 鑲嵌的 Api Request 是否有送出到 Server Side</li>
-<li>在 Native App 中 發送 Request 的格式以及原始資料是什麼?<br>(假定你想要觀看別人的 App 運作)</li>
-</ol>
-<h2 id="PreRequires"><a href="#PreRequires" class="headerlink" title="PreRequires"></a>PreRequires</h2><ol>
-<li><a target="_blank" rel="noopener" href="https://www.charlesproxy.com/">Charles</a> 攔截 Http Request</li>
-<li>Wifi with App Device</li>
-</ol>
-<h3 id="Steps"><a href="#Steps" class="headerlink" title="Steps"></a>Steps</h3><p>打開 Charles 後</p>
-<ol>
-<li><p>先去 Proxy &#x3D;&gt;Proxy Setting<br>指定你想要的 port 以及把設定都打勾</p>
-<img src="/2022/05/05/InterceptInApp/01.png" class="" title="Proxy Setting">
-</li>
-<li><p>Help&#x3D;&gt; Local IP Address<br>確定自己的 IP</p>
-<img src="/2022/05/05/InterceptInApp/02.png" class="" title="IP Setting">
-</li>
-<li><p>回到手機 填上你的 Proxy 根據 1 &amp;2 的 ip &amp; port</p>
-<img src="/2022/05/05/InterceptInApp/03.jpg" class="" title="Phone Setting">
-</li>
-<li><p>接著應該會跳出下圖 點選 Allow (如果選錯的話請重開 Charles 並且讓手機重新連線)</p>
-<img src="/2022/05/05/InterceptInApp/04.png" class=""></li>
-<li><p>那接著就可以選取你手機上面的 App 去觀察 Request</p>
-<img src="/2022/05/05/InterceptInApp/05.png" class="">
-</li>
-<li><p>接著去 Charles 這裡就可以點開 Request 觀察</p>
-<img src="/2022/05/05/InterceptInApp/06.png" class="">
-<img src="/2022/05/05/InterceptInApp/07.png" class=""></li>
-</ol>
-<h3 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h3><p>從一些小地方可以看到 在 App 開發中 為了讓 User 不一直重複登入</p>
-<p>會發給類似 Token 的東西 以及 Device ID 去判斷此帳號是否登入</p>
-<p>我們也可以透過 Postman ….方式直接拿取 App 背後的 Api 資訊</p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/05/InterceptInApp/" data-id="cl4031alp000095n9a3uaculq" data-title="在手機上如何攔截到 http Request" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
 
 
 </section>
