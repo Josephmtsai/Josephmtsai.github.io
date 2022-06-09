@@ -146,4 +146,4 @@ Maps to webpack://vue_menu/src/views/ErrorSample.vue:70:32 (parse)
 
 [Sample Code](https://github.com/Josephmtsai/vue_menu)
 [Error Handling](https://medium.com/js-dojo/error-exception-handling-in-vue-js-application-6c26eeb6b3e4)
-[https://www.npmjs.com/package/source-map-cli](https://www.npmjs.com/package/source-map-cli)
+[Source Map Cli](https://www.npmjs.com/package/source-map-cli)
