@@ -59,7 +59,37 @@ tags:
 我們這裡可以透過此套件做比較主要的三件事情
 
 1. 限制動態 HTML 的 TAG
-2. 限制 CSS &Script 語法的 domain
+
+Default options
+
+```javascript
+allowedTags: [
+  "address", "article", "aside", "footer", "header", "h1", "h2", "h3", "h4",
+  "h5", "h6", "hgroup", "main", "nav", "section", "blockquote", "dd", "div",
+  "dl", "dt", "figcaption", "figure", "hr", "li", "main", "ol", "p", "pre",
+  "ul", "a", "abbr", "b", "bdi", "bdo", "br", "cite", "code", "data", "dfn",
+  "em", "i", "kbd", "mark", "q", "rb", "rp", "rt", "rtc", "ruby", "s", "samp",
+  "small", "span", "strong", "sub", "sup", "time", "u", "var", "wbr", "caption",
+  "col", "colgroup", "table", "tbody", "td", "tfoot", "th", "thead", "tr"
+],
+disallowedTagsMode: 'discard',
+allowedAttributes: {
+  a: [ 'href', 'name', 'target' ],
+  // We don't currently allow img itself by default, but
+  // these attributes would make sense if we did.
+  img: [ 'src', 'srcset', 'alt', 'title', 'width', 'height', 'loading' ]
+},
+// Lots of these won't come up by default because we don't allow them
+selfClosing: [ 'img', 'br', 'hr', 'area', 'base', 'basefont', 'input', 'link', 'meta' ],
+// URL schemes we permit
+allowedSchemes: [ 'http', 'https', 'ftp', 'mailto', 'tel' ],
+allowedSchemesByTag: {},
+allowedSchemesAppliedToAttributes: [ 'href', 'src', 'cite' ],
+allowProtocolRelative: true,
+enforceHtmlBoundary: false
+```
+
+2. 限制 CSS & Script & iframe 語法
 
 ```javascript
 const clean = sanitizeHtml(
@@ -72,4 +102,25 @@ const clean = sanitizeHtml(
     allowedScriptDomains: ['authorized.com'],
   }
 );
+```
+
+```css
+onst clean = sanitizeHtml(dirty, {
+        allowedTags: ['p'],
+        allowedAttributes: {
+          'p': ["style"],
+        },
+        allowedStyles: {
+          '*': {
+            // Match HEX and RGB
+            'color': [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/],
+            'text-align': [/^left$/, /^right$/, /^center$/],
+            // Match any number with px, em, or %
+            'font-size': [/^\d+(?:px|em|%)$/]
+          },
+          'p': {
+            'font-size': [/^\d+rem$/]
+          }
+        }
+      });
 ```
