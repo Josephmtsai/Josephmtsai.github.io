@@ -12,7 +12,7 @@ tags:
 
 使用者動態設定的樣板或是 Banner 這裡一般人可能不會特別想到就是 XSS Attack
 
-我曾經遇過 真的有被駭客將靜態的 html 檔案裏面故意塞惡意程式碼，導致使用者看到錯誤畫面的狀況
+我曾經遇過公司 有駭客入侵將靜態的 html 檔案裏面故意塞惡意程式碼，導致使用者看到錯誤畫面的狀況(被導走到其他頁面)
 
 (ex: 這些 html 可能被駭客塞一些 js or redirect 導到錯誤網站 讓使用者看到一些錯誤資訊)
 
@@ -36,10 +36,11 @@ tags:
 | v-html | 只支援純粹 HTML 無法支援 vue custom component | 無法防止 XSS attack |
 | v-runtime-template | 支援 vue custom component & variabe (需事先定義好) | 無法防止 XSS attack |
 
-以下是範例
+我們可以看到我們在圖片 loading 的過程中插入 alert 如果沒有做任何阻擋 兩種方法都會跳 Alert
+
 [DEMO](https://codesandbox.io/s/dynamic-template-yvfx0n)
 
-我們可以看到我們在圖片 loading 的過程中插入 alert 如果沒有做任何阻擋 兩種方法都會跳 Alert
+{% asset_img 01.png "Sample" %}
 
 ```html
 <img
@@ -124,3 +125,20 @@ onst clean = sanitizeHtml(dirty, {
         }
       });
 ```
+
+根據上面的設定後
+
+可以對照[DEMO](https://codesandbox.io/s/dynamic-template-yvfx0n)
+透過 sanitize 過濾掉有問題的語法 避免 XSS 攻擊
+
+```javascript
+this.$sanitize(this.message);
+```
+
+因為靜態檔案最容易被人動手腳 尤其是系統一大 檔案一多不會有人時時刻刻去檢查....
+
+# Reference
+
+[XSS(Cross site scripting) 簡單範例](https://ithelp.ithome.com.tw/articles/10238479)
+[XSS Sample](https://www.softwaretestinghelp.com/cross-site-scripting-xss-attack-test/)
+[Vue 3 Sanitize](https://github.com/vannsl/vue-3-sanitize)
