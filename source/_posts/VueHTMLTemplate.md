@@ -29,26 +29,19 @@ tags:
 />
 ```
 
-回到主題來說
 這裡列出兩種 vue 的 componet 可以動態 compile html ，這裡列出來用途以及差異
 | Plugnin | Support | different | |
 |--------------------|--------|--- --------|---|
 | v-html | 只支援純粹 HTML 無法支援 vue custom component | 無法防止 XSS attack |
 | v-runtime-template | 支援 vue custom component & variabe (需事先定義好) | 無法防止 XSS attack |
 
-我們可以看到我們在圖片 loading 的過程中插入 alert 如果沒有做任何阻擋 兩種方法都會跳 Alert
+可能大家沒有感覺 那我們先來看以下範例
+如果沒有透過過濾不合法的 tag 在上面的 Demo 內 會出現什麼呢?
+
+1. xss 的 alert
+2. 非法的 iframe (假設我們沒有規定 iframe 是可以出現的)
 
 [DEMO](https://codesandbox.io/s/dynamic-template-yvfx0n)
-
-{% asset_img 01.png "Sample" %}
-
-```html
-<img
-  src="https://jnx.me/img/profile.jpg"
-  style="display:none"
-  onload="alert('xss');"
-/>
-```
 
 接下來我們介紹今天的主角 Sanitize html
 
@@ -57,7 +50,8 @@ tags:
 
 套件
 
-我們這裡可以透過此套件做比較主要的三件事情
+我們這裡可以透過此套件將 HTML 不合法的 TAG 或是相對應的 TAG 做一些限制以及過濾
+這裡列出兩大項
 
 1. 限制動態 HTML 的 TAG
 
@@ -135,7 +129,23 @@ onst clean = sanitizeHtml(dirty, {
 this.$sanitize(this.message);
 ```
 
-因為靜態檔案最容易被人動手腳 尤其是系統一大 檔案一多不會有人時時刻刻去檢查....
+### 範例
+
+那如果像剛剛這樣 假設我們想要允許特定 Domain 的 iframe 要怎麼辦呢
+
+我們可以透過 OverideOption 將特定的 domain & tag 掛上去 這樣就可以避免 User 掛載一些奇怪的 Domain
+
+```javascript
+const overridenOptions = {
+  allowedTags: ['iframe'],
+  allowedAttributes: {
+    iframe: ['src'],
+  },
+  allowedIframeHostnames: ['www.youtube.com'],
+};
+```
+
+因為靜態檔案最容易被人動手腳 尤其是系統一大 檔案一多不會有人時時刻刻去檢查...就需要有這種檢查幫助我們去過濾語法
 
 # Reference
 
