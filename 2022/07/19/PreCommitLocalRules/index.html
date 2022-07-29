@@ -17,7 +17,7 @@
 <meta property="og:image" content="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/02.png">
 <meta property="og:image" content="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/03.png">
 <meta property="article:published_time" content="2022-07-19T16:01:08.000Z">
-<meta property="article:modified_time" content="2022-07-29T15:34:04.812Z">
+<meta property="article:modified_time" content="2022-07-29T17:12:38.531Z">
 <meta property="article:author" content="Joseph M Tsai">
 <meta property="article:tag" content="Vue">
 <meta property="article:tag" content="Pre-Commit">
@@ -109,35 +109,35 @@
 <p>主要是以下的套件需要安裝:</p>
 <p>可以參考從<a target="_blank" rel="noopener" href="https://www.coffeeclass.io/articles/commit-better-code-with-husky-prettier-eslint-lint-staged">Husky Lint-staged</a> 開始安裝</p>
 <ol>
-<li>Husky install</li>
-</ol>
-<blockquote>
+<li>Husky install<blockquote>
 <p>此套件主要是可以比較簡單操作 Git hooks</p>
 </blockquote>
+</li>
+</ol>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">npx husky-init &amp;&amp; npm install</span><br></pre></td></tr></table></figure>
 
 <ol start="2">
-<li>Lint staged install</li>
-</ol>
-<blockquote>
+<li>Lint staged install<blockquote>
 <p>此套件主要是針對 Commit Code 只會針對這些 Commit 的檔案做優化 以及檢查 而不會所有專案內的檔案檢查 增加效率</p>
 </blockquote>
+</li>
+</ol>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">npm i --save-dev lint-staged</span><br></pre></td></tr></table></figure>
 
 <ol start="3">
-<li>Modify .husky pre-commit file</li>
-</ol>
-<blockquote>
+<li>Modify .husky pre-commit file<blockquote>
 <p>修改.husky 資料夾底下的 pre-commit 檔案</p>
 </blockquote>
+</li>
+</ol>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">#!/bin/sh</span><br><span class="line">. &quot;$(dirname &quot;$0&quot;)/_/husky.sh&quot;</span><br></pre></td></tr></table></figure>
 
 <ol start="4">
-<li>Modify package.json</li>
-</ol>
-<blockquote>
+<li>Modify package.json<blockquote>
 <p>修改 package.json 直接在 root 底下新增這個 KEY<br>可以參考官方文件 也可以分離出來<a target="_blank" rel="noopener" href="https://github.com/okonet/lint-staged#Configuration">Config</a><br>我們只需要針對 vue ,ts, js 檔案做優化</p>
 </blockquote>
+</li>
+</ol>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">&quot;lint-staged&quot;: &#123;</span><br><span class="line">    &quot;**/*.&#123;js,ts,vue&#125;&quot;: [</span><br><span class="line">      &quot;npx eslint --fix&quot;</span><br><span class="line">    ]</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
 
 <p>接著就可以隨便測試看看 Commit 一個不合法的 js 檔案</p>
@@ -152,15 +152,7 @@
 <h2 id="Setting-EsLint-Local-Rules"><a href="#Setting-EsLint-Local-Rules" class="headerlink" title="Setting EsLint Local Rules"></a>Setting EsLint Local Rules</h2><ol>
 <li>在你的 ESLint Config 設定 plugin &amp;你想要綁定的 rule 以及錯誤的程度</li>
 </ol>
-<p>以 vue cli 來說預設是在 package.json 裡面</p>
-<p>新增這兩行</p>
-<blockquote>
-<p>“local-rules&#x2F;disallow-identifiers”: “error”<br>“plugins”: [</p>
-<blockquote>
-<p>“eslint-plugin-local-rules”<br>]</p>
-</blockquote>
-</blockquote>
-<p>代表是使用哪一個套件以及我們想要使用哪一個規則</p>
+<p>以 vue cli 來說預設是在 package.json 裡面 的 rules Object<br>新增你自訂的規則以及 plugin</p>
 <figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">&quot;eslintConfig&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;root&quot;</span><span class="punctuation">:</span> <span class="keyword">true</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;env&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;node&quot;</span><span class="punctuation">:</span> <span class="keyword">true</span></span><br><span class="line">    <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;extends&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">      <span class="string">&quot;plugin:vue/vue3-essential&quot;</span><span class="punctuation">,</span></span><br><span class="line">      <span class="string">&quot;@vue/airbnb&quot;</span></span><br><span class="line">    <span class="punctuation">]</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;parserOptions&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;parser&quot;</span><span class="punctuation">:</span> <span class="string">&quot;@babel/eslint-parser&quot;</span></span><br><span class="line">    <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;rules&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;max-len&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">        <span class="string">&quot;error&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="punctuation">&#123;</span></span><br><span class="line">          <span class="attr">&quot;code&quot;</span><span class="punctuation">:</span> <span class="number">1000</span></span><br><span class="line">        <span class="punctuation">&#125;</span></span><br><span class="line">      <span class="punctuation">]</span><span class="punctuation">,</span></span><br><span class="line">      <span class="attr">&quot;local-rules/disallow-identifiers&quot;</span><span class="punctuation">:</span> <span class="string">&quot;error&quot;</span></span><br><span class="line">    <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;plugins&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">      <span class="string">&quot;eslint-plugin-local-rules&quot;</span></span><br><span class="line">    <span class="punctuation">]</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br></pre></td></tr></table></figure>
 
 <ol start="2">
@@ -184,7 +176,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="cl66mkr1e0003ayn93jpla6ry" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="cl66q3dw80003b9on09n24boa" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
       
       
       
