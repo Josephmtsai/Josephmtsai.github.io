@@ -32,24 +32,21 @@ Vue & Vite Cli
 可以參考從[Husky Lint-staged](https://www.coffeeclass.io/articles/commit-better-code-with-husky-prettier-eslint-lint-staged) 開始安裝
 
 1. Husky install
-
-> 此套件主要是可以比較簡單操作 Git hooks
+   > 此套件主要是可以比較簡單操作 Git hooks
 
 ```bash
 npx husky-init && npm install
 ```
 
 2. Lint staged install
-
-> 此套件主要是針對 Commit Code 只會針對這些 Commit 的檔案做優化 以及檢查 而不會所有專案內的檔案檢查 增加效率
+   > 此套件主要是針對 Commit Code 只會針對這些 Commit 的檔案做優化 以及檢查 而不會所有專案內的檔案檢查 增加效率
 
 ```bash
 npm i --save-dev lint-staged
 ```
 
 3. Modify .husky pre-commit file
-
-> 修改.husky 資料夾底下的 pre-commit 檔案
+   > 修改.husky 資料夾底下的 pre-commit 檔案
 
 ```pre-commit
 #!/bin/sh
@@ -57,10 +54,9 @@ npm i --save-dev lint-staged
 ```
 
 4. Modify package.json
-
-> 修改 package.json 直接在 root 底下新增這個 KEY
-> 可以參考官方文件 也可以分離出來[Config](https://github.com/okonet/lint-staged#Configuration)
-> 我們只需要針對 vue ,ts, js 檔案做優化
+   > 修改 package.json 直接在 root 底下新增這個 KEY
+   > 可以參考官方文件 也可以分離出來[Config](https://github.com/okonet/lint-staged#Configuration)
+   > 我們只需要針對 vue ,ts, js 檔案做優化
 
 ```
 "lint-staged": {
@@ -89,17 +85,8 @@ npm i --save-dev lint-staged
 
 1. 在你的 ESLint Config 設定 plugin &你想要綁定的 rule 以及錯誤的程度
 
-以 vue cli 來說預設是在 package.json 裡面
-
-新增這兩行
-
-> "local-rules/disallow-identifiers": "error"
-> "plugins": [
->
-> > "eslint-plugin-local-rules"
-> > ]
-
-代表是使用哪一個套件以及我們想要使用哪一個規則
+以 vue cli 來說預設是在 package.json 裡面 的 rules Object
+新增你自訂的規則以及 plugin
 
 ```json
 "eslintConfig": {
