@@ -1,15 +1,143 @@
 ---
-title: Pinia Writing Hint in Vue3
-date: 2022-05-28 11:15:55
+title: Pinia Writing Hint in Composition Api
+date: 2022-12-26 00:15:55
 tags:
   - Pinia
   - Reactive
   - Refs
-  - Vue3
+  - Composition Api
   - Proxy
+  - StoreToRefs
 ---
 
-在 Vue3 使用 Pinia 做狀態管理的時候，有可能會把狀態宣告成巢狀的 Object 結構
+在 Composition Api 使用 Pinia 做狀態管理的時候,官方網站上面有寫說
+
+{% asset_img 03.png "Sample" %}
+
+寫一陣子後才想到有遇過幾個問題
+
+怎麼樣算是沒有 refs or reactive , 並且怎樣寫才是正確的呢?
+
+先看一下我們定義的 State
+
+以 number , array ,object 為例子來講解一下我們使用的方法
+
+```javascript
+import { defineStore } from 'pinia';
+export const useCounter = defineStore({
+  id: 'counter',
+
+  state: () => ({
+    n: 2,
+    decrementedTimes: 0,
+    numbers: [],
+    data: {
+      user: 'joseph',
+      age: 13,
+      profile: {
+        role: 'aaa',
+      },
+    },
+  }),
+
+  getters: {
+    double: (state) => state.n * 2,
+  },
+
+  actions: {
+    increment(amount = 1) {
+      this.n += amount;
+    },
+    setupUser(userName, profile) {
+      this.data.user = userName;
+      this.data.profile.role = profile;
+    },
+    pushNumber(number) {
+      this.numbers.push(number);
+    },
+  },
+});
+```
+
+[Sample](https://codesandbox.io/s/pinia-testing-i1lqly)
+我們用三個層面來探討
+
+1.  Counter Store 建立實體
+
+```javascript
+import { useCounter } from './stores/counter';
+const counter = useCounter();
+```
+
+2. Counter Store 解構方式取出 (錯誤方法)
+
+```javascript
+const {
+  n: unRefCounts,
+  numbers: unRefNumbers,
+  data: unRefData,
+  double: unRefDouble,
+} = useCounter();
+```
+
+3. Counter Store 解構方式取出 (StoreToRefs)
+
+```javascript
+const { n, numbers, data, double } = storeToRefs(counter);
+```
+
+# Counter Store 建立實體
+
+這個最不需要討論 因為建立實體後 可以調用所有的 method 屬性跟 Getter 都會是雙向綁定的
+只是缺點是 每次使用都要 counter.xxx counter.xxx 有點麻煩
+
+```javascript
+import { useCounter } from './stores/counter';
+const counter = useCounter();
+```
+
+{% asset_img 04.png "Sample" %}
+
+# Counter Store 解構方式取出 (錯誤方法)
+
+因為在 ES6 上面建立的解構的方法 所以一開始大家都會想要用這種方法片段的取出值
+
+```javascript
+const {
+  n: unRefCounts,
+  numbers: unRefNumbers,
+  data: unRefData,
+  double: unRefDouble,
+} = useCounter();
+```
+
+{% asset_img 05.png "Sample" %}
+
+大家可以看到 標黑色的部分 因為單純的 number or string 這些都是 call by value 所以透過解構的方法並不會雙向綁定
+但是物件跟陣列是會的
+
+**為了避免混用 我們還是少用這種方法**
+
+# Counter Store 解構方式取出 (StoreToRefs)
+
+這是官方推薦的方法
+
+```javascript
+const { n, numbers, data, double } = storeToRefs(counter);
+```
+
+這樣就可以把 n 直接做雙向綁定 只要操作的時候使用 n.value ++就可以
+
+但是要注意一件事情. storeToRefs 出來的值 如果再將其中的子屬性 assign 出去也不會有 two way binding 的效果
+
+```javascript
+const userName = data.value.user;
+```
+
+{% asset_img 06.png "Sample" %}
+
+那如果我們還是希望可以有子屬性有 two way binding 的效果可以參考以下範例
+
 ex: 使用者的資料
 
 ```javascript
