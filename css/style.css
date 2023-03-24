@@ -164,7 +164,7 @@ body {
   overflow: hidden;
 }
 .mermaid {
-  background: transparent;
+  background: #fff;
 }
 #wrap {
   height: 100%;
