@@ -163,6 +163,9 @@ body {
 .mobile-nav-on {
   overflow: hidden;
 }
+.mermaid {
+  background: transparent;
+}
 #wrap {
   height: 100%;
   width: 100%;

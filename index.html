@@ -98,7 +98,8 @@
 <p>Prerender 是預先拿取 snapshot 的檔案回來，效能比較好但是比較不即時<br>Server Side Render 是當下的 Request 才開始渲染網頁，比較消耗效能 但是比較即時</p>
 </blockquote>
 <p>所以就看大家怎麼選擇</p>
-<h1 id="Asp-net-實作-Prerender-的生命週期"><a href="#Asp-net-實作-Prerender-的生命週期" class="headerlink" title="Asp.net 實作 Prerender 的生命週期"></a>Asp.net 實作 Prerender 的生命週期</h1><h3 id="Request-Flow"><a href="#Request-Flow" class="headerlink" title="Request Flow"></a>Request Flow</h3><p>我們先來介紹當一個 Request 進到 IIS Server 中的生命週期</p>
+<h1 id="Asp-net-實作-Prerender"><a href="#Asp-net-實作-Prerender" class="headerlink" title="Asp.net 實作 Prerender"></a>Asp.net 實作 Prerender</h1><p>我們這裡會稍微介紹一下 怎麼使用 Asp.net 實作一個 Prerender 檢查的 Dll</p>
+<h3 id="Request-Flow"><a href="#Request-Flow" class="headerlink" title="Request Flow"></a>Request Flow</h3><p>我們先來介紹當一個 Request 進到 IIS Server 中的生命週期</p>
 <p>簡單來說 IIS 上面有一些預先檢查 EX: URL Rerewrite . 當這些檢查如果都不符合的時候<br>就會開始進到 Asp.net 生命週期，所以在做 Prerender 的檢查應該使用 Application Module<br>在 Request 還沒有進到 Asp.net 驗證以及 Routing 之前判斷，如果根據某一些 User Agent 就應該將預設好的 html<br>回給 search engine</p>
 <pre class="mermaid">sequenceDiagram
     User->> IIS: Request
@@ -113,25 +114,18 @@
         Application Module->> User: Return the static file To User
     end</pre>
 
-<h3 id="Application-Flow"><a href="#Application-Flow" class="headerlink" title="Application Flow"></a>Application Flow</h3><p>這是 ASP.NET 應用程式生命週期流程圖<br>剛剛說的檢查是否為 Search Engine 應該在 BeginRequest 就檢查，避免做太多不必要的檢查之類</p>
+<h3 id="Application-Flow"><a href="#Application-Flow" class="headerlink" title="Application Flow"></a>Application Flow</h3><p>這是 ASP.NET 應用程式生命週期流程圖 這裡不多加詳述<br>剛剛說的檢查是否為 Search Engine 應該在 BeginRequest 就檢查，避免做太多不必要的檢查之類<br>因為看到 MapRequestHandler 代表就是已經進到 Route Config 裡面了</p>
 <pre class="mermaid">graph LR
     A(BeginRequest) --> B(AuthenticateRequest)
     B --> C(AuthorizeRequest)
     C --> D(ResolveRequestCache)
     D --> E(MapRequestHandler)
-    E --> F(AcquireRequestState)
-    F --> G(PreRequestHandlerExecute)
-    G --> H(ExecuteHandler)
-    H --> I(PostRequestHandlerExecute)
-    I --> J(ReleaseRequestState)
-    J --> K(UpdateRequestCache)
-    K --> L(LogRequest)
-    L --> M(EndRequest)</pre>
+    E --> F(.....)</pre>
 
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clfmsxu8b0004bdoz5yythvfe" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clfmt69630004bknf36v7cv39" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
       
       
       
@@ -254,7 +248,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="clfmsxu850001bdoz8his4ir8" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="clfmt695t0001bknfg41660zx" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
       
       
       
@@ -336,7 +330,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="clfmsxu8c0005bdoz7gu4c5mr" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="clfmt69640005bknfcmsbg6dk" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
       
       
       
@@ -449,7 +443,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="clfmsxu890003bdozc4197yad" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="clfmt695y0003bknf7dd2h39p" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
       
       
       
@@ -531,7 +525,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="clfmsxu8h000abdoz2v3ve08y" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="clfmt696a000abknf7su7cd75" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
       
       
       
@@ -593,7 +587,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="clfmsxu8f0008bdoz9eaz4sh0" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="clfmt69680008bknf7ldcfhj6" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
       
       
       
@@ -675,7 +669,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="clfmsxu8i000bbdoz9wxmc09c" data-title="VueErrorHandling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="clfmt696b000bbknf6ys31vh2" data-title="VueErrorHandling" class="article-share-link">Share</a>
       
       
       
@@ -726,7 +720,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="clfmsxu8k000dbdoz2w7c7fei" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="clfmt696f000dbknf70vh52r4" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
       
       
       
@@ -817,7 +811,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="clfmsxu8d0007bdozez5x4mxu" data-title="UC Browser Support" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="clfmt69660007bknf45macbs9" data-title="UC Browser Support" class="article-share-link">Share</a>
       
       
       
@@ -891,7 +885,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/05/InterceptInApp/" data-id="clfmsxu800000bdozfw05228c" data-title="在手機上如何攔截到 http Request" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/05/InterceptInApp/" data-id="clfmt695m0000bknf4zik38to" data-title="在手機上如何攔截到 http Request" class="article-share-link">Share</a>
       
       
       
