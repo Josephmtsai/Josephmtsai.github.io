@@ -113,10 +113,25 @@
         Application Module->> User: Return the static file To User
     end</pre>
 
+<h3 id="Application-Flow"><a href="#Application-Flow" class="headerlink" title="Application Flow"></a>Application Flow</h3><p>這是 ASP.NET 應用程式生命週期流程圖<br>剛剛說的檢查是否為 Search Engine 應該在 BeginRequest 就檢查，避免做太多不必要的檢查之類</p>
+<pre class="mermaid">graph LR
+    A(BeginRequest) --> B(AuthenticateRequest)
+    B --> C(AuthorizeRequest)
+    C --> D(ResolveRequestCache)
+    D --> E(MapRequestHandler)
+    E --> F(AcquireRequestState)
+    F --> G(PreRequestHandlerExecute)
+    G --> H(ExecuteHandler)
+    H --> I(PostRequestHandlerExecute)
+    I --> J(ReleaseRequestState)
+    J --> K(UpdateRequestCache)
+    K --> L(LogRequest)
+    L --> M(EndRequest)</pre>
+
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clfmsinzj0004dpoq87h1fhjq" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clfmsmdlm0004brok91ief70z" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
       
       
       
@@ -239,7 +254,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="clfmsinze0001dpoq5xopabkk" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="clfmsmdlg0001brok1xioc41p" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
       
       
       
@@ -321,7 +336,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="clfmsinzk0005dpoqagnl9nwi" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="clfmsmdln0005brok66ha5z2s" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
       
       
       
@@ -434,7 +449,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="clfmsinzi0003dpoq6a79357y" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="clfmsmdlk0003brok9qhl376k" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
       
       
       
@@ -516,7 +531,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="clfmsinzr000adpoq8urrh1gt" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="clfmsmdls000abrok9nb311nm" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
       
       
       
@@ -578,7 +593,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="clfmsinzp0008dpoq4czh3ilx" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="clfmsmdlq0008brok5l7wab6b" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
       
       
       
@@ -660,7 +675,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="clfmsinzs000bdpoq7bti81bt" data-title="VueErrorHandling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="clfmsmdlu000bbrokf9vzbgop" data-title="VueErrorHandling" class="article-share-link">Share</a>
       
       
       
@@ -711,7 +726,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="clfmsio01000ddpoq1xmmfsrt" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="clfmsmdlw000dbrokaqw20jld" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
       
       
       
@@ -802,7 +817,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="clfmsinzm0007dpoqff2kas74" data-title="UC Browser Support" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="clfmsmdlp0007broke38k8vuj" data-title="UC Browser Support" class="article-share-link">Share</a>
       
       
       
@@ -876,7 +891,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/05/InterceptInApp/" data-id="clfmsinz80000dpoqh92we84a" data-title="在手機上如何攔截到 http Request" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/05/InterceptInApp/" data-id="clfmsmdl90000brokfgdu6mpd" data-title="在手機上如何攔截到 http Request" class="article-share-link">Share</a>
       
       
       
