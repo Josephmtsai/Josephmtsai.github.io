@@ -163,9 +163,6 @@ body {
 .mobile-nav-on {
   overflow: hidden;
 }
-.mermaid {
-  background: #fff;
-}
 #wrap {
   height: 100%;
   width: 100%;
@@ -940,6 +937,9 @@ a.article-title:hover {
   display: block;
   max-width: 100%;
   margin: 0 auto;
+}
+.mermaid {
+  background: #fff;
 }
 #comments {
   background: #fff;
