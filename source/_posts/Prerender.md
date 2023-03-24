@@ -48,3 +48,24 @@ sequenceDiagram
         Application Module->> User: Return the static file To User
     end
 ```
+
+### Application Flow
+
+這是 ASP.NET 應用程式生命週期流程圖
+剛剛說的檢查是否為 Search Engine 應該在 BeginRequest 就檢查，避免做太多不必要的檢查之類
+
+```mermaid
+graph LR
+    A(BeginRequest) --> B(AuthenticateRequest)
+    B --> C(AuthorizeRequest)
+    C --> D(ResolveRequestCache)
+    D --> E(MapRequestHandler)
+    E --> F(AcquireRequestState)
+    F --> G(PreRequestHandlerExecute)
+    G --> H(ExecuteHandler)
+    H --> I(PostRequestHandlerExecute)
+    I --> J(ReleaseRequestState)
+    J --> K(UpdateRequestCache)
+    K --> L(LogRequest)
+    L --> M(EndRequest)
+```
