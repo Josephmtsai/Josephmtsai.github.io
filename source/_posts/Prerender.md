@@ -16,14 +16,16 @@ Prerender 簡單來說就是預先將網頁 snap shot 起來，等到搜尋引�
 {% asset_img zEZt0mx.png "Compare" %}
 
 我這裡總結一下
-\*\*就是 Prerender 以及 Server Side Render 都是後端產生的 html 差異在
+**就是 Prerender 以及 Server Side Render 都是後端產生的 html 差異在**
 
 > Prerender 是預先拿取 snapshot 的檔案回來，效能比較好但是比較不即時
 > Server Side Render 是當下的 Request 才開始渲染網頁，比較消耗效能 但是比較即時
 
 所以就看大家怎麼選擇
 
-# Asp.net 實作 Prerender 的生命週期
+# Asp.net 實作 Prerender
+
+我們這裡會稍微介紹一下 怎麼使用 Asp.net 實作一個 Prerender 檢查的 Dll
 
 ### Request Flow
 
@@ -51,8 +53,9 @@ sequenceDiagram
 
 ### Application Flow
 
-這是 ASP.NET 應用程式生命週期流程圖
+這是 ASP.NET 應用程式生命週期流程圖 這裡不多加詳述
 剛剛說的檢查是否為 Search Engine 應該在 BeginRequest 就檢查，避免做太多不必要的檢查之類
+因為看到 MapRequestHandler 代表就是已經進到 Route Config 裡面了
 
 ```mermaid
 graph LR
@@ -60,12 +63,5 @@ graph LR
     B --> C(AuthorizeRequest)
     C --> D(ResolveRequestCache)
     D --> E(MapRequestHandler)
-    E --> F(AcquireRequestState)
-    F --> G(PreRequestHandlerExecute)
-    G --> H(ExecuteHandler)
-    H --> I(PostRequestHandlerExecute)
-    I --> J(ReleaseRequestState)
-    J --> K(UpdateRequestCache)
-    K --> L(LogRequest)
-    L --> M(EndRequest)
+    E --> F(.....)
 ```

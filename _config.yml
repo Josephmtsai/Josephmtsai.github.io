@@ -98,7 +98,3 @@ ignore:
 ## Plugins: https://hexo.io/plugins/
 ## Themes: https://hexo.io/themes/
 theme: landscape
-# mermaid chart
-mermaid: ## mermaid url https://github.com/knsv/mermaid
-  enable: true # default true
-  version: '7.1.2' # default v7.1.2

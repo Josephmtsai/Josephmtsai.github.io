@@ -61,3 +61,7 @@ valine:
   lang: zh-cn # i18n: zh-cn/en
   placeholder: Just go go # valine comment input placeholder(like: Please leave your footprints )
   guest_info: nick,mail,link #valine comment header info
+# mermaid chart
+mermaid: ## mermaid url https://github.com/knsv/mermaid
+  enable: true # default true
+  version: '7.1.2' # default v7.1.2
