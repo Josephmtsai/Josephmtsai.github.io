@@ -938,8 +938,8 @@ a.article-title:hover {
   max-width: 100%;
   margin: 0 auto;
 }
-.mermaid {
-  background: #fff !important;
+#mermaidChart0 {
+  background: #fff;
 }
 #comments {
   background: #fff;
