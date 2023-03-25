@@ -124,17 +124,15 @@ public class Global : HttpApplication
 
 下面是常見的搜尋引擎的 UserAgent
 
-| 搜索引擎    | User-Agent                                                                                              |
-| ----------- | ------------------------------------------------------------------------------------------------------- |
-| Ahrefs      | Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)                                      |
-| Alexa       | Mozilla/5.0 (compatible; archive.org_bot +http://www.alexa.com/site/help/webmasters; crawler@alexa.com) |
-| Exabot      | Exabot/3.0 (http://www.exabot.com/go/robot)                                                             |
-| Gigabot     | Gigabot/3.0 (http://www.gigablast.com/spider.html)                                                      |
-| Majestic-12 | MJ12bot/v1.4.8 (http://mj12bot.com/)                                                                    |
-| SeznamBot   | SeznamBot/3.2 (+http://napoveda.seznam.cz/en/seznambot-intro/)                                          |
-| SMTBot      | SMTBot/1.0 (https://www.smt-associates.com)                                                             |
-| DotBot      | DotBot/1.1 (http://www.opensiteexplorer.org/dotbot)                                                     |
-| Qwantify    | Mozilla/5.0 (compatible; Qwantify/2.4w; +https://www.qwant.com/)/2.4w                                   |
+| 搜索引擎   | User-Agent                                                                          |
+| ---------- | ----------------------------------------------------------------------------------- |
+| Google     | Googlebot/2.1 (+http://www.google.com/bot.html)                                     |
+| Bing       | Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)             |
+| Baidu      | Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html) |
+| Yahoo      | Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp) |
+| Yandex     | Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)                    |
+| DuckDuckGo | DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)                          |
+| Sogou      | Sogou web spider/4.0(+http://www.sogou.com/docs/help/webmasters.htm#07)             |
 
 # 結論
 
