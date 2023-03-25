@@ -25,7 +25,11 @@ Prerender 簡單來說就是預先將網頁 snap shot 起來，等到搜尋引�
 
 # Asp.net 實作 Prerender
 
-我們這裡會稍微介紹一下 怎麼使用 Asp.net 實作一個 Prerender 檢查的 Dll
+我們這裡會稍微介紹一下 怎麼使用 Asp.net 實作一個 Prerender 檢查的 Dll ,
+
+首先我們要先知道在 Request 的什麼階段比較適合將 Snap Shot 的檔案回傳給搜尋引擎
+
+那以下是我們的介紹
 
 ### Request Flow
 
@@ -65,3 +69,75 @@ graph LR
     D --> E(MapRequestHandler)
     E --> F(.....)
 ```
+
+### 使用 BeginRequest 實作
+
+```C#
+
+using System;
+using System.Web;
+
+public class Global : HttpApplication
+{
+    protected void Application_BeginRequest(object sender, EventArgs e)
+    {
+
+        bool isRouteRequest = RouteTable.Routes.GetRouteData(new HttpContextWrapper(Context)) != null;
+        // 判斷條件
+        if (isSearchAgent(Request.UserAgent.ToLower()) && isNotStaticFileOrAjaxRequest() && isRouteRequest)
+        {
+            //回傳SnapShot檔案
+        }
+    }
+
+    public bool isSearchAgent(string userAgent)
+    {
+        string[] searchEngineUserAgents = { "googlebot", "bingbot", "yahoo", "baiduspider", "yandex" };
+
+        bool isSearchEngine = false;
+        foreach (var searchEngineUserAgent in searchEngineUserAgents)
+        {
+            if (userAgent.Contains(searchEngineUserAgent))
+            {
+                isSearchEngine = true;
+                break;
+            }
+        }
+        return true;
+    }
+
+    public bool isNotStaticFileOrAjaxRequest()
+    {
+        // 檢查是否為AJAX請求
+        bool isAjaxRequest = string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase);
+
+        // 檢查是否為靜態檔案存取
+        string fileExtension = System.IO.Path.GetExtension(Request.Url.AbsolutePath).ToLower();
+        bool isStaticFileRequest = fileExtension == ".css" || fileExtension == ".js" || fileExtension == ".jpg" || fileExtension == ".png" || fileExtension == ".gif";
+        return !isAjaxRequest && !isStaticFileRequest;
+    }
+}
+
+```
+
+上述的例子是直接在 global.asax 裡面直接判斷，也可以使用 modules 來達到這件事情。
+
+下面是常見的搜尋引擎的 UserAgent
+
+| 搜索引擎    | User-Agent                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| Ahrefs      | Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)                                      |
+| Alexa       | Mozilla/5.0 (compatible; archive.org_bot +http://www.alexa.com/site/help/webmasters; crawler@alexa.com) |
+| Exabot      | Exabot/3.0 (http://www.exabot.com/go/robot)                                                             |
+| Gigabot     | Gigabot/3.0 (http://www.gigablast.com/spider.html)                                                      |
+| Majestic-12 | MJ12bot/v1.4.8 (http://mj12bot.com/)                                                                    |
+| SeznamBot   | SeznamBot/3.2 (+http://napoveda.seznam.cz/en/seznambot-intro/)                                          |
+| SMTBot      | SMTBot/1.0 (https://www.smt-associates.com)                                                             |
+| DotBot      | DotBot/1.1 (http://www.opensiteexplorer.org/dotbot)                                                     |
+| Qwantify    | Mozilla/5.0 (compatible; Qwantify/2.4w; +https://www.qwant.com/)/2.4w                                   |
+
+# 結論
+
+使用 Prerender 好處在於說可以自己決定要回傳什麼時候的 SnapShot 檔案給搜尋引擎使用，
+
+但是反之也要注意更新檔案的頻率。
