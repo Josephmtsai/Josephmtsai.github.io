@@ -941,6 +941,12 @@ a.article-title:hover {
 #mermaidChart0 {
   background: #fff;
 }
+#mermaidChart1 {
+  background: #fff;
+}
+.article-entry pre mermaid {
+  background: #fff;
+}
 #comments {
   background: #fff;
   -webkit-box-shadow: 1px 2px 3px #ddd;
