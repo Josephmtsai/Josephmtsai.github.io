@@ -939,7 +939,7 @@ a.article-title:hover {
   margin: 0 auto;
 }
 .mermaid {
-  background: #fff;
+  background: #fff !important;
 }
 #comments {
   background: #fff;
