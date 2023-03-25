@@ -15,7 +15,7 @@
 <meta property="og:locale" content="zh_TW">
 <meta property="og:image" content="https://josephmtsai.github.io/2023/03/24/Prerender/zEZt0mx.png">
 <meta property="article:published_time" content="2023-03-24T16:28:43.000Z">
-<meta property="article:modified_time" content="2023-03-25T02:40:27.116Z">
+<meta property="article:modified_time" content="2023-03-25T13:58:05.858Z">
 <meta property="article:author" content="Joseph M Tsai">
 <meta property="article:tag" content="SEO">
 <meta property="article:tag" content="Prerender">
@@ -105,7 +105,9 @@
 <p>Prerender 是預先拿取 snapshot 的檔案回來，效能比較好但是比較不即時<br>Server Side Render 是當下的 Request 才開始渲染網頁，比較消耗效能 但是比較即時</p>
 </blockquote>
 <p>所以就看大家怎麼選擇</p>
-<h1 id="Asp-net-實作-Prerender"><a href="#Asp-net-實作-Prerender" class="headerlink" title="Asp.net 實作 Prerender"></a>Asp.net 實作 Prerender</h1><p>我們這裡會稍微介紹一下 怎麼使用 Asp.net 實作一個 Prerender 檢查的 Dll</p>
+<h1 id="Asp-net-實作-Prerender"><a href="#Asp-net-實作-Prerender" class="headerlink" title="Asp.net 實作 Prerender"></a>Asp.net 實作 Prerender</h1><p>我們這裡會稍微介紹一下 怎麼使用 Asp.net 實作一個 Prerender 檢查的 Dll ,</p>
+<p>首先我們要先知道在 Request 的什麼階段比較適合將 Snap Shot 的檔案回傳給搜尋引擎</p>
+<p>那以下是我們的介紹</p>
 <h3 id="Request-Flow"><a href="#Request-Flow" class="headerlink" title="Request Flow"></a>Request Flow</h3><p>我們先來介紹當一個 Request 進到 IIS Server 中的生命週期</p>
 <p>簡單來說 IIS 上面有一些預先檢查 EX: URL Rerewrite . 當這些檢查如果都不符合的時候<br>就會開始進到 Asp.net 生命週期，所以在做 Prerender 的檢查應該使用 Application Module<br>在 Request 還沒有進到 Asp.net 驗證以及 Routing 之前判斷，如果根據某一些 User Agent 就應該將預設好的 html<br>回給 search engine</p>
 <pre class="mermaid">sequenceDiagram
@@ -129,10 +131,61 @@
     D --> E(MapRequestHandler)
     E --> F(.....)</pre>
 
+<h3 id="使用-BeginRequest-實作"><a href="#使用-BeginRequest-實作" class="headerlink" title="使用 BeginRequest 實作"></a>使用 BeginRequest 實作</h3><figure class="highlight c#"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"><span class="keyword">using</span> System;</span><br><span class="line"><span class="keyword">using</span> System.Web;</span><br><span class="line"></span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title">Global</span> : <span class="title">HttpApplication</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="function"><span class="keyword">protected</span> <span class="keyword">void</span> <span class="title">Application_BeginRequest</span>(<span class="params"><span class="built_in">object</span> sender, EventArgs e</span>)</span></span><br><span class="line">    &#123;</span><br><span class="line"></span><br><span class="line">        <span class="built_in">bool</span> isRouteRequest = RouteTable.Routes.GetRouteData(<span class="keyword">new</span> HttpContextWrapper(Context)) != <span class="literal">null</span>;</span><br><span class="line">        <span class="comment">// 判斷條件</span></span><br><span class="line">        <span class="keyword">if</span> (isSearchAgent(Request.UserAgent.ToLower()) &amp;&amp; isNotStaticFileOrAjaxRequest() &amp;&amp; isRouteRequest)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="comment">//回傳SnapShot檔案</span></span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="built_in">bool</span> <span class="title">isSearchAgent</span>(<span class="params"><span class="built_in">string</span> userAgent</span>)</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="built_in">string</span>[] searchEngineUserAgents = &#123; <span class="string">&quot;googlebot&quot;</span>, <span class="string">&quot;bingbot&quot;</span>, <span class="string">&quot;yahoo&quot;</span>, <span class="string">&quot;baiduspider&quot;</span>, <span class="string">&quot;yandex&quot;</span> &#125;;</span><br><span class="line"></span><br><span class="line">        <span class="built_in">bool</span> isSearchEngine = <span class="literal">false</span>;</span><br><span class="line">        <span class="keyword">foreach</span> (<span class="keyword">var</span> searchEngineUserAgent <span class="keyword">in</span> searchEngineUserAgents)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">if</span> (userAgent.Contains(searchEngineUserAgent))</span><br><span class="line">            &#123;</span><br><span class="line">                isSearchEngine = <span class="literal">true</span>;</span><br><span class="line">                <span class="keyword">break</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="built_in">bool</span> <span class="title">isNotStaticFileOrAjaxRequest</span>()</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// 檢查是否為AJAX請求</span></span><br><span class="line">        <span class="built_in">bool</span> isAjaxRequest = <span class="built_in">string</span>.Equals(Request.Headers[<span class="string">&quot;X-Requested-With&quot;</span>], <span class="string">&quot;XMLHttpRequest&quot;</span>, StringComparison.OrdinalIgnoreCase);</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 檢查是否為靜態檔案存取</span></span><br><span class="line">        <span class="built_in">string</span> fileExtension = System.IO.Path.GetExtension(Request.Url.AbsolutePath).ToLower();</span><br><span class="line">        <span class="built_in">bool</span> isStaticFileRequest = fileExtension == <span class="string">&quot;.css&quot;</span> || fileExtension == <span class="string">&quot;.js&quot;</span> || fileExtension == <span class="string">&quot;.jpg&quot;</span> || fileExtension == <span class="string">&quot;.png&quot;</span> || fileExtension == <span class="string">&quot;.gif&quot;</span>;</span><br><span class="line">        <span class="keyword">return</span> !isAjaxRequest &amp;&amp; !isStaticFileRequest;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>上述的例子是直接在 global.asax 裡面直接判斷，也可以使用 modules 來達到這件事情。</p>
+<p>下面是常見的搜尋引擎的 UserAgent</p>
+<table>
+<thead>
+<tr>
+<th>搜索引擎</th>
+<th>User-Agent</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Ahrefs</td>
+<td>Mozilla&#x2F;5.0 (compatible; AhrefsBot&#x2F;7.0; +<a target="_blank" rel="noopener" href="http://ahrefs.com/robot/">http://ahrefs.com/robot/</a>)</td>
+</tr>
+<tr>
+<td>Alexa</td>
+<td>Mozilla&#x2F;5.0 (compatible; archive.org_bot +<a target="_blank" rel="noopener" href="http://www.alexa.com/site/help/webmasters">http://www.alexa.com/site/help/webmasters</a>; <a href="mailto:&#99;&#x72;&#x61;&#x77;&#x6c;&#x65;&#x72;&#64;&#x61;&#108;&#101;&#120;&#x61;&#x2e;&#x63;&#x6f;&#109;">&#99;&#x72;&#x61;&#x77;&#x6c;&#x65;&#x72;&#64;&#x61;&#108;&#101;&#120;&#x61;&#x2e;&#x63;&#x6f;&#109;</a>)</td>
+</tr>
+<tr>
+<td>Exabot</td>
+<td>Exabot&#x2F;3.0 (<a target="_blank" rel="noopener" href="http://www.exabot.com/go/robot">http://www.exabot.com/go/robot</a>)</td>
+</tr>
+<tr>
+<td>Gigabot</td>
+<td>Gigabot&#x2F;3.0 (<a target="_blank" rel="noopener" href="http://www.gigablast.com/spider.html">http://www.gigablast.com/spider.html</a>)</td>
+</tr>
+<tr>
+<td>Majestic-12</td>
+<td>MJ12bot&#x2F;v1.4.8 (<a target="_blank" rel="noopener" href="http://mj12bot.com/">http://mj12bot.com/</a>)</td>
+</tr>
+<tr>
+<td>SeznamBot</td>
+<td>SeznamBot&#x2F;3.2 (+<a target="_blank" rel="noopener" href="http://napoveda.seznam.cz/en/seznambot-intro/">http://napoveda.seznam.cz/en/seznambot-intro/</a>)</td>
+</tr>
+<tr>
+<td>SMTBot</td>
+<td>SMTBot&#x2F;1.0 (<a target="_blank" rel="noopener" href="https://www.smt-associates.com/">https://www.smt-associates.com</a>)</td>
+</tr>
+<tr>
+<td>DotBot</td>
+<td>DotBot&#x2F;1.1 (<a target="_blank" rel="noopener" href="http://www.opensiteexplorer.org/dotbot">http://www.opensiteexplorer.org/dotbot</a>)</td>
+</tr>
+<tr>
+<td>Qwantify</td>
+<td>Mozilla&#x2F;5.0 (compatible; Qwantify&#x2F;2.4w; +<a target="_blank" rel="noopener" href="https://www.qwant.com/)/2.4w">https://www.qwant.com/)/2.4w</a></td>
+</tr>
+</tbody></table>
+<h1 id="結論"><a href="#結論" class="headerlink" title="結論"></a>結論</h1><p>使用 Prerender 好處在於說可以自己決定要回傳什麼時候的 SnapShot 檔案給搜尋引擎使用，</p>
+<p>但是反之也要注意更新檔案的頻率。</p>
+
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clfnd6e170004dmq320execyz" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clfo1dufi0004cdoob07h0p9f" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
       
       
       
