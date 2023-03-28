@@ -104,14 +104,11 @@
 <p>裡面其實只有 directions 跟 y 最重要</p>
 <p>因為我們判斷它是否為回彈事件為 判斷他 nextY &#x3D;&#x3D;&#x3D;0 代表他就在最上方</p>
 <p>不用管他是什麼事件，這樣就可以解決了</p>
-<blockquote>
-<p>這裡說明一下 為什麼使用這方法而不用 touchmove preventDefault 是因為 有可能舊版本的 safari 沒有這個 event…<br>也不想要考慮太多相容性 就先保留這個行為 但是讓結果相同</p>
-</blockquote>
+<p><strong>這裡說明一下 為什麼使用這方法而不用 touchmove preventDefault 是因為 有可能舊版本的 safari 沒有這個 event…</strong><br><strong>也不想要考慮太多相容性 就先保留這個行為 但是讓結果相同</strong></p>
 <figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> &#123; useScroll &#125; <span class="keyword">from</span> <span class="string">&#x27;@vueuse/core&#x27;</span>;</span><br><span class="line"><span class="keyword">import</span> &#123; ref, computed, toRefs, watch &#125; <span class="keyword">from</span> <span class="string">&#x27;vue&#x27;</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">export</span> <span class="keyword">default</span> <span class="keyword">function</span> <span class="title function_">useHeader</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="keyword">const</span> showHeader = <span class="title function_">ref</span>(<span class="literal">true</span>);</span><br><span class="line">  <span class="keyword">const</span> winComputedRef = <span class="title function_">computed</span>(<span class="function">() =&gt;</span> <span class="variable language_">window</span>);</span><br><span class="line">  <span class="keyword">const</span> &#123; arrivedState, y, directions &#125; = <span class="title function_">useScroll</span>(winComputedRef);</span><br><span class="line">  <span class="keyword">const</span> &#123; <span class="attr">top</span>: toTop, <span class="attr">bottom</span>: toBottom &#125; = <span class="title function_">toRefs</span>(directions);</span><br><span class="line">  <span class="keyword">const</span> &#123; <span class="attr">top</span>: topArrived &#125; = <span class="title function_">toRefs</span>(arrivedState);</span><br><span class="line">  <span class="title function_">watch</span>([toBottom, y], <span class="function">(<span class="params">[toBottomNewValue, nextY]</span>) =&gt;</span> &#123;</span><br><span class="line">    <span class="comment">//nextY to prevent iOS safari elastic scrolling</span></span><br><span class="line">    <span class="keyword">if</span> (toBottomNewValue &amp;&amp; nextY !== <span class="number">0</span>) &#123;</span><br><span class="line">      showHeader.<span class="property">value</span> = <span class="literal">false</span>;</span><br><span class="line">    &#125; <span class="keyword">else</span> <span class="keyword">if</span> (nextY === <span class="number">0</span>) &#123;</span><br><span class="line">      showHeader.<span class="property">value</span> = <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;);</span><br><span class="line"></span><br><span class="line">  <span class="title function_">watch</span>(</span><br><span class="line">    <span class="function">() =&gt;</span> toTop.<span class="property">value</span>,</span><br><span class="line">    <span class="function">(<span class="params">newValue</span>) =&gt;</span> &#123;</span><br><span class="line">      <span class="keyword">if</span> (newValue) &#123;</span><br><span class="line">        showHeader.<span class="property">value</span> = <span class="literal">true</span>;</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">  );</span><br><span class="line">  <span class="keyword">return</span> &#123;</span><br><span class="line">    showHeader,</span><br><span class="line">    topArrived,</span><br><span class="line">    toBottom,</span><br><span class="line">    toTop,</span><br><span class="line">    y,</span><br><span class="line">  &#125;;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 
 <p>這個問題主要要考慮的是 iOS 以及 safari 版本不同 有可能有不同的事件 所以最好是找一個比較符合的解決方法</p>
-<h2 id="其他解法-要確認使用者大部分-Device-在什麼版本"><a href="#其他解法-要確認使用者大部分-Device-在什麼版本" class="headerlink" title="其他解法(要確認使用者大部分 Device 在什麼版本)"></a>其他解法(要確認使用者大部分 Device 在什麼版本)</h2><p>方向</p>
-<ol>
+<h2 id="其他解法-要確認使用者大部分-Device-在什麼版本"><a href="#其他解法-要確認使用者大部分-Device-在什麼版本" class="headerlink" title="其他解法(要確認使用者大部分 Device 在什麼版本)"></a>其他解法(要確認使用者大部分 Device 在什麼版本)</h2><ol>
 <li><p>touchmove prevent</p>
 </li>
 <li><p>使用 debounce 限制 scroll top 抓取事件 delay 50 ms 之類 然後判斷高度 可以使用 lodash.throttle 套件</p>
@@ -122,7 +119,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/28/PreventElasticScroll/" data-id="clfsemeo70005atona9sb01ez" data-title="iOS Safari Handle Elastic Scroll" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/28/PreventElasticScroll/" data-id="clfseovj70005asond5mh6e76" data-title="iOS Safari Handle Elastic Scroll" class="article-share-link">Share</a>
       
       
       
@@ -239,7 +236,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clfsemeo60004aton6r015nqe" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clfseovj60004ason95vchv3l" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
       
       
       
@@ -362,7 +359,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="clfsemeo50003aton6wv92toh" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="clfseovj10001ason42yseqec" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
       
       
       
@@ -444,7 +441,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="clfsemeo80007atond368fb1u" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="clfseovj90007asongz5u8wai" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
       
       
       
@@ -557,7 +554,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="clfsemeo10001aton6ithc3y7" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="clfseovj50003ason2p7chi7q" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
       
       
       
@@ -639,7 +636,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="clfsemeoc000batongy4p465f" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="clfseovjc000basonhtp7cxac" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
       
       
       
@@ -701,7 +698,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="clfsemeob000aaton3ewd9p4w" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="clfseovjb000aasonglju1url" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
       
       
       
@@ -783,7 +780,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="clfsemeoe000daton83y88qxs" data-title="VueErrorHandling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="clfseovk0002pason8sg6g06d" data-title="VueErrorHandling" class="article-share-link">Share</a>
       
       
       
@@ -834,7 +831,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="clfsemeof000fatonf12m0sl7" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="clfseovk2002qason1pgh5jpa" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
       
       
       
@@ -925,7 +922,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="clfsemeo90008atondvpa5rol" data-title="UC Browser Support" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="clfseovja0008asona5ghdzia" data-title="UC Browser Support" class="article-share-link">Share</a>
       
       
       
