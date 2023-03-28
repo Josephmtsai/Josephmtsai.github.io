@@ -29,8 +29,8 @@ tags:
 
 不用管他是什麼事件，這樣就可以解決了
 
-> 這裡說明一下 為什麼使用這方法而不用 touchmove preventDefault 是因為 有可能舊版本的 safari 沒有這個 event...
-> 也不想要考慮太多相容性 就先保留這個行為 但是讓結果相同
+**這裡說明一下 為什麼使用這方法而不用 touchmove preventDefault 是因為 有可能舊版本的 safari 沒有這個 event...**
+**也不想要考慮太多相容性 就先保留這個行為 但是讓結果相同**
 
 ```javascript
 import { useScroll } from '@vueuse/core';
@@ -72,8 +72,6 @@ export default function useHeader() {
 這個問題主要要考慮的是 iOS 以及 safari 版本不同 有可能有不同的事件 所以最好是找一個比較符合的解決方法
 
 ## 其他解法(要確認使用者大部分 Device 在什麼版本)
-
-方向
 
 1.  touchmove prevent
 
