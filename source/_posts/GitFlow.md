@@ -26,6 +26,7 @@ tags:
 | main        | Pre-Prod, Prod | 正式環境      |
 | feature/xxx |                | 開發功能分支  |
 | hotfix/xxx  |                | 緊急功能修正  |
+| fix/xxx     |                | 排程功能部屬  |
 
 我們環境實際上重要的有三種環境
 
@@ -57,19 +58,38 @@ tags:
 2. feature/ForgotAccount: 忘記帳號密碼的流程 (新增 UI 以及會修改到 Routing 的檔案)
 3. feature/Product: 新的產品頁面 (新增 UI 以及會修改到 Routing 的檔案)
 4. main: 我們的正式環境的 branch
+5. fix/Week1: 因為我們是每一週會上 Code 所以 branch 以 fix prefix 開頭 然後會把完成的功能 merge 進來
 
 首先可能 A 這個人收到會員功能的部分開始開發，以及 B 這個人也開始開發忘記帳號密碼的流程
-
 他們都是從 main 這個 branch 開啟 feature branch 各自開發，那開發到一個段落了
-
 A 的功能先完成，他先 Merge 到 QAT ，接著換 B 的功能完成，他也 Merge 到 QAT
 
 **如圖片黑框的部分 這樣有可能會發生衝突**
 {% asset_img 1.1.png "Flow" %}
 
 Issue 1. 因為根據剛剛上面的敘述 A 跟 B 在沒有協調的狀況下 它們有檔案衝突了
+
 所以這是第一個衝突點，Routing 檔案衝突
 Solution:
 
 1. 找 A 跟 B 一起選擇 confilt 檔案
-2. 並且要討論之後 Prod 進入的順序是否是 A 先 B 後 或是 B 後 A 先 ，如果不是
+2. 並且要討論之後進到正式環境的順序是否是 A 先 B 後 或是 B 後 A 先 ，到時候要討論怎麼 Merge
+
+---
+
+接著測試到一個段落 QA 也認為 1 跟 2. 的 branch 差不多可以進 Prod 了,我們會透過剛剛提到的 5.
+fix/Week1 將大家要進的程式碼統一 Merge 到此 branch 然後 merge to Prod ,部屬到 Pre-Prod 環境給 QA 做最後檢查
+
+**這樣好處是 Merge prod 只會有一個點 到時候要退版也會好退**
+
+Issue 2. 跟 Issue 1 一樣 有可能會有 Routing 檔案衝突或是其他檔案衝突
+
+**如圖片黑框的部分 這樣有可能會發生衝突**
+{% asset_img 1.2.png "Flow" %}
+Solution:
+
+1. 定時 Sync main branch 到自己的 branch ex: feature/Profile 如果有衝突可以當下就定時解掉 避免上線前的困擾
+2. 找 A 跟 B 一起選擇 confilt 檔案
+3. 部屬時候如果有衝突的部分要再檢查一次功能
+
+---
