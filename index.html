@@ -160,33 +160,23 @@ options
 }
 end
 commit id:"First Commit" tag: "1.0.0"
-
-% 分支创建阶段
 branch feature/Profile
 branch feature/ForgotAccount
 branch feature/Product
 branch qat/uat
-
-% 功能分支提交阶段
 checkout feature/Profile
 commit id:"Profile UI"
 commit id:"Add Profile Routing"
-
 checkout feature/Product
 commit id:"Add Poduct UI"
 commit
-
 checkout feature/ForgotAccount
 commit id:"ForgotAccount UI"
 commit id:"Add ForgotAccount Routing"
-
-% 合并到 qat/uat 分支阶段
 checkout qat/uat
 merge feature/Profile id: "Profile enter qat"
 merge feature/ForgotAccount id: "ForgotAccount enter qat" type: HIGHLIGHT
 merge feature/Product id: "Product enter qat"
-
-% Hotfix 分支阶段
 checkout main
 branch hotfix/RegisterIssue
 commit id: "fix register form"
@@ -194,21 +184,15 @@ commit id: "fix UI Issue"
 commit id: "fix Routing Issue"
 checkout main
 merge hotfix/RegisterIssue
-
-% 修复问题和合并到 qat/uat 分支阶段
 checkout feature/Profile
 commit id:"Fix QT-XXX Profile Issue"
-
 checkout feature/ForgotAccount
 commit id:"Fix QT-XXX ForgotAccount Issue"
 commit id:"Fix UAT-XXXXX ForgotAccount Issue"
-
 merge qat/uat
 checkout qat/uat
 merge feature/ForgotAccount type: HIGHLIGHT
 merge feature/Profile type: HIGHLIGHT
-
-% 将功能分支合并到 rlps/week1 分支并部署
 checkout main
 branch rlps/week1
 checkout rlps/week1
@@ -220,7 +204,7 @@ merge rlps/week1 tag: "1.0.1"</pre>
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/04/12/GitFlow/" data-id="clgdugrjh0003dnolg9jidi0s" data-title="GitFlow" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/04/12/GitFlow/" data-id="clgdumxu10000bwom6w5o2lgh" data-title="GitFlow" class="article-share-link">Share</a>
       
       
       
@@ -286,7 +270,7 @@ merge rlps/week1 tag: "1.0.1"</pre>
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/28/PreventElasticScroll/" data-id="clgdugrjk0007dnolbvfl5fbb" data-title="iOS Safari Handle Elastic Scroll" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/28/PreventElasticScroll/" data-id="clgdumxue0007bwom9cyi6r73" data-title="iOS Safari Handle Elastic Scroll" class="article-share-link">Share</a>
       
       
       
@@ -403,7 +387,7 @@ merge rlps/week1 tag: "1.0.1"</pre>
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clgdugrjj0005dnolblyg1w8b" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clgdumxuc0005bwom51zzdahf" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
       
       
       
@@ -526,7 +510,7 @@ merge rlps/week1 tag: "1.0.1"</pre>
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="clgdugrjd0001dnolc1cicvlq" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="clgdumxua0003bwomaavk4v5j" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
       
       
       
@@ -608,7 +592,7 @@ merge rlps/week1 tag: "1.0.1"</pre>
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="clgdugrjl0008dnolba68hpox" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="clgdumxuf0008bwom5un96do6" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
       
       
       
@@ -721,7 +705,7 @@ merge rlps/week1 tag: "1.0.1"</pre>
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="clgdugrji0004dnol6odp1zg7" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="clgdumxub0004bwomasdb0cbo" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
       
       
       
@@ -803,7 +787,7 @@ merge rlps/week1 tag: "1.0.1"</pre>
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="clgdugrjp000ddnol712wfpis" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="clgdumxuj000dbwom1bumg7il" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
       
       
       
@@ -865,7 +849,7 @@ merge rlps/week1 tag: "1.0.1"</pre>
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="clgdugrjo000bdnold88a8gwb" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="clgdumxuh000bbwomeebcgn36" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
       
       
       
@@ -947,7 +931,7 @@ merge rlps/week1 tag: "1.0.1"</pre>
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="clgdugrjr000fdnol0lem7tcd" data-title="VueErrorHandling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="clgdumxuk000fbwom3g8z0ddr" data-title="VueErrorHandling" class="article-share-link">Share</a>
       
       
       
@@ -998,7 +982,7 @@ merge rlps/week1 tag: "1.0.1"</pre>
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="clgdugrjs000idnolg6af1ktm" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="clgdumxuo000ibwom9pmnhi6j" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
       
       
       
