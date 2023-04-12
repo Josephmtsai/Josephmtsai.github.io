@@ -42,6 +42,8 @@ tags:
 
 2. 緊急修正問題 直接推到 Prod
 
+3. 開發功能 時程需要拖很長(歷時一兩個月)
+
 以下是大致上的 Gitflow 流程圖
 
 {% asset_img Flow.png "Example" %}
@@ -81,7 +83,7 @@ branch 流程順序如下:
 ---
 
 接著測試到一個段落 QA 也認為 1 跟 2. 的 branch 差不多可以進 Prod 了,我們會透過剛剛提到的 5.
-fix/Week1 將大家要進的程式碼統一 Merge 到此 branch 然後 merge to Prod ,部屬到 Pre-Prod 環境給 QA 做最後檢查
+fix/Week1 將大家要進的程式碼統一 Merge 到此 branch 然後 merge to main ,部屬到 Pre-Prod 環境給 QA 做最後檢查
 
 branch 流程順序如下:
 
@@ -119,7 +121,7 @@ branch 流程順序如下:
 2. hotfix/RegisterIssue Merge main (緊急修正 要直接丟到 Pre-prod 做快速驗證後上線)
 3. hotfix/RegisterIssue Merge qat
 
-為什麼要做 3 是因為要避免 qat 以及 main branch 有一些落差，理論上 qat 會比較新 但是功能應該要跟 prod 相同
+為什麼要做 3 是因為要避免 qat 以及 main branch 有一些落差，理論上 qat 會比較新 但是功能應該要跟 main 相同
 
 ### Issue 3. 有可能遇到的問題也是類似 ，有可能在 Merge qat 的時候 ,QAT 有新的功能在開發也修改到相同檔案
 
@@ -128,6 +130,19 @@ branch 流程順序如下:
 ### Solution:
 
 1. 找到衝突的檔案 並且找到功能的作者討論如何修改衝突
-2. 並且請功能的作者 他的 branch 先行 sync prod 到自己的 branch 維持最新的版本 避免之後 Merge prod 又會有衝突
+2. 並且請功能的作者 他的 branch 先行 sync main 到自己的 branch 維持最新的版本 避免之後 Merge main 又會有衝突
 
 ---
+
+# 3. 開發功能 時程需要拖很長(歷時一兩個月)
+
+因為要先知道 如果一個 feature branch 存活的週期大於一個月以上一定要定時做一件事情
+
+**定時 sync main to feature branch **
+
+其餘流程要照著正常 feature 推動 這樣才不會有到時候要 Merge main 一堆衝突的困擾
+
+# 心得
+
+不管使用什麼 gitflow 都是要避免衝突，盡量要跟衝突的檔案的作者溝通 看上線時程，以及 sync main branch.
+如果真有遇到 Merge 到錯誤的 branch (最好是先 force reset 到錯誤的地方開始解決 千萬不要再修改檔案避免造成更多錯誤)
