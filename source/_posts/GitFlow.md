@@ -42,8 +42,6 @@ tags:
 
 2. 緊急修正問題 直接推到 Prod
 
-3. 開發功能 時程需要拖很長(歷時一兩個月)
-
 以下是大致上的 Gitflow 流程圖
 
 {% asset_img Flow.png "Example" %}
@@ -60,17 +58,22 @@ tags:
 4. main: 我們的正式環境的 branch
 5. fix/Week1: 因為我們是每一週會上 Code 所以 branch 以 fix prefix 開頭 然後會把完成的功能 merge 進來
 
-首先可能 A 這個人收到會員功能的部分開始開發，以及 B 這個人也開始開發忘記帳號密碼的流程
-他們都是從 main 這個 branch 開啟 feature branch 各自開發，那開發到一個段落了
-A 的功能先完成，他先 Merge 到 QAT ，接著換 B 的功能完成，他也 Merge 到 QAT
+branch 流程順序如下:
+
+1. feature/Profile ,feature/ForgotAccount 都從 main 拉 branch 出來
+2. feature/Profile ,feature/ForgotAccount 各自開發 直到完成
+3. feature/Profile ,feature/ForgotAccount Merge qat
+
+---
 
 **如圖片黑框的部分 這樣有可能會發生衝突**
 {% asset_img 1.1.png "Flow" %}
 
-Issue 1. 因為根據剛剛上面的敘述 A 跟 B 在沒有協調的狀況下 它們有檔案衝突了
+## Issue 1. 因為根據剛剛上面的敘述 A 跟 B 在沒有協調的狀況下 它們有檔案衝突了
 
 所以這是第一個衝突點，Routing 檔案衝突
-Solution:
+
+### Solution:
 
 1. 找 A 跟 B 一起選擇 confilt 檔案
 2. 並且要討論之後進到正式環境的順序是否是 A 先 B 後 或是 B 後 A 先 ，到時候要討論怎麼 Merge
@@ -80,16 +83,51 @@ Solution:
 接著測試到一個段落 QA 也認為 1 跟 2. 的 branch 差不多可以進 Prod 了,我們會透過剛剛提到的 5.
 fix/Week1 將大家要進的程式碼統一 Merge 到此 branch 然後 merge to Prod ,部屬到 Pre-Prod 環境給 QA 做最後檢查
 
+branch 流程順序如下:
+
+1. fix/Week1 都從 main 拉 branch 出來
+2. feature/Profile ,feature/ForgotAccount Merge fix/week1
+3. fix/week1 Merge main (需要有人 approve 或是檢查程式碼)
+
 **這樣好處是 Merge prod 只會有一個點 到時候要退版也會好退**
 
-Issue 2. 跟 Issue 1 一樣 有可能會有 Routing 檔案衝突或是其他檔案衝突
+## Issue 2. 跟 Issue 1 一樣 有可能會有 Routing 檔案衝突或是其他檔案衝突
 
-**如圖片黑框的部分 這樣有可能會發生衝突**
+**如圖片黑框的部分 fix/week1 是從上方這個 main branch 開的 然後 merge 進去這樣有可能會發生衝突**
 {% asset_img 1.2.png "Flow" %}
-Solution:
+
+### Solution:
 
 1. 定時 Sync main branch 到自己的 branch ex: feature/Profile 如果有衝突可以當下就定時解掉 避免上線前的困擾
 2. 找 A 跟 B 一起選擇 confilt 檔案
 3. 部屬時候如果有衝突的部分要再檢查一次功能
+
+---
+
+這樣就完成照順序進到 Prod 的功能了
+
+# 2. 緊急修正問題 直接推到 Prod
+
+想當然 我們在開發的過程中 有可能緊急有發生 Prod 有問題 需要緊急修正的問題
+
+branch:
+hotfix/RegisterIssue : 註冊問題修正的 branch
+
+branch 流程順序如下:
+
+1. hotfix/RegisterIssue 都從 main 拉 branch 出來
+2. hotfix/RegisterIssue Merge main (緊急修正 要直接丟到 Pre-prod 做快速驗證後上線)
+3. hotfix/RegisterIssue Merge qat
+
+為什麼要做 3 是因為要避免 qat 以及 main branch 有一些落差，理論上 qat 會比較新 但是功能應該要跟 prod 相同
+
+### Issue 3. 有可能遇到的問題也是類似 ，有可能在 Merge qat 的時候 ,QAT 有新的功能在開發也修改到相同檔案
+
+{% asset_img 1.3.png "Flow" %}
+
+### Solution:
+
+1. 找到衝突的檔案 並且找到功能的作者討論如何修改衝突
+2. 並且請功能的作者 他的 branch 先行 sync prod 到自己的 branch 維持最新的版本 避免之後 Merge prod 又會有衝突
 
 ---
