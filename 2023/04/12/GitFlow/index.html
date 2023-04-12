@@ -6,20 +6,23 @@
   
   <title>GitFlow | Joseph&#39;s Work Note</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題， 首先我們先定義好 Git Branch 以及對應的環境    Branch Env Branch Remark    qat QAT QA Testing   main Pre-Prod, Prod 正式環境   feature&#x2F;xxx  開發功能分支   hotfix&#x2F;xxx  緊急功能修正">
+  <meta name="description" content="突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題，以及他們解決什麼問題 最主要觀念是  正常功能開發以 main branch 為主體(所有的分支都由這裡出發) ，分別 Merge 到 QAT 避免同步大家開發多個功能，有互相的影響以及將不必要的程式碼帶到正式環境  緊急修正的情況可以直接根據 main branch 拉出分支修正 避免其他影響 然後部屬到 Pre-p">
 <meta property="og:type" content="article">
 <meta property="og:title" content="GitFlow">
 <meta property="og:url" content="https://josephmtsai.github.io/2023/04/12/GitFlow/index.html">
 <meta property="og:site_name" content="Joseph&#39;s Work Note">
-<meta property="og:description" content="突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題， 首先我們先定義好 Git Branch 以及對應的環境    Branch Env Branch Remark    qat QAT QA Testing   main Pre-Prod, Prod 正式環境   feature&#x2F;xxx  開發功能分支   hotfix&#x2F;xxx  緊急功能修正">
+<meta property="og:description" content="突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題，以及他們解決什麼問題 最主要觀念是  正常功能開發以 main branch 為主體(所有的分支都由這裡出發) ，分別 Merge 到 QAT 避免同步大家開發多個功能，有互相的影響以及將不必要的程式碼帶到正式環境  緊急修正的情況可以直接根據 main branch 拉出分支修正 避免其他影響 然後部屬到 Pre-p">
 <meta property="og:locale" content="zh_TW">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/04/12/GitFlow/Flow.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/04/12/GitFlow/1.1.png">
 <meta property="article:published_time" content="2023-04-12T14:52:34.000Z">
-<meta property="article:modified_time" content="2023-04-12T15:31:16.205Z">
+<meta property="article:modified_time" content="2023-04-12T15:55:43.897Z">
 <meta property="article:author" content="Joseph M Tsai">
 <meta property="article:tag" content="Git">
 <meta property="article:tag" content="GitFlow">
 <meta property="article:tag" content="Workflow">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://josephmtsai.github.io/2023/04/12/GitFlow/Flow.png">
   
   
     <link rel="shortcut icon" href="/favicon.png">
@@ -92,8 +95,16 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <p>突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題，</p>
+        <p>突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題，以及他們解決什麼問題</p>
+<p>最主要觀念是</p>
+<ol>
+<li><p>正常功能開發以 main branch 為主體(所有的分支都由這裡出發) ，分別 Merge 到 QAT 避免同步大家開發多個功能，<br>有互相的影響以及將不必要的程式碼帶到正式環境</p>
+</li>
+<li><p>緊急修正的情況可以直接根據 main branch 拉出分支修正 避免其他影響 然後部屬到 Pre-prod 測試</p>
+</li>
+</ol>
 <p>首先我們先定義好 Git Branch 以及對應的環境</p>
+<p><strong>我們這裡以 main 當作我們的主要分支 所有 branch 都是以 main 為主</strong></p>
 <table>
 <thead>
 <tr>
@@ -154,60 +165,32 @@
 </li>
 </ol>
 <p>以下是大致上的 Gitflow 流程圖</p>
+<img src="/2023/04/12/GitFlow/Flow.png" class="" title="Example">
+
 <p>我們會一個一個介紹</p>
-<pre class="mermaid">gitGraph:
-options
-{
-  "nodeSpacing": 150,
-  "commitSpacing": 60
-}
-end
-commit id:"First Commit" tag: "1.0.0"
-branch feature/Profile
-branch feature/ForgotAccount
-branch feature/Product
-branch qat/uat
-checkout feature/Profile
-commit id:"Profile UI"
-commit id:"Add Profile Routing"
-checkout feature/Product
-commit id:"Add Poduct UI"
-commit
-checkout feature/ForgotAccount
-commit id:"ForgotAccount UI"
-commit id:"Add ForgotAccount Routing"
-checkout qat/uat
-merge feature/Profile id: "Profile enter qat"
-merge feature/ForgotAccount id: "ForgotAccount enter qat" type: HIGHLIGHT
-merge feature/Product id: "Product enter qat"
-checkout main
-branch hotfix/RegisterIssue
-commit id: "fix register form"
-commit id: "fix UI Issue"
-commit id: "fix Routing Issue"
-checkout main
-merge hotfix/RegisterIssue
-checkout feature/Profile
-commit id:"Fix QT-XXX Profile Issue"
-checkout feature/ForgotAccount
-commit id:"Fix QT-XXX ForgotAccount Issue"
-commit id:"Fix UAT-XXXXX ForgotAccount Issue"
-merge qat/uat
-checkout qat/uat
-merge feature/ForgotAccount type: HIGHLIGHT
-merge feature/Profile type: HIGHLIGHT
-checkout main
-branch rlps/week1
-checkout rlps/week1
-merge feature/ForgotAccount type: HIGHLIGHT
-merge feature/Profile type: HIGHLIGHT
-checkout main
-merge rlps/week1 tag: "1.0.1"</pre>
+<h1 id="1-開發功能-照順序進到-Prod"><a href="#1-開發功能-照順序進到-Prod" class="headerlink" title="1. 開發功能 照順序進到 Prod"></a>1. 開發功能 照順序進到 Prod</h1><p>首先我們先介紹我們有幾個 branch 以及大概的功能敘述</p>
+<ol>
+<li>feature&#x2F;Profile : 他有會員功能的部分 (新增 UI 以及會修改到 Routing 的檔案)</li>
+<li>feature&#x2F;ForgotAccount: 忘記帳號密碼的流程 (新增 UI 以及會修改到 Routing 的檔案)</li>
+<li>feature&#x2F;Product: 新的產品頁面 (新增 UI 以及會修改到 Routing 的檔案)</li>
+<li>main: 我們的正式環境的 branch</li>
+</ol>
+<p>首先可能 A 這個人收到會員功能的部分開始開發，以及 B 這個人也開始開發忘記帳號密碼的流程</p>
+<p>他們都是從 main 這個 branch 開啟 feature branch 各自開發，那開發到一個段落了</p>
+<p>A 的功能先完成，他先 Merge 到 QAT ，接著換 B 的功能完成，他也 Merge 到 QAT</p>
+<p><strong>如圖片黑框的部分 這樣有可能會發生衝突</strong></p>
+<img src="/2023/04/12/GitFlow/1.1.png" class="" title="Flow">
+
+<p>Issue 1. 因為根據剛剛上面的敘述 A 跟 B 在沒有協調的狀況下 它們有檔案衝突了<br>所以這是第一個衝突點，Routing 檔案衝突<br>Solution:</p>
+<ol>
+<li>找 A 跟 B 一起選擇 confilt 檔案</li>
+<li>並且要討論之後 Prod 進入的順序是否是 A 先 B 後 或是 B 後 A 先 ，如果不是</li>
+</ol>
 
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/04/12/GitFlow/" data-id="clgdumxu10000bwom6w5o2lgh" data-title="GitFlow" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/04/12/GitFlow/" data-id="clgdvigg40000bongg05452ha" data-title="GitFlow" class="article-share-link">Share</a>
       
       
       
