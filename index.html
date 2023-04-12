@@ -160,8 +160,6 @@
 </li>
 <li><p>緊急修正問題 直接推到 Prod</p>
 </li>
-<li><p>開發功能 時程需要拖很長(歷時一兩個月)</p>
-</li>
 </ol>
 <p>以下是大致上的 Gitflow 流程圖</p>
 <img src="/2023/04/12/GitFlow/Flow.png" class="" title="Example">
@@ -175,34 +173,61 @@
 <li>main: 我們的正式環境的 branch</li>
 <li>fix&#x2F;Week1: 因為我們是每一週會上 Code 所以 branch 以 fix prefix 開頭 然後會把完成的功能 merge 進來</li>
 </ol>
-<p>首先可能 A 這個人收到會員功能的部分開始開發，以及 B 這個人也開始開發忘記帳號密碼的流程<br>他們都是從 main 這個 branch 開啟 feature branch 各自開發，那開發到一個段落了<br>A 的功能先完成，他先 Merge 到 QAT ，接著換 B 的功能完成，他也 Merge 到 QAT</p>
+<p>branch 流程順序如下:</p>
+<ol>
+<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount 都從 main 拉 branch 出來</li>
+<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount 各自開發 直到完成</li>
+<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount Merge qat</li>
+</ol>
+<hr>
 <p><strong>如圖片黑框的部分 這樣有可能會發生衝突</strong></p>
 <img src="/2023/04/12/GitFlow/1.1.png" class="" title="Flow">
 
-<p>Issue 1. 因為根據剛剛上面的敘述 A 跟 B 在沒有協調的狀況下 它們有檔案衝突了</p>
-<p>所以這是第一個衝突點，Routing 檔案衝突<br>Solution:</p>
-<ol>
+<h2 id="Issue-1-因為根據剛剛上面的敘述-A-跟-B-在沒有協調的狀況下-它們有檔案衝突了"><a href="#Issue-1-因為根據剛剛上面的敘述-A-跟-B-在沒有協調的狀況下-它們有檔案衝突了" class="headerlink" title="Issue 1. 因為根據剛剛上面的敘述 A 跟 B 在沒有協調的狀況下 它們有檔案衝突了"></a>Issue 1. 因為根據剛剛上面的敘述 A 跟 B 在沒有協調的狀況下 它們有檔案衝突了</h2><p>所以這是第一個衝突點，Routing 檔案衝突</p>
+<h3 id="Solution"><a href="#Solution" class="headerlink" title="Solution:"></a>Solution:</h3><ol>
 <li>找 A 跟 B 一起選擇 confilt 檔案</li>
 <li>並且要討論之後進到正式環境的順序是否是 A 先 B 後 或是 B 後 A 先 ，到時候要討論怎麼 Merge</li>
 </ol>
 <hr>
 <p>接著測試到一個段落 QA 也認為 1 跟 2. 的 branch 差不多可以進 Prod 了,我們會透過剛剛提到的 5.<br>fix&#x2F;Week1 將大家要進的程式碼統一 Merge 到此 branch 然後 merge to Prod ,部屬到 Pre-Prod 環境給 QA 做最後檢查</p>
-<p><strong>這樣好處是 Merge prod 只會有一個點 到時候要退版也會好退</strong></p>
-<p>Issue 2. 跟 Issue 1 一樣 有可能會有 Routing 檔案衝突或是其他檔案衝突</p>
-<p><strong>如圖片黑框的部分 這樣有可能會發生衝突</strong></p>
-<img src="/2023/04/12/GitFlow/1.2.png" class="" title="Flow">
-<p>Solution:</p>
+<p>branch 流程順序如下:</p>
 <ol>
+<li>fix&#x2F;Week1 都從 main 拉 branch 出來</li>
+<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount Merge fix&#x2F;week1</li>
+<li>fix&#x2F;week1 Merge main (需要有人 approve 或是檢查程式碼)</li>
+</ol>
+<p><strong>這樣好處是 Merge prod 只會有一個點 到時候要退版也會好退</strong></p>
+<h2 id="Issue-2-跟-Issue-1-一樣-有可能會有-Routing-檔案衝突或是其他檔案衝突"><a href="#Issue-2-跟-Issue-1-一樣-有可能會有-Routing-檔案衝突或是其他檔案衝突" class="headerlink" title="Issue 2. 跟 Issue 1 一樣 有可能會有 Routing 檔案衝突或是其他檔案衝突"></a>Issue 2. 跟 Issue 1 一樣 有可能會有 Routing 檔案衝突或是其他檔案衝突</h2><p><strong>如圖片黑框的部分 fix&#x2F;week1 是從上方這個 main branch 開的 然後 merge 進去這樣有可能會發生衝突</strong></p>
+<img src="/2023/04/12/GitFlow/1.2.png" class="" title="Flow">
+
+<h3 id="Solution-1"><a href="#Solution-1" class="headerlink" title="Solution:"></a>Solution:</h3><ol>
 <li>定時 Sync main branch 到自己的 branch ex: feature&#x2F;Profile 如果有衝突可以當下就定時解掉 避免上線前的困擾</li>
 <li>找 A 跟 B 一起選擇 confilt 檔案</li>
 <li>部屬時候如果有衝突的部分要再檢查一次功能</li>
+</ol>
+<hr>
+<p>這樣就完成照順序進到 Prod 的功能了</p>
+<h1 id="2-緊急修正問題-直接推到-Prod"><a href="#2-緊急修正問題-直接推到-Prod" class="headerlink" title="2. 緊急修正問題 直接推到 Prod"></a>2. 緊急修正問題 直接推到 Prod</h1><p>想當然 我們在開發的過程中 有可能緊急有發生 Prod 有問題 需要緊急修正的問題</p>
+<p>branch:<br>hotfix&#x2F;RegisterIssue : 註冊問題修正的 branch</p>
+<p>branch 流程順序如下:</p>
+<ol>
+<li>hotfix&#x2F;RegisterIssue 都從 main 拉 branch 出來</li>
+<li>hotfix&#x2F;RegisterIssue Merge main (緊急修正 要直接丟到 Pre-prod 做快速驗證後上線)</li>
+<li>hotfix&#x2F;RegisterIssue Merge qat</li>
+</ol>
+<p>為什麼要做 3 是因為要避免 qat 以及 main branch 有一些落差，理論上 qat 會比較新 但是功能應該要跟 prod 相同</p>
+<h3 id="Issue-3-有可能遇到的問題也是類似-，有可能在-Merge-qat-的時候-QAT-有新的功能在開發也修改到相同檔案"><a href="#Issue-3-有可能遇到的問題也是類似-，有可能在-Merge-qat-的時候-QAT-有新的功能在開發也修改到相同檔案" class="headerlink" title="Issue 3. 有可能遇到的問題也是類似 ，有可能在 Merge qat 的時候 ,QAT 有新的功能在開發也修改到相同檔案"></a>Issue 3. 有可能遇到的問題也是類似 ，有可能在 Merge qat 的時候 ,QAT 有新的功能在開發也修改到相同檔案</h3><img src="/2023/04/12/GitFlow/1.3.png" class="" title="Flow">
+
+<h3 id="Solution-2"><a href="#Solution-2" class="headerlink" title="Solution:"></a>Solution:</h3><ol>
+<li>找到衝突的檔案 並且找到功能的作者討論如何修改衝突</li>
+<li>並且請功能的作者 他的 branch 先行 sync prod 到自己的 branch 維持最新的版本 避免之後 Merge prod 又會有衝突</li>
 </ol>
 <hr>
 
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/04/12/GitFlow/" data-id="clgdwbsk30000clp0be73apov" data-title="GitFlow" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/04/12/GitFlow/" data-id="clgdxf5k00000bvoseee52l9u" data-title="GitFlow" class="article-share-link">Share</a>
       
       
       
@@ -268,7 +293,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/28/PreventElasticScroll/" data-id="clgdwbskj0007clp05ck3e3mz" data-title="iOS Safari Handle Elastic Scroll" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/28/PreventElasticScroll/" data-id="clgdxf5ke0007bvosh6hbafvu" data-title="iOS Safari Handle Elastic Scroll" class="article-share-link">Share</a>
       
       
       
@@ -385,7 +410,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clgdwbskh0005clp05hsh40uo" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="clgdxf5kc0005bvosghkc2yzu" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
       
       
       
@@ -508,7 +533,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="clgdwbske0003clp084qih8y3" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="clgdxf5k90003bvosbo466m5b" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
       
       
       
@@ -590,7 +615,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="clgdwbskk0008clp0f8on2zci" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="clgdxf5kf0008bvos7w6se38t" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
       
       
       
@@ -703,7 +728,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="clgdwbskf0004clp06miwezpz" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="clgdxf5kb0004bvos7rpc2ek2" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
       
       
       
@@ -785,7 +810,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="clgdwbskq000dclp02hrnc7l5" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="clgdxf5kk000dbvosgxsn784x" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
       
       
       
@@ -847,7 +872,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="clgdwbskn000bclp07gwq586d" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="clgdxf5ki000bbvos0jo2a9xy" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
       
       
       
@@ -929,7 +954,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="clgdwbskt000fclp08p1wbycr" data-title="VueErrorHandling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="clgdxf5km000fbvosds0oawd5" data-title="VueErrorHandling" class="article-share-link">Share</a>
       
       
       
@@ -980,7 +1005,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="clgdwbslq0039clp04tkp47uq" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="clgdxf5lf0039bvos5t4j9epn" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
       
       
       
