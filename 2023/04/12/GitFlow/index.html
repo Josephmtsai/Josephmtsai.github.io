@@ -4,16 +4,21 @@
   <meta charset="utf-8">
   
   
-  <title>Tag: Object | Joseph&#39;s Work Note</title>
+  <title>GitFlow | Joseph&#39;s Work Note</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="front-end,seo,back-end">
-<meta property="og:type" content="website">
-<meta property="og:title" content="Joseph&#39;s Work Note">
-<meta property="og:url" content="https://josephmtsai.github.io/tags/Object/index.html">
+  <meta name="description" content="突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題， 首先我們先定義好 Git Branch 以及對應的環境    Branch Env Branch Remark    qat QAT QA Testing   main Pre-Prod, Prod 正式環境   feature&#x2F;xxx  開發功能分支   hotfix&#x2F;xxx  緊急功能修正">
+<meta property="og:type" content="article">
+<meta property="og:title" content="GitFlow">
+<meta property="og:url" content="https://josephmtsai.github.io/2023/04/12/GitFlow/index.html">
 <meta property="og:site_name" content="Joseph&#39;s Work Note">
-<meta property="og:description" content="front-end,seo,back-end">
+<meta property="og:description" content="突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題， 首先我們先定義好 Git Branch 以及對應的環境    Branch Env Branch Remark    qat QAT QA Testing   main Pre-Prod, Prod 正式環境   feature&#x2F;xxx  開發功能分支   hotfix&#x2F;xxx  緊急功能修正">
 <meta property="og:locale" content="zh_TW">
+<meta property="article:published_time" content="2023-04-12T14:52:34.000Z">
+<meta property="article:modified_time" content="2023-04-12T15:26:24.096Z">
 <meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Git">
+<meta property="article:tag" content="GitFlow">
+<meta property="article:tag" content="Workflow">
 <meta name="twitter:card" content="summary">
   
   
@@ -65,39 +70,181 @@
 </header>
 
       <div class="outer">
-        <section id="main">
-  
-  
-    
-    
-      
-      
-      <section class="archives-wrap">
-        <div class="archive-year-wrap">
-          <a href="/archives/2022" class="archive-year">2022</a>
-        </div>
-        <div class="archives">
-    
-    <article class="archive-article archive-type-post">
-  <div class="archive-article-inner">
-    <header class="archive-article-header">
-      <a href="/2022/12/24/TypeScriptEnumObject/" class="archive-article-date">
-  <time class="dt-published" datetime="2022-12-24T03:59:26.000Z" itemprop="datePublished">12月 24</time>
+        <section id="main"><article id="post-GitFlow" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2023/04/12/GitFlow/" class="article-date">
+  <time class="dt-published" datetime="2023-04-12T14:52:34.000Z" itemprop="datePublished">2023-04-12</time>
 </a>
-      
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
   
-    <h1 itemprop="name">
-      <a class="archive-article-title" href="/2022/12/24/TypeScriptEnumObject/">TypeScript Object Using Enum as Key</a>
+    <h1 class="p-name article-title" itemprop="headline name">
+      GitFlow
     </h1>
   
 
-    </header>
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題，</p>
+<p>首先我們先定義好 Git Branch 以及對應的環境</p>
+<table>
+<thead>
+<tr>
+<th>Branch</th>
+<th>Env</th>
+<th>Branch Remark</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>qat</td>
+<td>QAT</td>
+<td>QA Testing</td>
+</tr>
+<tr>
+<td>main</td>
+<td>Pre-Prod, Prod</td>
+<td>正式環境</td>
+</tr>
+<tr>
+<td>feature&#x2F;xxx</td>
+<td></td>
+<td>開發功能分支</td>
+</tr>
+<tr>
+<td>hotfix&#x2F;xxx</td>
+<td></td>
+<td>緊急功能修正</td>
+</tr>
+</tbody></table>
+<p>我們環境實際上重要的有三種環境</p>
+<table>
+<thead>
+<tr>
+<th>Environment</th>
+<th>remark</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>QAT</td>
+<td>給 QA 做測試的環境(所有的 Feature 都會先進到 QAT 給 QA 測試 測試完成的才會 Deploy to Pre-prod)</td>
+</tr>
+<tr>
+<td>Pre-prod</td>
+<td>上線前給 QA 做最後測試的環境</td>
+</tr>
+<tr>
+<td>Prod</td>
+<td>正式環境</td>
+</tr>
+</tbody></table>
+<p>那我們可以依照幾種情境講述會遇到的問題</p>
+<ol>
+<li><p>開發功能 照順序進到 Prod</p>
+</li>
+<li><p>緊急修正問題 直接推到 Prod</p>
+</li>
+<li><p>開發功能 時程需要拖很長(歷時一兩個月)</p>
+</li>
+</ol>
+<p>以下是大致上的 Gitflow 流程圖</p>
+<p>我們會一個一個介紹</p>
+<pre class="mermaid">gitGraph:
+options
+{
+  "nodeSpacing": 150,
+  "commitSpacing": 60
+}
+end
+commit id:"First Commit" tag: "1.0.0"
+
+% 分支创建阶段
+branch feature/Profile
+branch feature/ForgotAccount
+branch feature/Product
+branch qat/uat
+
+% 功能分支提交阶段
+checkout feature/Profile
+commit id:"Profile UI"
+commit id:"Add Profile Routing"
+
+checkout feature/Product
+commit id:"Add Poduct UI"
+commit
+
+checkout feature/ForgotAccount
+commit id:"ForgotAccount UI"
+commit id:"Add ForgotAccount Routing"
+
+% 合并到 qat/uat 分支阶段
+checkout qat/uat
+merge feature/Profile id: "Profile enter qat"
+merge feature/ForgotAccount id: "ForgotAccount enter qat" type: HIGHLIGHT
+merge feature/Product id: "Product enter qat"
+
+% Hotfix 分支阶段
+checkout main
+branch hotfix/RegisterIssue
+commit id: "fix register form"
+commit id: "fix UI Issue"
+commit id: "fix Routing Issue"
+checkout main
+merge hotfix/RegisterIssue
+
+% 修复问题和合并到 qat/uat 分支阶段
+checkout feature/Profile
+commit id:"Fix QT-XXX Profile Issue"
+
+checkout feature/ForgotAccount
+commit id:"Fix QT-XXX ForgotAccount Issue"
+commit id:"Fix UAT-XXXXX ForgotAccount Issue"
+
+merge qat/uat
+checkout qat/uat
+merge feature/ForgotAccount type: HIGHLIGHT
+merge feature/Profile type: HIGHLIGHT
+
+% 将功能分支合并到 rlps/week1 分支并部署
+checkout main
+branch rlps/week1
+checkout rlps/week1
+merge feature/ForgotAccount type: HIGHLIGHT
+merge feature/Profile type: HIGHLIGHT
+checkout main
+merge rlps/week1 tag: "1.0.1"</pre>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2023/04/12/GitFlow/" data-id="clgdugrjh0003dnolg9jidi0s" data-title="GitFlow" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li></ul>
+
+    </footer>
   </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2023/03/28/PreventElasticScroll/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">iOS Safari Handle Elastic Scroll</div>
+    </a>
+  
+</nav>
+
+  
 </article>
-  
-  
-    </div></section>
-  
 
 
 </section>
