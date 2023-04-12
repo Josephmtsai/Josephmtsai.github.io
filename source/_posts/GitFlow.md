@@ -47,33 +47,23 @@ options
 }
 end
 commit id:"First Commit" tag: "1.0.0"
-
-% 分支创建阶段
 branch feature/Profile
 branch feature/ForgotAccount
 branch feature/Product
 branch qat/uat
-
-% 功能分支提交阶段
 checkout feature/Profile
 commit id:"Profile UI"
 commit id:"Add Profile Routing"
-
 checkout feature/Product
 commit id:"Add Poduct UI"
 commit
-
 checkout feature/ForgotAccount
 commit id:"ForgotAccount UI"
 commit id:"Add ForgotAccount Routing"
-
-% 合并到 qat/uat 分支阶段
 checkout qat/uat
 merge feature/Profile id: "Profile enter qat"
 merge feature/ForgotAccount id: "ForgotAccount enter qat" type: HIGHLIGHT
 merge feature/Product id: "Product enter qat"
-
-% Hotfix 分支阶段
 checkout main
 branch hotfix/RegisterIssue
 commit id: "fix register form"
@@ -81,21 +71,15 @@ commit id: "fix UI Issue"
 commit id: "fix Routing Issue"
 checkout main
 merge hotfix/RegisterIssue
-
-% 修复问题和合并到 qat/uat 分支阶段
 checkout feature/Profile
 commit id:"Fix QT-XXX Profile Issue"
-
 checkout feature/ForgotAccount
 commit id:"Fix QT-XXX ForgotAccount Issue"
 commit id:"Fix UAT-XXXXX ForgotAccount Issue"
-
 merge qat/uat
 checkout qat/uat
 merge feature/ForgotAccount type: HIGHLIGHT
 merge feature/Profile type: HIGHLIGHT
-
-% 将功能分支合并到 rlps/week1 分支并部署
 checkout main
 branch rlps/week1
 checkout rlps/week1
@@ -103,5 +87,4 @@ merge feature/ForgotAccount type: HIGHLIGHT
 merge feature/Profile type: HIGHLIGHT
 checkout main
 merge rlps/week1 tag: "1.0.1"
-
 ```
