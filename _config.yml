@@ -97,3 +97,10 @@ ignore:
 ## Plugins: https://hexo.io/plugins/
 ## Themes: https://hexo.io/themes/
 theme: landscape
+
+# Mermaid
+mermaid:
+  enable: true
+  version: '10.9.0'
+  options:
+    startOnLoad: true
