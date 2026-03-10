@@ -9,12 +9,12 @@
   <meta name="description" content="前言在開發後台管理系統時，我們經常會遇到一個問題：每個 API Handler 都需要處理認證驗證、日誌記錄、錯誤捕獲等重複性邏輯。如果在每個檔案中都寫一遍，不僅冗長，還容易遺漏。本文將介紹如何在 Nuxt 3 的 Server API 中，利用 Higher-Order Function (高階函式) 的概念，打造一個統一的 defineLogAndAuthHandler，讓所有 API 自動擁">
 <meta property="og:type" content="article">
 <meta property="og:title" content="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝">
-<meta property="og:url" content="https://josephmtsai.github.io/2026/01/19/Nuxt3ApiLoggerHandler/index.html">
+<meta property="og:url" content="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/index.html">
 <meta property="og:site_name" content="Joseph&#39;s Work Note">
 <meta property="og:description" content="前言在開發後台管理系統時，我們經常會遇到一個問題：每個 API Handler 都需要處理認證驗證、日誌記錄、錯誤捕獲等重複性邏輯。如果在每個檔案中都寫一遍，不僅冗長，還容易遺漏。本文將介紹如何在 Nuxt 3 的 Server API 中，利用 Higher-Order Function (高階函式) 的概念，打造一個統一的 defineLogAndAuthHandler，讓所有 API 自動擁">
 <meta property="og:locale" content="zh_TW">
-<meta property="article:published_time" content="2026-01-19T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-03-10T03:44:22.726Z">
+<meta property="article:published_time" content="2026-03-09T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-10T03:47:26.091Z">
 <meta property="article:author" content="Joseph M Tsai">
 <meta property="article:tag" content="Nuxt3">
 <meta property="article:tag" content="TypeScript">
@@ -70,8 +70,8 @@
       <div class="outer">
         <section id="main"><article id="post-Nuxt3ApiLoggerHandler" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2026/01/19/Nuxt3ApiLoggerHandler/" class="article-date">
-  <time class="dt-published" datetime="2026-01-19T16:00:00.000Z" itemprop="datePublished">2026-01-20</time>
+    <a href="/2026/03/09/Nuxt3ApiLoggerHandler/" class="article-date">
+  <time class="dt-published" datetime="2026-03-09T16:00:00.000Z" itemprop="datePublished">2026-03-10</time>
 </a>
     
   <div class="article-category">
@@ -244,7 +244,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/01/19/Nuxt3ApiLoggerHandler/" data-id="cmmk2gfat0005s01o3x8ebif4" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmmk2kacw0005ul1ohwpjhqor" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
       
       
       
@@ -314,7 +314,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
   <div class="widget-wrap">
     <h3 class="widget-title">彙整</h3>
     <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/01/">一月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
     </div>
   </div>
 
@@ -331,7 +331,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
           </li>
         
           <li>
-            <a href="/2026/01/19/Nuxt3ApiLoggerHandler/">在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</a>
+            <a href="/2026/03/09/Nuxt3ApiLoggerHandler/">在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</a>
           </li>
         
           <li>
