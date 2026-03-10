@@ -1,6 +1,6 @@
 ---
 title: 在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝
-date: 2026-01-20
+date: 2026-03-10
 tags:
   - Nuxt3
   - TypeScript
