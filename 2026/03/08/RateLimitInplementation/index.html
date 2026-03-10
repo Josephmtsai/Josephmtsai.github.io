@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制 | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="前言在面向全球用戶的平台系統中，API 被濫用幾乎是必然會遇到的問題——無論是攻擊者暴力嘗試登入、爬蟲高頻抓取資料，還是用戶無意間重複提交表單。 本文分享一個我們實際在生產環境中使用的 Redis-based API Rate Limiting 架構，涵蓋兩種策略：滑動視窗（Sliding Window） 和 滑動視窗 + 封鎖鎖定（Sliding Window + Block Lock），並支援">
+<meta property="og:type" content="article">
+<meta property="og:title" content="使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制">
+<meta property="og:url" content="https://josephmtsai.github.io/2026/03/08/RateLimitInplementation/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="前言在面向全球用戶的平台系統中，API 被濫用幾乎是必然會遇到的問題——無論是攻擊者暴力嘗試登入、爬蟲高頻抓取資料，還是用戶無意間重複提交表單。 本文分享一個我們實際在生產環境中使用的 Redis-based API Rate Limiting 架構，涵蓋兩種策略：滑動視窗（Sliding Window） 和 滑動視窗 + 封鎖鎖定（Sliding Window + Block Lock），並支援">
+<meta property="og:locale" content="zh_TW">
+<meta property="article:published_time" content="2026-03-08T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-10T06:35:04.578Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Redis">
+<meta property="article:tag" content="Rate Limiting">
+<meta property="article:tag" content="System Design">
+<meta property="article:tag" content=".NET">
+<meta property="article:tag" content="Security">
+<meta name="twitter:card" content="summary">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-RateLimitInplementation" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/08/RateLimitInplementation/" class="article-date">
+  <time class="dt-published" datetime="2026-03-08T16:00:00.000Z" itemprop="datePublished">2026-03-09</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在面向全球用戶的平台系統中，API 被濫用幾乎是必然會遇到的問題——無論是攻擊者暴力嘗試登入、<br>爬蟲高頻抓取資料，還是用戶無意間重複提交表單。</p>
+<p>本文分享一個我們實際在生產環境中使用的 <strong>Redis-based API Rate Limiting 架構</strong>，<br>涵蓋兩種策略：<strong>滑動視窗（Sliding Window）</strong> 和 <strong>滑動視窗 + 封鎖鎖定（Sliding Window + Block Lock）</strong>，<br>並支援以 Session ID、IP、Member Code 等多種身份維度進行限流。</p>
+<span id="more"></span>
+
+<h2 id="架構概覽"><a href="#架構概覽" class="headerlink" title="架構概覽"></a>架構概覽</h2><pre class="mermaid">flowchart TD
+    A[API Request] --> B[Identity 解析]
+    B -->|Session ID / IP / Member Code| C[Rate Limiter<br/>檢查 + 記錄]
+    C <--> D[(Redis Sorted Set<br/>Score = Timestamp ms<br/>Member = Unique ID)]
+    C --> E{超過限制？}
+    E -->|No| F[正常執行 API]
+    E -->|Yes| G[寫入 Block Lock Key<br/>TTL = N 秒]
+    G --> H[回傳 429 / 錯誤訊息<br/>+ 限制結束時間]</pre>
+
+<h2 id="核心概念：為什麼選擇-Redis-Sorted-Set？"><a href="#核心概念：為什麼選擇-Redis-Sorted-Set？" class="headerlink" title="核心概念：為什麼選擇 Redis Sorted Set？"></a>核心概念：為什麼選擇 Redis Sorted Set？</h2><p>一般常見的 Rate Limiting 演算法有：</p>
+<table>
+<thead>
+<tr>
+<th>演算法</th>
+<th>優點</th>
+<th>缺點</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Fixed Window Counter</td>
+<td>簡單</td>
+<td>視窗邊界會有突發流量問題</td>
+</tr>
+<tr>
+<td>Sliding Window Log</td>
+<td>精確</td>
+<td>記憶體消耗大</td>
+</tr>
+<tr>
+<td><strong>Sliding Window Counter (Sorted Set)</strong></td>
+<td><strong>精確 + 自動過期清理</strong></td>
+<td>略比 Counter 複雜</td>
+</tr>
+<tr>
+<td>Token Bucket</td>
+<td>允許突發</td>
+<td>實作複雜</td>
+</tr>
+</tbody></table>
+<p>我們選擇 <strong>Redis Sorted Set</strong> 的原因：</p>
+<ol>
+<li><strong>Score 即時間戳</strong>：每次請求記錄當下的毫秒時間戳作為 Score</li>
+<li><strong>原生範圍查詢</strong>：<code>ZCOUNT</code> 可以直接查詢「過去 N 秒內有多少筆請求」</li>
+<li><strong>自動清理</strong>：<code>ZREMRANGEBYSCORE</code> 移除過期的請求紀錄</li>
+<li><strong>TTL 自動回收</strong>：整個 Key 設定 <code>EXPIRE</code> 避免記憶體洩漏</li>
+</ol>
+<h2 id="策略一：基礎版-—-滑動視窗-Rate-Limit"><a href="#策略一：基礎版-—-滑動視窗-Rate-Limit" class="headerlink" title="策略一：基礎版 — 滑動視窗 Rate Limit"></a>策略一：基礎版 — 滑動視窗 Rate Limit</h2><h3 id="設計邏輯"><a href="#設計邏輯" class="headerlink" title="設計邏輯"></a>設計邏輯</h3><pre class="mermaid">flowchart LR
+    subgraph window [滑動視窗 LimitDuration]
+        t1((t1)) --> t2((t2)) --> t3((t3)) --> t4((t4)) --> t5((t5))
+    end
+    expired[已過期<br/>清除] -.-> window
+    window -.-> now[當前時間]
+    window --> count["count = 5"]
+    count --> check{"count >= LimitCount?"}
+    check -->|Yes| reject[拒絕請求]
+    check -->|No| allow[放行]</pre>
+
+<h3 id="程式碼實作"><a href="#程式碼實作" class="headerlink" title="程式碼實作"></a>程式碼實作</h3><figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title">SuspectUsageManager</span> : <span class="title">ISuspectUsage</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">readonly</span> IDatabase db;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">readonly</span> SuspectUsageAction action;</span><br><span class="line">    <span class="keyword">private</span> <span class="keyword">readonly</span> SuspectUsageSettingEntity _setting;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Redis Key 格式: &#123;Action&#125;:&#123;Identity&#125;</span></span><br><span class="line">    <span class="comment">// 例如: BankAccountUpdate:192.168.1.1</span></span><br><span class="line">    <span class="keyword">private</span> <span class="built_in">string</span> _rateLimitKey(<span class="built_in">string</span> key) =&gt; <span class="string">$&quot;<span class="subst">&#123;action&#125;</span>:<span class="subst">&#123;key&#125;</span>&quot;</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 計算滑動視窗的起始時間點</span></span><br><span class="line">    <span class="keyword">private</span> <span class="built_in">double</span> _cutTime =&gt; DateTime.Now</span><br><span class="line">        .AddSeconds(-_setting.LimitDuration)</span><br><span class="line">        .ToJsMilliseconds();</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="built_in">bool</span> <span class="title">IsOverRateLimit</span>(<span class="params"><span class="built_in">string</span> identity</span>)</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">var</span> redisKey = _rateLimitKey(identity);</span><br><span class="line">        <span class="comment">// ZCOUNT: 只計算視窗內的請求數</span></span><br><span class="line">        <span class="keyword">return</span> db.SortedSetLength(redisKey, _cutTime) &gt;= _setting.LimitCount;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="built_in">bool</span> <span class="title">AddUsage</span>(<span class="params"><span class="built_in">string</span> identity, <span class="built_in">string</span> uniqueMember</span>)</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">var</span> redisKey = _rateLimitKey(identity);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (!IsOverRateLimit(identity))</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="comment">// ZADD: Score = 當前毫秒時間戳, Member = 唯一識別碼</span></span><br><span class="line">            db.SortedSetAdd(redisKey, uniqueMember, DateTime.Now.ToJsMilliseconds());</span><br><span class="line">            <span class="comment">// 設定整個 Key 的 TTL 避免記憶體洩漏</span></span><br><span class="line">            db.KeyExpire(redisKey, TimeSpan.FromSeconds(_setting.LimitDuration));</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// ZREMRANGEBYSCORE: 清除視窗外的舊資料</span></span><br><span class="line">        db.SortedSetRemoveRangeByScore(redisKey, <span class="number">0</span>, _cutTime);</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="Redis-資料結構範例"><a href="#Redis-資料結構範例" class="headerlink" title="Redis 資料結構範例"></a>Redis 資料結構範例</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">Key:  BankAccountUpdate:192.168.1.1</span><br><span class="line">Type: Sorted Set</span><br><span class="line">TTL:  120 seconds</span><br><span class="line"></span><br><span class="line">┌──────────────────────┬────────────────────┐</span><br><span class="line">│ Member (唯一識別碼)   │ Score (毫秒時間戳)  │</span><br><span class="line">├──────────────────────┼────────────────────┤</span><br><span class="line">│ &quot;guid-abc-001&quot;       │ 1710000060000      │</span><br><span class="line">│ &quot;guid-abc-002&quot;       │ 1710000090000      │</span><br><span class="line">│ &quot;guid-abc-003&quot;       │ 1710000120000      │ ← 超過 LimitCount=2 → 拒絕</span><br><span class="line">└──────────────────────┴────────────────────┘</span><br></pre></td></tr></table></figure>
+
+<h2 id="策略二：進階版-—-滑動視窗-封鎖鎖定"><a href="#策略二：進階版-—-滑動視窗-封鎖鎖定" class="headerlink" title="策略二：進階版 — 滑動視窗 + 封鎖鎖定"></a>策略二：進階版 — 滑動視窗 + 封鎖鎖定</h2><p>基礎版的問題：超過限制後，攻擊者只要等視窗過期就能繼續嘗試。<br>進階版加入了一個 <strong>Block Lock Key</strong>，一旦超限就鎖定一段額外時間。</p>
+<h3 id="設計邏輯-1"><a href="#設計邏輯-1" class="headerlink" title="設計邏輯"></a>設計邏輯</h3><pre class="mermaid">flowchart TD
+    A[收到請求] --> B{Block Key 存在？}
+    B -->|Yes| X[直接拒絕<br/>回傳封鎖結束時間]
+    B -->|No| C[ZCOUNT 計算<br/>視窗內請求數]
+    C --> D{超過 LimitCount？}
+    D -->|No| E[放行 + 記錄請求]
+    D -->|Yes| F["寫入 Block Key<br/>(TTL = BlockSeconds)"]
+    F --> X</pre>
+
+<h3 id="程式碼實作-1"><a href="#程式碼實作-1" class="headerlink" title="程式碼實作"></a>程式碼實作</h3><figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title">RateLimitManager</span> : <span class="title">ISuspectUsage</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">// 計數用 Key: &#123;Action&#125;:&#123;Identity&#125;</span></span><br><span class="line">    <span class="keyword">private</span> <span class="built_in">string</span> _rateLimitKey(<span class="built_in">string</span> key) =&gt; <span class="string">$&quot;<span class="subst">&#123;action&#125;</span>:<span class="subst">&#123;key&#125;</span>&quot;</span>;</span><br><span class="line">    <span class="comment">// 封鎖用 Key: &#123;Action&#125;:&#123;Identity&#125;:locked</span></span><br><span class="line">    <span class="keyword">private</span> <span class="built_in">string</span> _blockLimitKey(<span class="built_in">string</span> key) =&gt; <span class="string">$&quot;<span class="subst">&#123;action&#125;</span>:<span class="subst">&#123;key&#125;</span>:locked&quot;</span>;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="built_in">bool</span> <span class="title">IsOverRateLimit</span>(<span class="params"><span class="built_in">string</span> identity</span>)</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// Step 1: 先檢查 Block Key 是否存在 (O(1) 操作，極快)</span></span><br><span class="line">        <span class="keyword">var</span> blockKey = _blockLimitKey(identity);</span><br><span class="line">        <span class="keyword">if</span> (db.KeyExists(blockKey, CommandFlags.PreferReplica))</span><br><span class="line">            <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// Step 2: 計算滑動視窗內的請求數</span></span><br><span class="line">        <span class="keyword">var</span> rateCount = db.SortedSetLength(_rateLimitKey(identity), _cutTime);</span><br><span class="line"></span><br><span class="line">        <span class="comment">// Step 3: 超限 → 寫入 Block Key 開始封鎖</span></span><br><span class="line">        <span class="keyword">if</span> (rateCount &gt;= _setting.LimitCount)</span><br><span class="line">        &#123;</span><br><span class="line">            db.StringSet(</span><br><span class="line">                _blockLimitKey(identity),</span><br><span class="line">                identity,</span><br><span class="line">                TimeSpan.FromSeconds(_setting.BlockSeconds)</span><br><span class="line">            );</span><br><span class="line">            <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 取得封鎖結束時間 (毫秒時間戳，前端可直接用於倒數計時)</span></span><br><span class="line">    <span class="function"><span class="keyword">public</span> <span class="built_in">long</span> <span class="title">GetRestrictionEndTime</span>(<span class="params"><span class="built_in">string</span> identity</span>)</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// 優先從 Block Key 的 TTL 計算</span></span><br><span class="line">        <span class="keyword">var</span> blockTTL = db.KeyTimeToLive(_blockLimitKey(identity));</span><br><span class="line">        <span class="keyword">if</span> (blockTTL.HasValue)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">return</span> (<span class="built_in">long</span>)DateTime.Now.Add(blockTTL.Value).ToJsMilliseconds();</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// Fallback: 從 Sorted Set 最後一筆的 Score 推算</span></span><br><span class="line">        <span class="keyword">var</span> lastScore = db.SortedSetRangeByRankWithScores(</span><br><span class="line">            _rateLimitKey(identity), <span class="number">-1</span>, <span class="number">-1</span></span><br><span class="line">        ).First().Score;</span><br><span class="line">        <span class="keyword">return</span> (<span class="built_in">long</span>)(lastScore + _setting.BlockSeconds * <span class="number">1000</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="兩種-Redis-Key-的配合"><a href="#兩種-Redis-Key-的配合" class="headerlink" title="兩種 Redis Key 的配合"></a>兩種 Redis Key 的配合</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Rate Limit Key (Sorted Set):            Block Key (String):</span><br><span class="line">SecureForgotAccount:user123              SecureForgotAccount:user123:locked</span><br><span class="line">┌────────┬──────────────┐               ┌────────────────────┐</span><br><span class="line">│ Member │ Score        │               │ Value: &quot;user123&quot;   │</span><br><span class="line">├────────┼──────────────┤               │ TTL: 1800 seconds  │</span><br><span class="line">│ guid-1 │ 171000006000 │               └────────────────────┘</span><br><span class="line">│ guid-2 │ 171000007000 │</span><br><span class="line">│ guid-3 │ 171000008000 │  ← count=3, 達到 LimitCount</span><br><span class="line">└────────┴──────────────┘     → 觸發寫入 Block Key</span><br></pre></td></tr></table></figure>
+
+<h3 id="兩種策略的比較"><a href="#兩種策略的比較" class="headerlink" title="兩種策略的比較"></a>兩種策略的比較</h3><table>
+<thead>
+<tr>
+<th>面向</th>
+<th>基礎版 (SuspectUsageManager)</th>
+<th>進階版 (RateLimitManager)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>超限後行為</td>
+<td>視窗內舊請求過期後即可恢復</td>
+<td>額外鎖定 BlockSeconds，需等鎖定期結束</td>
+</tr>
+<tr>
+<td>Redis 操作數</td>
+<td>每次請求: ZCOUNT</td>
+<td>每次請求: EXISTS (O(1)) → 快速攔截</td>
+</tr>
+<tr>
+<td>適用場景</td>
+<td>一般性限流 (查詢、上傳)</td>
+<td>安全敏感操作 (OTP、密碼重設、MFA)</td>
+</tr>
+<tr>
+<td>前端倒數計時</td>
+<td>基於最後一筆請求推算</td>
+<td>基於 Block Key TTL 精確計算</td>
+</tr>
+<tr>
+<td>防攻擊能力</td>
+<td>中等</td>
+<td>強 — 封鎖期間完全阻斷</td>
+</tr>
+</tbody></table>
+<h2 id="身份維度-Identity-設計"><a href="#身份維度-Identity-設計" class="headerlink" title="身份維度 (Identity) 設計"></a>身份維度 (Identity) 設計</h2><p>限流的「身份」決定了「誰被限制」。我們支援多種維度，可依場景靈活組合：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="built_in">enum</span> SuspectIdentity</span><br><span class="line">&#123;</span><br><span class="line">    MemberCode,   <span class="comment">// 會員代碼 — 限制特定用戶</span></span><br><span class="line">    SessionId,    <span class="comment">// Session ID — 限制特定瀏覽器 session</span></span><br><span class="line">    AccountId,    <span class="comment">// 帳號 ID — 限制特定帳號 (跨 session)</span></span><br><span class="line">    ClientIp,     <span class="comment">// IP 位址 — 限制特定來源</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="組合使用範例"><a href="#組合使用範例" class="headerlink" title="組合使用範例"></a>組合使用範例</h3><figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 銀行帳號更新：同時限制「會員」和「IP」</span></span><br><span class="line"><span class="keyword">var</span> identities = <span class="keyword">new</span> List&lt;<span class="built_in">string</span>&gt; &#123; trading.MemberCode, trading.ClientIP &#125;;</span><br><span class="line"><span class="keyword">var</span> isBlocked = identities.Any(id =&gt; suspectUsageManager.IsOverRateLimit(id));</span><br><span class="line"></span><br><span class="line"><span class="comment">// 促銷查詢：限制「會員 + 促銷代碼」的組合</span></span><br><span class="line"><span class="keyword">var</span> identity = <span class="string">$&quot;<span class="subst">&#123;memberCode&#125;</span>_<span class="subst">&#123;promoCode&#125;</span>&quot;</span>;</span><br><span class="line">suspectUsageManager.IsOverRateLimit(identity);</span><br><span class="line"></span><br><span class="line"><span class="comment">// MFA 重送：限制特定 AccountId</span></span><br><span class="line">rateLimit.IsOverRateLimit(accountId.ToString());</span><br></pre></td></tr></table></figure>
+
+<h2 id="XML-設定驅動-—-免部署調整"><a href="#XML-設定驅動-—-免部署調整" class="headerlink" title="XML 設定驅動 — 免部署調整"></a>XML 設定驅動 — 免部署調整</h2><p>所有限流參數都透過 XML 設定檔管理，修改設定無需重新編譯：</p>
+<figure class="highlight xml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">ArrayOfSuspectUsageSettingEntity</span>&gt;</span></span><br><span class="line">  <span class="comment">&lt;!-- 一般操作 — 基礎版滑動視窗 --&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">SuspectUsageSettingEntity</span> <span class="attr">Action</span>=<span class="string">&quot;BankAccountUpdate&quot;</span></span></span><br><span class="line"><span class="tag">    <span class="attr">LimitCount</span>=<span class="string">&quot;2&quot;</span> <span class="attr">LimitDuration</span>=<span class="string">&quot;120&quot;</span> /&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">SuspectUsageSettingEntity</span> <span class="attr">Action</span>=<span class="string">&quot;ComposeMessage&quot;</span></span></span><br><span class="line"><span class="tag">    <span class="attr">LimitCount</span>=<span class="string">&quot;5&quot;</span> <span class="attr">LimitDuration</span>=<span class="string">&quot;1800&quot;</span> /&gt;</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">&lt;!-- 安全操作 — 進階版滑動視窗 + 封鎖 --&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">SuspectUsageSettingEntity</span> <span class="attr">Action</span>=<span class="string">&quot;SecureForgotAccount&quot;</span></span></span><br><span class="line"><span class="tag">    <span class="attr">LimitCount</span>=<span class="string">&quot;3&quot;</span> <span class="attr">LimitDuration</span>=<span class="string">&quot;1800&quot;</span> <span class="attr">BlockDuration</span>=<span class="string">&quot;1800&quot;</span> /&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">SuspectUsageSettingEntity</span> <span class="attr">Action</span>=<span class="string">&quot;SecureChangeEmail&quot;</span></span></span><br><span class="line"><span class="tag">    <span class="attr">LimitCount</span>=<span class="string">&quot;3&quot;</span> <span class="attr">LimitDuration</span>=<span class="string">&quot;1800&quot;</span> <span class="attr">BlockDuration</span>=<span class="string">&quot;1800&quot;</span> /&gt;</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">&lt;!-- 登入保護 — 長時間封鎖 --&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">SuspectUsageSettingEntity</span> <span class="attr">Action</span>=<span class="string">&quot;SecureLoginForceForgotAccount&quot;</span></span></span><br><span class="line"><span class="tag">    <span class="attr">LimitCount</span>=<span class="string">&quot;2&quot;</span> <span class="attr">LimitDuration</span>=<span class="string">&quot;86400&quot;</span> <span class="attr">BlockDuration</span>=<span class="string">&quot;86400&quot;</span> /&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">ArrayOfSuspectUsageSettingEntity</span>&gt;</span></span><br></pre></td></tr></table></figure>
+
+<table>
+<thead>
+<tr>
+<th>參數</th>
+<th>說明</th>
+<th>範例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>LimitCount</td>
+<td>時間窗內允許的最大次數</td>
+<td>3 &#x3D; 最多 3 次</td>
+</tr>
+<tr>
+<td>LimitDuration</td>
+<td>滑動視窗大小 (秒)</td>
+<td>1800 &#x3D; 30 分鐘</td>
+</tr>
+<tr>
+<td>BlockDuration</td>
+<td>超限後的封鎖時間 (秒)</td>
+<td>1800 &#x3D; 鎖定 30 分鐘</td>
+</tr>
+</tbody></table>
+<h2 id="實際使用場景"><a href="#實際使用場景" class="headerlink" title="實際使用場景"></a>實際使用場景</h2><h3 id="場景-1：銀行帳號更新-—-防止頻繁修改"><a href="#場景-1：銀行帳號更新-—-防止頻繁修改" class="headerlink" title="場景 1：銀行帳號更新 — 防止頻繁修改"></a>場景 1：銀行帳號更新 — 防止頻繁修改</h3><blockquote>
+<p>策略: 基礎版 | 120 秒內最多 2 次 | By MemberCode + IP</p>
+</blockquote>
+<p>用戶可能在短時間內反覆修改銀行帳號來測試系統，同時以 MemberCode 和 IP 雙維度限制，即使換帳號也無法繞過 IP 限流。</p>
+<h3 id="場景-2：忘記密碼-OTP-驗證-—-防暴力破解"><a href="#場景-2：忘記密碼-OTP-驗證-—-防暴力破解" class="headerlink" title="場景 2：忘記密碼 &#x2F; OTP 驗證 — 防暴力破解"></a>場景 2：忘記密碼 &#x2F; OTP 驗證 — 防暴力破解</h3><blockquote>
+<p>策略: 進階版 | 30 分鐘內最多 3 次 | 超過後封鎖 30 分鐘 | By LoginId</p>
+</blockquote>
+<p>攻擊者嘗試暴力破解 OTP 時，3 次失敗後直接封鎖 30 分鐘，且前端可透過 <code>GetRestrictionEndTime()</code> 取得精確的倒數時間。</p>
+<h3 id="場景-3：MFA-登入驗證重送-—-動態設定"><a href="#場景-3：MFA-登入驗證重送-—-動態設定" class="headerlink" title="場景 3：MFA 登入驗證重送 — 動態設定"></a>場景 3：MFA 登入驗證重送 — 動態設定</h3><blockquote>
+<p>策略: 進階版 | 設定來自後台 API 動態取得 | By AccountId</p>
+</blockquote>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> rateLimitSetting = <span class="keyword">new</span> SuspectUsageSettingEntity</span><br><span class="line">&#123;</span><br><span class="line">    Action = SuspectUsageAction.LoginVerification_Resend.ToString(),</span><br><span class="line">    LimitCount = otpConfig.NewDeviceMfaRetryWindowMaxAttempts,</span><br><span class="line">    LimitDuration = otpConfig.NewDeviceMfaRetryWindowMinutes * <span class="number">60</span>,</span><br><span class="line">    BlockDuration = (otpConfig.NewDeviceMfaCooldownMinutes * <span class="number">60</span>).ToString()</span><br><span class="line">&#125;;</span><br><span class="line"><span class="keyword">var</span> rateLimit = <span class="keyword">new</span> RateLimitManager(action, rateLimitSetting);</span><br></pre></td></tr></table></figure>
+
+<h3 id="場景-4：登入攻擊防護-—-長時間封鎖"><a href="#場景-4：登入攻擊防護-—-長時間封鎖" class="headerlink" title="場景 4：登入攻擊防護 — 長時間封鎖"></a>場景 4：登入攻擊防護 — 長時間封鎖</h3><blockquote>
+<p>策略: 進階版 | 24 小時內 2 次 | 超過後封鎖 24 小時 | By LoginId&#x2F;Email</p>
+</blockquote>
+<p>偵測到帳號處於 Force Reset Password 狀態仍被反覆嘗試登入，直接在 Redis 層攔截，完全不碰資料庫，有效降低 DB 負載。</p>
+<h3 id="場景-5：促銷-返利查詢-—-防爬蟲"><a href="#場景-5：促銷-返利查詢-—-防爬蟲" class="headerlink" title="場景 5：促銷 &#x2F; 返利查詢 — 防爬蟲"></a>場景 5：促銷 &#x2F; 返利查詢 — 防爬蟲</h3><blockquote>
+<p>策略: 基礎版 | 60 秒內最多 10 次 | By MemberCode + PromoCode</p>
+</blockquote>
+<p>防止爬蟲高頻抓取促銷和返利資料。</p>
+<h3 id="場景-6：ActionFilter-整合-—-宣告式限流"><a href="#場景-6：ActionFilter-整合-—-宣告式限流" class="headerlink" title="場景 6：ActionFilter 整合 — 宣告式限流"></a>場景 6：ActionFilter 整合 — 宣告式限流</h3><p>透過 .NET ActionFilter，可以用 Attribute 宣告式地套用限流：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">[<span class="meta">RateLimitActionFilter(</span></span><br><span class="line"><span class="meta">    UsageAction = SuspectUsageAction.SecureMiniGame,</span></span><br><span class="line"><span class="meta">    SuspectIdentity = SuspectIdentity.MemberCode</span></span><br><span class="line"><span class="meta">)</span>]</span><br><span class="line"><span class="function"><span class="keyword">public</span> ActionResult <span class="title">PlayMiniGame</span>()</span> &#123; ... &#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="效能考量"><a href="#效能考量" class="headerlink" title="效能考量"></a>效能考量</h2><ul>
+<li><strong>Block Key 快速攔截</strong>：進階版先檢查 <code>EXISTS</code>（O(1)），被封鎖的請求不需要執行 <code>ZCOUNT</code>，大幅減少 Redis 操作</li>
+<li><strong>PreferReplica 讀取</strong>：<code>db.KeyExists(blockKey, CommandFlags.PreferReplica)</code> 從 Redis Replica 讀取，降低主節點負擔</li>
+<li><strong>自動清理</strong>：每次 <code>AddUsage</code> 時清除過期資料，避免 Sorted Set 無限膨脹</li>
+<li><strong>Key TTL 兜底</strong>：即使清理邏輯出問題，Key 本身也有 TTL 會自動過期</li>
+</ul>
+<h2 id="結語"><a href="#結語" class="headerlink" title="結語"></a>結語</h2><p>這套架構在生產環境中承載了 <strong>20+ 種不同場景</strong> 的限流需求，從基本的表單防重複提交到安全敏感的 MFA&#x2F;OTP 驗證，所有設定透過 XML 管理、支援後台動態調整，且可以透過 ActionFilter 宣告式套用。</p>
+<p>關鍵設計決策：</p>
+<ul>
+<li><strong>Sorted Set</strong> 作為滑動視窗的天然資料結構</li>
+<li><strong>Block Key</strong> 分離計數與封鎖，讓被封鎖的請求以 O(1) 被攔截</li>
+<li><strong>多維度 Identity</strong> 讓同一套機制適用於不同限流策略</li>
+<li><strong>前端友善</strong>：<code>GetRestrictionEndTime()</code> 回傳毫秒時間戳，前端可直接用於倒數 UI</li>
+</ul>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/08/RateLimitInplementation/" data-id="cmmk8jww2000euz1ogo66ao8f" data-title="使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/03/09/Nuxt3ApiLoggerHandler/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2023/10/07/JamWebDebugger/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">JamWebDebugger</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤雲</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/NET/" style="font-size: 10px;">.NET</a> <a href="/tags/API-Design/" style="font-size: 10px;">API Design</a> <a href="/tags/Api/" style="font-size: 10px;">Api</a> <a href="/tags/App-Debug/" style="font-size: 10px;">App Debug</a> <a href="/tags/Asp-net/" style="font-size: 10px;">Asp.net</a> <a href="/tags/Axios/" style="font-size: 10px;">Axios</a> <a href="/tags/Backend/" style="font-size: 10px;">Backend</a> <a href="/tags/Client-Side-Error/" style="font-size: 10px;">Client Side Error</a> <a href="/tags/Compatible/" style="font-size: 10px;">Compatible</a> <a href="/tags/Composition-Api/" style="font-size: 10px;">Composition Api</a> <a href="/tags/Custom-Rules/" style="font-size: 10px;">Custom Rules</a> <a href="/tags/Debbuger/" style="font-size: 10px;">Debbuger</a> <a href="/tags/Debug/" style="font-size: 10px;">Debug</a> <a href="/tags/ERR-CONTENT-DECODING-FAILED/" style="font-size: 10px;">ERR_CONTENT_DECODING_FAILED</a> <a href="/tags/ESLint/" style="font-size: 10px;">ESLint</a> <a href="/tags/Elastic-Scrolling/" style="font-size: 10px;">Elastic Scrolling</a> <a href="/tags/Enum/" style="font-size: 10px;">Enum</a> <a href="/tags/Error/" style="font-size: 13.33px;">Error</a> <a href="/tags/Error-Handling/" style="font-size: 13.33px;">Error Handling</a> <a href="/tags/File-Check/" style="font-size: 10px;">File Check</a> <a href="/tags/Git/" style="font-size: 10px;">Git</a> <a href="/tags/GitFlow/" style="font-size: 10px;">GitFlow</a> <a href="/tags/Gzip/" style="font-size: 10px;">Gzip</a> <a href="/tags/IIS/" style="font-size: 10px;">IIS</a> <a href="/tags/Intecept-Request/" style="font-size: 10px;">Intecept Request</a> <a href="/tags/Integration/" style="font-size: 10px;">Integration</a> <a href="/tags/Log/" style="font-size: 16.67px;">Log</a> <a href="/tags/Nuxt3/" style="font-size: 13.33px;">Nuxt3</a> <a href="/tags/Object/" style="font-size: 10px;">Object</a> <a href="/tags/Pinia/" style="font-size: 13.33px;">Pinia</a> <a href="/tags/Pre-Commit/" style="font-size: 10px;">Pre-Commit</a> <a href="/tags/Prerender/" style="font-size: 10px;">Prerender</a> <a href="/tags/Proxy/" style="font-size: 10px;">Proxy</a> <a href="/tags/QA-Testing/" style="font-size: 10px;">QA Testing</a> <a href="/tags/Quality-Control/" style="font-size: 10px;">Quality Control</a> <a href="/tags/Rate-Limiting/" style="font-size: 10px;">Rate Limiting</a> <a href="/tags/Reactive/" style="font-size: 10px;">Reactive</a> <a href="/tags/Recording/" style="font-size: 10px;">Recording</a> <a href="/tags/Redis/" style="font-size: 10px;">Redis</a> <a href="/tags/Refs/" style="font-size: 10px;">Refs</a> <a href="/tags/SEO/" style="font-size: 10px;">SEO</a> <a href="/tags/Safari/" style="font-size: 10px;">Safari</a> <a href="/tags/Security/" style="font-size: 10px;">Security</a> <a href="/tags/Server-Side-Render/" style="font-size: 10px;">Server Side Render</a> <a href="/tags/Source-Map/" style="font-size: 10px;">Source Map</a> <a href="/tags/StoreToRefs/" style="font-size: 10px;">StoreToRefs</a> <a href="/tags/System-Design/" style="font-size: 10px;">System Design</a> <a href="/tags/Tailwind-CSS/" style="font-size: 10px;">Tailwind CSS</a> <a href="/tags/Tailwind-CSS-Dark-Mode/" style="font-size: 10px;">Tailwind CSS Dark Mode</a> <a href="/tags/TypeScript/" style="font-size: 10px;">TypeScript</a> <a href="/tags/Typescript/" style="font-size: 10px;">Typescript</a> <a href="/tags/UC-Browser/" style="font-size: 10px;">UC Browser</a> <a href="/tags/Vite/" style="font-size: 10px;">Vite</a> <a href="/tags/Vue/" style="font-size: 13.33px;">Vue</a> <a href="/tags/Vue-Life-Cycle/" style="font-size: 10px;">Vue Life Cycle</a> <a href="/tags/Vue3/" style="font-size: 20px;">Vue3</a> <a href="/tags/VueUse/" style="font-size: 10px;">VueUse</a> <a href="/tags/Web-Debug/" style="font-size: 10px;">Web Debug</a> <a href="/tags/Workflow/" style="font-size: 10px;">Workflow</a> <a href="/tags/iOS/" style="font-size: 10px;">iOS</a> <a href="/tags/v-html/" style="font-size: 10px;">v-html</a> <a href="/tags/v-runtime-template/" style="font-size: 10px;">v-runtime-template</a> <a href="/tags/v-sanitize/" style="font-size: 10px;">v-sanitize</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/03/10/ErrorContentDecoding/">ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/09/Nuxt3ApiLoggerHandler/">在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/08/RateLimitInplementation/">使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制</a>
+          </li>
+        
+          <li>
+            <a href="/2023/10/07/JamWebDebugger/">JamWebDebugger</a>
+          </li>
+        
+          <li>
+            <a href="/2023/04/12/GitFlow/">GitFlow</a>
+          </li>
+        
+          <li>
+            <a href="/2023/03/28/PreventElasticScroll/">iOS Safari Handle Elastic Scroll</a>
+          </li>
+        
+          <li>
+            <a href="/2023/03/24/Prerender/">SEO Prerender Introduce &amp; Asp.net 實作</a>
+          </li>
+        
+          <li>
+            <a href="/2022/12/25/PiniaWritingHint/">Pinia Writing Hint in Composition Api</a>
+          </li>
+        
+          <li>
+            <a href="/2022/12/24/TypeScriptEnumObject/">TypeScript Object Using Enum as Key</a>
+          </li>
+        
+          <li>
+            <a href="/2022/07/19/PreCommitLocalRules/">Pre Commit ESLint Local Rules</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+
+  <script src='https://unpkg.com/mermaid@7.1.2/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({theme: 'forest'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>
