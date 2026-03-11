@@ -4,17 +4,25 @@
   <meta charset="utf-8">
   
   
-  <title>Tag: IIS | Joseph&#39;s Work Note</title>
+  <title>Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程 | Joseph&#39;s Work Note</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="front-end,seo,back-end">
-<meta property="og:type" content="website">
-<meta property="og:title" content="Joseph&#39;s Work Note">
-<meta property="og:url" content="https://josephmtsai.github.io/tags/IIS/index.html">
+  <meta name="description" content="前言在團隊協作中，經常會遇到這種情境：你的功能分支已經 merge 到正式環境的 release branch，但上線前一天被通知要抽單退版。這時候如果直接在 release branch 上 git revert 那筆 merge commit，後續想把同一個功能分支重新 merge 回去時，Git 會認為「這些 commit 已經被 merge 過了」而跳過所有變更——導致程式碼根本沒有被帶回">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程">
+<meta property="og:url" content="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/index.html">
 <meta property="og:site_name" content="Joseph&#39;s Work Note">
-<meta property="og:description" content="front-end,seo,back-end">
+<meta property="og:description" content="前言在團隊協作中，經常會遇到這種情境：你的功能分支已經 merge 到正式環境的 release branch，但上線前一天被通知要抽單退版。這時候如果直接在 release branch 上 git revert 那筆 merge commit，後續想把同一個功能分支重新 merge 回去時，Git 會認為「這些 commit 已經被 merge 過了」而跳過所有變更——導致程式碼根本沒有被帶回">
 <meta property="og:locale" content="zh_TW">
+<meta property="og:image" content="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/image.png">
+<meta property="article:published_time" content="2026-03-10T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-11T07:24:05.514Z">
 <meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Git">
+<meta property="article:tag" content="GitFlow">
+<meta property="article:tag" content="Workflow">
+<meta property="article:tag" content="Revert">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/image.png">
   
   
     <link rel="shortcut icon" href="/favicon.png">
@@ -61,39 +69,93 @@
 </header>
 
       <div class="outer">
-        <section id="main">
-  
-  
-    
-    
-      
-      
-      <section class="archives-wrap">
-        <div class="archive-year-wrap">
-          <a href="/archives/2023" class="archive-year">2023</a>
-        </div>
-        <div class="archives">
-    
-    <article class="archive-article archive-type-post">
-  <div class="archive-article-inner">
-    <header class="archive-article-header">
-      <a href="/2023/03/24/Prerender/" class="archive-article-date">
-  <time class="dt-published" datetime="2023-03-24T16:28:43.000Z" itemprop="datePublished">3月 25</time>
+        <section id="main"><article id="post-GitHotfixRevertFlow" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/10/GitHotfixRevertFlow/" class="article-date">
+  <time class="dt-published" datetime="2026-03-10T16:00:00.000Z" itemprop="datePublished">2026-03-11</time>
 </a>
-      
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
   
-    <h1 itemprop="name">
-      <a class="archive-article-title" href="/2023/03/24/Prerender/">SEO Prerender Introduce &amp; Asp.net 實作</a>
+    <h1 class="p-name article-title" itemprop="headline name">
+      Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程
     </h1>
   
 
-    </header>
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在團隊協作中，經常會遇到這種情境：你的功能分支已經 merge 到正式環境的 release branch，但上線前一天被通知要<strong>抽單退版</strong>。這時候如果直接在 release branch 上 <code>git revert</code> 那筆 merge commit，後續想把同一個功能分支重新 merge 回去時，Git 會認為「這些 commit 已經被 merge 過了」而跳過所有變更——導致程式碼根本沒有被帶回來。</p>
+<p>本文記錄這個問題的成因，以及在不遺漏檔案的前提下，如何正確退版並繼續推進功能。</p>
+<span id="more"></span>
+
+<h2 id="問題場景"><a href="#問題場景" class="headerlink" title="問題場景"></a>問題場景</h2><p>假設流程如下：</p>
+<ol>
+<li>你在 <code>CC1-XXX</code> 功能分支上完成修改</li>
+<li>將 <code>CC1-XXX</code> merge 到正式環境前的 release branch（例如 <code>release/prod</code>）</li>
+<li>上線前被通知要抽單，需要從 <code>release/prod</code> 退掉你的變更</li>
+<li>但功能本身還需要繼續修改，修完後要重新上線</li>
+</ol>
+<p>如果此時直接在 <code>release/prod</code> 上 revert 你的 merge commit，之後再次從 <code>CC1-XXX</code> merge 回去，Git 會判定這些 commit 已經存在於歷史中，<strong>不會帶入任何變更</strong>。</p>
+<h2 id="為什麼會這樣？"><a href="#為什麼會這樣？" class="headerlink" title="為什麼會這樣？"></a>為什麼會這樣？</h2><p>Git 的 merge 判斷基於 commit history，而非檔案差異。當你 revert 一筆 merge commit 時：</p>
+<ul>
+<li>Revert 只是新增一筆「反向操作」的 commit，原本的 merge commit 仍然留在歷史中</li>
+<li>下次再 merge 同一個分支時，Git 看到那些 commit 已經在歷史裡了，就不會再 merge 一次</li>
+<li>結果就是：你以為 merge 成功了，但實際上什麼都沒帶進去</li>
+</ul>
+<h2 id="正確的退版與重新上線流程"><a href="#正確的退版與重新上線流程" class="headerlink" title="正確的退版與重新上線流程"></a>正確的退版與重新上線流程</h2><h3 id="Step-1：在-release-branch-上-revert-merge-commit"><a href="#Step-1：在-release-branch-上-revert-merge-commit" class="headerlink" title="Step 1：在 release branch 上 revert merge commit"></a>Step 1：在 release branch 上 revert merge commit</h3><p>先在 <code>release/prod</code> 上 revert 掉 <code>CC1-XXX</code> 的 merge commit，讓 release branch 回到乾淨的狀態。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">git checkout release/prod</span><br><span class="line">git revert -m 1 &lt;merge-commit-hash&gt;</span><br></pre></td></tr></table></figure>
+
+<h3 id="Step-2：將-release-branch-同步回你的功能分支"><a href="#Step-2：將-release-branch-同步回你的功能分支" class="headerlink" title="Step 2：將 release branch 同步回你的功能分支"></a>Step 2：將 release branch 同步回你的功能分支</h3><p>把最新的 <code>release/prod</code>（包含 revert commit）sync 回你的 <code>CC1-XXX</code> 分支，確保兩邊歷史一致。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">git checkout CC1-XXX</span><br><span class="line">git merge release/prod</span><br></pre></td></tr></table></figure>
+
+<h3 id="Step-3：在功能分支上-revert-那筆-revert"><a href="#Step-3：在功能分支上-revert-那筆-revert" class="headerlink" title="Step 3：在功能分支上 revert 那筆 revert"></a>Step 3：在功能分支上 revert 那筆 revert</h3><p>在 <code>CC1-XXX</code> 上，cherry-pick 或 revert 掉 Step 1 產生的 revert commit。這會讓你的變更重新出現在功能分支上。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git revert &lt;revert-commit-hash&gt;</span><br></pre></td></tr></table></figure>
+
+<h3 id="Step-4：繼續修改並重新-merge"><a href="#Step-4：繼續修改並重新-merge" class="headerlink" title="Step 4：繼續修改並重新 merge"></a>Step 4：繼續修改並重新 merge</h3><p>此時 <code>CC1-XXX</code> 上已經有了「revert of revert」，等於你的原始變更被還原回來了。繼續修改完畢後，正常 merge 回 <code>release/prod</code> 即可，Git 這次會正確帶入所有變更。</p>
+<h2 id="流程示意圖"><a href="#流程示意圖" class="headerlink" title="流程示意圖"></a>流程示意圖</h2><img src="/2026/03/10/GitHotfixRevertFlow/image.png" class="" title="Git Revert Flow">
+
+<h2 id="重點整理"><a href="#重點整理" class="headerlink" title="重點整理"></a>重點整理</h2><ul>
+<li><strong>直接 revert merge commit 後，不能再次 merge 同一個分支</strong>——Git 會認為已經 merge 過而跳過</li>
+<li><strong>解法是「revert the revert」</strong>——在功能分支上反轉那筆退版 commit，讓變更重新生效</li>
+<li>務必先將 release branch 同步回功能分支，確保歷史一致後再操作，避免遺漏檔案</li>
+</ul>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmmlpqrkc0005u61o7nkd1n4b" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li></ul>
+
+    </footer>
   </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/03/10/ErrorContentDecoding/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄</div>
+    </a>
+  
+</nav>
+
+  
 </article>
-  
-  
-    </div></section>
-  
 
 
 </section>
