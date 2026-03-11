@@ -5,6 +5,8 @@ tags:
   - Typescript
   - Enum
   - Object
+categories:
+  - 前端開發
 ---
 
 我們在使用 typescript 的時候 有可能需要宣告 Enum 來避免 傳入的參數可能大小寫不符合或是傳到沒有值的參數

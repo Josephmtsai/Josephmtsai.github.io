@@ -5,6 +5,8 @@ tags:
   - Intecept Request
   - App Debug
   - Web Debug
+categories:
+  - Debug
 ---
 
 > 在開發 App 的過程中，最常會遇到的幾個問題是

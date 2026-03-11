@@ -7,6 +7,8 @@ tags:
   - Elastic Scrolling
   - Compatible
   - iOS
+categories:
+  - Troubleshooting
 ---
 
 先說明這個問題主要是 通常在滾動頁面的時候 會有兩個需求

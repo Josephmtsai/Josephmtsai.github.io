@@ -5,6 +5,8 @@ tags:
   - Git
   - GitFlow
   - Workflow
+categories:
+  - 工程實踐
 ---
 
 突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題，以及他們解決什麼問題

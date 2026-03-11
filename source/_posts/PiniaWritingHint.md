@@ -8,6 +8,8 @@ tags:
   - Composition Api
   - Proxy
   - StoreToRefs
+categories:
+  - 前端開發
 ---
 
 在 Composition Api 使用 Pinia 做狀態管理的時候,官方網站上面有寫說

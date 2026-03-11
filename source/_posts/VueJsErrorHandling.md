@@ -8,6 +8,8 @@ tags:
   - Log
   - Error
   - Source Map
+categories:
+  - Debug
 ---
 
 ### 一般前端開發最常遇到的問題有四塊:

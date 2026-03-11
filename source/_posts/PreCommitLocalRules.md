@@ -8,6 +8,8 @@ tags:
   - File Check
   - Quality Control
   - ESLint
+categories:
+  - 工程實踐
 ---
 
 我們在開發專案的時候，為了程式碼的品質 通常會用各種輔助工具幫助我們檢查（例如： ESLint, Formater, Testing ...)

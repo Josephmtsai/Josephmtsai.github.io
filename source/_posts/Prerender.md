@@ -7,6 +7,8 @@ tags:
   - Server Side Render
   - IIS
   - Asp.net
+categories:
+  - 前端架構
 ---
 
 此篇文章是介紹 SEO Prerender，可能很多人會大概會想說聽過 Server Side Render 以及 Client Side Render ，

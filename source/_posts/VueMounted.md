@@ -5,6 +5,8 @@ tags:
   - Vue3
   - Vue Life Cycle
   - Integration
+categories:
+  - 前端開發
 ---
 
 最近遇到一個 Issue，我們本來有跟 Partner 整合一個功能，做法是類似先 Inject 對方的 js，

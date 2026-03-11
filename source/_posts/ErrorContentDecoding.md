@@ -6,6 +6,8 @@ tags:
   - Nuxt3
   - Client Side Error
   - Gzip
+categories:
+  - Troubleshooting
 ---
 
 ## 前言

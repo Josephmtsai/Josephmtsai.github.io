@@ -7,6 +7,8 @@ tags:
   - Vite
   - Vue3
   - Tailwind CSS Dark Mode
+categories:
+  - Troubleshooting
 ---
 
 在開發 Global 的網頁的時候，通常會去評估各種網頁的支援度，如果沒有通常會請放 Upgrade your Browser.

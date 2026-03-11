@@ -5,6 +5,8 @@ tags:
   - Debbuger
   - Recording
   - QA Testing
+categories:
+  - Debug
 ---
 
 前幾天同事介紹一個好用的工具,最主要是它可以錄製網頁的 Network ,Console 資訊

@@ -6,6 +6,8 @@ tags:
   - v-html
   - v-sanitize
   - v-runtime-template
+categories:
+  - 前端開發
 ---
 
 在開發系統中 有可能會需要使用到 CMS 系統或是動態抓取 CDN 的頁面 取得

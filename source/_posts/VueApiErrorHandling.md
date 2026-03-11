@@ -9,6 +9,8 @@ tags:
   - Error
   - Axios
   - Pinia
+categories:
+  - 前端架構
 ---
 
 接著 上一篇文章[Vue Error Handling](https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/)
