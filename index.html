@@ -63,6 +63,107 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-VueBroadCastImplement" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/12/VueBroadCastImplement/" class="article-date">
+  <time class="dt-published" datetime="2026-03-12T16:00:00.000Z" itemprop="datePublished">2026-03-13</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在多分頁的 Web 應用中，跨 Tab 同步狀態是常見需求——例如閒置登出同步、Session 過期通知、T&amp;C 接受後其他 Tab 強制刷新等。瀏覽器原生的 <code>BroadcastChannel</code> API 是最直覺的方案，搭配 VueUse 的 <code>useBroadcastChannel</code> 封裝更是方便。</p>
+<p>但在實際開發中，我們踩了一個非常隱晦的坑——<strong>同一個 Tab 內建立多個 BroadcastChannel 實例，會互相收到訊息</strong>。本文記錄我們從「能用」到「好用」的架構演進過程。</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/03/12/VueBroadCastImplement/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VueBroadCastImplement/" data-id="cmmnckfe10019vi1o111e0uw3" data-title="Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-VuePartialView" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/12/VuePartialView/" class="article-date">
+  <time class="dt-published" datetime="2026-03-12T16:00:00.000Z" itemprop="datePublished">2026-03-13</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/03/12/VuePartialView/">跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在多產品平台中，每個產品（體育、娛樂城、棋牌等）可能由不同的合作夥伴（Provider）開發，使用的技術棧也各不相同——React、Angular、甚至純 JS。但平台需要在所有產品頁面上維持一致的品牌形象、導航列、會員狀態和法律聲明。</p>
+<p>要求每個 Provider 自行實作這些 UI 元件既不現實也難以維護。因此我們設計了 <strong>star4partialview</strong> — 一個獨立打包的 Vue 3 應用，輸出單一 <code>partialView.js</code>，Provider 只需引入一個 <code>&lt;script&gt;</code> 標籤就能獲得完整的 Header + Footer。</p>
+<p>兩個獨立的 JS Runtime 透過 <code>window.postMessage</code> 通訊，實現了一種輕量級的 <strong>Micro Frontend</strong> 模式。</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/03/12/VuePartialView/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VuePartialView/" data-id="cmmnckfes006lvi1oa1ywd3t6" data-title="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-ELKWatcher" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2026/03/11/ELKWatcher/" class="article-date">
@@ -99,7 +200,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmmn9wyrs0001ud1o5t6r2vrm" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmmnckfdj0001vi1o4vu42mol" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控" class="article-share-link">Share</a>
       
       
       
@@ -149,7 +250,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmmn9wyrx0006ud1oe7ikffet" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmmnckfdq0009vi1ogufh1y3z" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
       
       
       
@@ -264,7 +365,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/ErrorContentDecoding/" data-id="cmmn9wyrv0004ud1og55p1dzz" data-title="ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/10/ErrorContentDecoding/" data-id="cmmnckfdm0004vi1o96i8fspr" data-title="ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄" class="article-share-link">Share</a>
       
       
       
@@ -454,7 +555,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmmn9wys5000fud1ocomhczuz" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmmnckfdt000fvi1oc949hjd2" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
       
       
       
@@ -504,7 +605,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/08/RateLimitInplementation/" data-id="cmmn9wysb000vud1o77khg0do" data-title="使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/08/RateLimitInplementation/" data-id="cmmnckfdy000vvi1o6gjleoag" data-title="使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制" class="article-share-link">Share</a>
       
       
       
@@ -554,7 +655,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/07/LazyCacheIssue/" data-id="cmmn9wys4000eud1og0xzc5qj" data-title="LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/07/LazyCacheIssue/" data-id="cmmnckfds000evi1o2ye81ikp" data-title="LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期" class="article-share-link">Share</a>
       
       
       
@@ -609,7 +710,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/02/03/ApiFeatureVersionControl/" data-id="cmmn9wyro0000ud1og8h07buk" data-title="Feature Version Control — APP 版本功能控管架構" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/02/03/ApiFeatureVersionControl/" data-id="cmmnckfdf0000vi1o00ln6urx" data-title="Feature Version Control — APP 版本功能控管架構" class="article-share-link">Share</a>
       
       
       
@@ -664,7 +765,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/10/07/JamWebDebugger/" data-id="cmmn9wys3000aud1o1hs75duu" data-title="JamWebDebugger" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/10/07/JamWebDebugger/" data-id="cmmnckfdr000avi1o4ssub45j" data-title="JamWebDebugger" class="article-share-link">Share</a>
       
       
       
@@ -678,265 +779,11 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
 
 
   
-    <article id="post-GitFlow" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2023/04/12/GitFlow/" class="article-date">
-  <time class="dt-published" datetime="2023-04-12T14:52:34.000Z" itemprop="datePublished">2023-04-12</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2023/04/12/GitFlow/">GitFlow</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <p>突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題，以及他們解決什麼問題</p>
-<p>最主要觀念是</p>
-<ol>
-<li><p>正常功能開發以 main branch 為主體(所有的分支都由這裡出發) ，分別 Merge 到 QAT 避免同步大家開發多個功能，<br>有互相的影響以及將不必要的程式碼帶到正式環境</p>
-</li>
-<li><p>緊急修正的情況可以直接根據 main branch 拉出分支修正 避免其他影響 然後部屬到 Pre-prod 測試</p>
-</li>
-</ol>
-<p>首先我們先定義好 Git Branch 以及對應的環境</p>
-<p><strong>我們這裡以 main 當作我們的主要分支 所有 branch 都是以 main 為主</strong></p>
-<table>
-<thead>
-<tr>
-<th>Branch</th>
-<th>Env</th>
-<th>Branch Remark</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>qat</td>
-<td>QAT</td>
-<td>QA Testing</td>
-</tr>
-<tr>
-<td>main</td>
-<td>Pre-Prod, Prod</td>
-<td>正式環境</td>
-</tr>
-<tr>
-<td>feature&#x2F;xxx</td>
-<td></td>
-<td>開發功能分支</td>
-</tr>
-<tr>
-<td>hotfix&#x2F;xxx</td>
-<td></td>
-<td>緊急功能修正</td>
-</tr>
-<tr>
-<td>fix&#x2F;xxx</td>
-<td></td>
-<td>排程功能部屬</td>
-</tr>
-</tbody></table>
-<p>我們環境實際上重要的有三種環境</p>
-<table>
-<thead>
-<tr>
-<th>Environment</th>
-<th>remark</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>QAT</td>
-<td>給 QA 做測試的環境(所有的 Feature 都會先進到 QAT 給 QA 測試 測試完成的才會 Deploy to Pre-prod)</td>
-</tr>
-<tr>
-<td>Pre-prod</td>
-<td>上線前給 QA 做最後測試的環境</td>
-</tr>
-<tr>
-<td>Prod</td>
-<td>正式環境</td>
-</tr>
-</tbody></table>
-<p>那我們可以依照幾種情境講述會遇到的問題</p>
-<ol>
-<li><p>開發功能 照順序進到 Prod</p>
-</li>
-<li><p>緊急修正問題 直接推到 Prod</p>
-</li>
-<li><p>開發功能 時程需要拖很長(歷時一兩個月)</p>
-</li>
-</ol>
-<p>以下是大致上的 Gitflow 流程圖</p>
-<img src="/2023/04/12/GitFlow/Flow.png" class="" title="Example">
-
-<p>我們會一個一個介紹</p>
-<h1 id="1-開發功能-照順序進到-Prod"><a href="#1-開發功能-照順序進到-Prod" class="headerlink" title="1. 開發功能 照順序進到 Prod"></a>1. 開發功能 照順序進到 Prod</h1><p>首先我們先介紹我們有幾個 branch 以及大概的功能敘述</p>
-<ol>
-<li>feature&#x2F;Profile : 他有會員功能的部分 (新增 UI 以及會修改到 Routing 的檔案)</li>
-<li>feature&#x2F;ForgotAccount: 忘記帳號密碼的流程 (新增 UI 以及會修改到 Routing 的檔案)</li>
-<li>feature&#x2F;Product: 新的產品頁面 (新增 UI 以及會修改到 Routing 的檔案)</li>
-<li>main: 我們的正式環境的 branch</li>
-<li>fix&#x2F;Week1: 因為我們是每一週會上 Code 所以 branch 以 fix prefix 開頭 然後會把完成的功能 merge 進來</li>
-</ol>
-<p>branch 流程順序如下:</p>
-<ol>
-<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount 都從 main 拉 branch 出來</li>
-<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount 各自開發 直到完成</li>
-<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount Merge qat</li>
-</ol>
-<hr>
-<p><strong>如圖片黑框的部分 這樣有可能會發生衝突</strong></p>
-<img src="/2023/04/12/GitFlow/1.1.png" class="" title="Flow">
-
-<h2 id="Issue-1-因為根據剛剛上面的敘述-A-跟-B-在沒有協調的狀況下-它們有檔案衝突了"><a href="#Issue-1-因為根據剛剛上面的敘述-A-跟-B-在沒有協調的狀況下-它們有檔案衝突了" class="headerlink" title="Issue 1. 因為根據剛剛上面的敘述 A 跟 B 在沒有協調的狀況下 它們有檔案衝突了"></a>Issue 1. 因為根據剛剛上面的敘述 A 跟 B 在沒有協調的狀況下 它們有檔案衝突了</h2><p>所以這是第一個衝突點，Routing 檔案衝突</p>
-<h3 id="Solution"><a href="#Solution" class="headerlink" title="Solution:"></a>Solution:</h3><ol>
-<li>找 A 跟 B 一起選擇 confilt 檔案</li>
-<li>並且要討論之後進到正式環境的順序是否是 A 先 B 後 或是 B 後 A 先 ，到時候要討論怎麼 Merge</li>
-</ol>
-<hr>
-<p>接著測試到一個段落 QA 也認為 1 跟 2. 的 branch 差不多可以進 Prod 了,我們會透過剛剛提到的 5.<br>fix&#x2F;Week1 將大家要進的程式碼統一 Merge 到此 branch 然後 merge to main ,部屬到 Pre-Prod 環境給 QA 做最後檢查</p>
-<p>branch 流程順序如下:</p>
-<ol>
-<li>fix&#x2F;Week1 都從 main 拉 branch 出來</li>
-<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount Merge fix&#x2F;week1</li>
-<li>fix&#x2F;week1 Merge main (需要有人 approve 或是檢查程式碼)</li>
-</ol>
-<p><strong>這樣好處是 Merge prod 只會有一個點 到時候要退版也會好退</strong></p>
-<h2 id="Issue-2-跟-Issue-1-一樣-有可能會有-Routing-檔案衝突或是其他檔案衝突"><a href="#Issue-2-跟-Issue-1-一樣-有可能會有-Routing-檔案衝突或是其他檔案衝突" class="headerlink" title="Issue 2. 跟 Issue 1 一樣 有可能會有 Routing 檔案衝突或是其他檔案衝突"></a>Issue 2. 跟 Issue 1 一樣 有可能會有 Routing 檔案衝突或是其他檔案衝突</h2><p><strong>如圖片黑框的部分 fix&#x2F;week1 是從上方這個 main branch 開的 然後 merge 進去這樣有可能會發生衝突</strong></p>
-<img src="/2023/04/12/GitFlow/1.2.png" class="" title="Flow">
-
-<h3 id="Solution-1"><a href="#Solution-1" class="headerlink" title="Solution:"></a>Solution:</h3><ol>
-<li>定時 Sync main branch 到自己的 branch ex: feature&#x2F;Profile 如果有衝突可以當下就定時解掉 避免上線前的困擾</li>
-<li>找 A 跟 B 一起選擇 confilt 檔案</li>
-<li>部屬時候如果有衝突的部分要再檢查一次功能</li>
-</ol>
-<hr>
-<p>這樣就完成照順序進到 Prod 的功能了</p>
-<h1 id="2-緊急修正問題-直接推到-Prod"><a href="#2-緊急修正問題-直接推到-Prod" class="headerlink" title="2. 緊急修正問題 直接推到 Prod"></a>2. 緊急修正問題 直接推到 Prod</h1><p>想當然 我們在開發的過程中 有可能緊急有發生 Prod 有問題 需要緊急修正的問題</p>
-<p>branch:<br>hotfix&#x2F;RegisterIssue : 註冊問題修正的 branch</p>
-<p>branch 流程順序如下:</p>
-<ol>
-<li>hotfix&#x2F;RegisterIssue 都從 main 拉 branch 出來</li>
-<li>hotfix&#x2F;RegisterIssue Merge main (緊急修正 要直接丟到 Pre-prod 做快速驗證後上線)</li>
-<li>hotfix&#x2F;RegisterIssue Merge qat</li>
-</ol>
-<p>為什麼要做 3 是因為要避免 qat 以及 main branch 有一些落差，理論上 qat 會比較新 但是功能應該要跟 main 相同</p>
-<h3 id="Issue-3-有可能遇到的問題也是類似-，有可能在-Merge-qat-的時候-QAT-有新的功能在開發也修改到相同檔案"><a href="#Issue-3-有可能遇到的問題也是類似-，有可能在-Merge-qat-的時候-QAT-有新的功能在開發也修改到相同檔案" class="headerlink" title="Issue 3. 有可能遇到的問題也是類似 ，有可能在 Merge qat 的時候 ,QAT 有新的功能在開發也修改到相同檔案"></a>Issue 3. 有可能遇到的問題也是類似 ，有可能在 Merge qat 的時候 ,QAT 有新的功能在開發也修改到相同檔案</h3><img src="/2023/04/12/GitFlow/1.3.png" class="" title="Flow">
-
-<h3 id="Solution-2"><a href="#Solution-2" class="headerlink" title="Solution:"></a>Solution:</h3><ol>
-<li>找到衝突的檔案 並且找到功能的作者討論如何修改衝突</li>
-<li>並且請功能的作者 他的 branch 先行 sync main 到自己的 branch 維持最新的版本 避免之後 Merge main 又會有衝突</li>
-</ol>
-<hr>
-<h1 id="3-開發功能-時程需要拖很長-歷時一兩個月"><a href="#3-開發功能-時程需要拖很長-歷時一兩個月" class="headerlink" title="3. 開發功能 時程需要拖很長(歷時一兩個月)"></a>3. 開發功能 時程需要拖很長(歷時一兩個月)</h1><p>因為要先知道 如果一個 feature branch 存活的週期大於一個月以上一定要定時做一件事情</p>
-<p>**定時 sync main to feature branch **</p>
-<p>其餘流程要照著正常 feature 推動 這樣才不會有到時候要 Merge main 一堆衝突的困擾</p>
-<h1 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h1><p>不管使用什麼 gitflow 都是要避免衝突，盡量要跟衝突的檔案的作者溝通 看上線時程，以及 sync main branch.<br>如果真有遇到 Merge 到錯誤的 branch (最好是先 force reset 到錯誤的地方開始解決 千萬不要再修改檔案避免造成更多錯誤)</p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/04/12/GitFlow/" data-id="cmmn9wyrw0005ud1o3143fomg" data-title="GitFlow" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-PreventElasticScroll" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2023/03/28/PreventElasticScroll/" class="article-date">
-  <time class="dt-published" datetime="2023-03-28T15:00:51.000Z" itemprop="datePublished">2023-03-28</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/Troubleshooting/">Troubleshooting</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2023/03/28/PreventElasticScroll/">iOS Safari Handle Elastic Scroll</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <p>先說明這個問題主要是 通常在滾動頁面的時候 會有兩個需求</p>
-<ol>
-<li><p>往下滑動就要隱藏 Header</p>
-</li>
-<li><p>開始上滑就要顯示 Header</p>
-</li>
-</ol>
-<img src="/2023/03/28/PreventElasticScroll/sample.gif" class="" title="Sample">
-
-<p>但是問題來了，iOS 有一個橡皮筋的功能叫做 Elastic Scroll ，他會造成你滑動到最上方以後 會再反彈</p>
-<p>如果沒有寫好的話，明明就滑動到最上方還是隱藏 Header (明明 Chrome 跟其他瀏覽器不會)….</p>
-<p>為了兼容這個問題 我們以 Vue Use 為例子做一個範例</p>
-<p>裡面其實只有 directions 跟 y 最重要</p>
-<p>因為我們判斷它是否為回彈事件為 判斷他 nextY &#x3D;&#x3D;&#x3D;0 代表他就在最上方</p>
-<p>不用管他是什麼事件，這樣就可以解決了</p>
-<p><strong>這裡說明一下 為什麼使用這方法而不用 touchmove preventDefault 是因為 有可能舊版本的 safari 沒有這個 event…</strong><br><strong>也不想要考慮太多相容性 就先保留這個行為 但是讓結果相同</strong></p>
-<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> &#123; useScroll &#125; <span class="keyword">from</span> <span class="string">&#x27;@vueuse/core&#x27;</span>;</span><br><span class="line"><span class="keyword">import</span> &#123; ref, computed, toRefs, watch &#125; <span class="keyword">from</span> <span class="string">&#x27;vue&#x27;</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">export</span> <span class="keyword">default</span> <span class="keyword">function</span> <span class="title function_">useHeader</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="keyword">const</span> showHeader = <span class="title function_">ref</span>(<span class="literal">true</span>);</span><br><span class="line">  <span class="keyword">const</span> winComputedRef = <span class="title function_">computed</span>(<span class="function">() =&gt;</span> <span class="variable language_">window</span>);</span><br><span class="line">  <span class="keyword">const</span> &#123; arrivedState, y, directions &#125; = <span class="title function_">useScroll</span>(winComputedRef);</span><br><span class="line">  <span class="keyword">const</span> &#123; <span class="attr">top</span>: toTop, <span class="attr">bottom</span>: toBottom &#125; = <span class="title function_">toRefs</span>(directions);</span><br><span class="line">  <span class="keyword">const</span> &#123; <span class="attr">top</span>: topArrived &#125; = <span class="title function_">toRefs</span>(arrivedState);</span><br><span class="line">  <span class="title function_">watch</span>([toBottom, y], <span class="function">(<span class="params">[toBottomNewValue, nextY]</span>) =&gt;</span> &#123;</span><br><span class="line">    <span class="comment">//nextY to prevent iOS safari elastic scrolling</span></span><br><span class="line">    <span class="keyword">if</span> (toBottomNewValue &amp;&amp; nextY !== <span class="number">0</span>) &#123;</span><br><span class="line">      showHeader.<span class="property">value</span> = <span class="literal">false</span>;</span><br><span class="line">    &#125; <span class="keyword">else</span> <span class="keyword">if</span> (nextY === <span class="number">0</span>) &#123;</span><br><span class="line">      showHeader.<span class="property">value</span> = <span class="literal">true</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;);</span><br><span class="line"></span><br><span class="line">  <span class="title function_">watch</span>(</span><br><span class="line">    <span class="function">() =&gt;</span> toTop.<span class="property">value</span>,</span><br><span class="line">    <span class="function">(<span class="params">newValue</span>) =&gt;</span> &#123;</span><br><span class="line">      <span class="keyword">if</span> (newValue) &#123;</span><br><span class="line">        showHeader.<span class="property">value</span> = <span class="literal">true</span>;</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">  );</span><br><span class="line">  <span class="keyword">return</span> &#123;</span><br><span class="line">    showHeader,</span><br><span class="line">    topArrived,</span><br><span class="line">    toBottom,</span><br><span class="line">    toTop,</span><br><span class="line">    y,</span><br><span class="line">  &#125;;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>這個問題主要要考慮的是 iOS 以及 safari 版本不同 有可能有不同的事件 所以最好是找一個比較符合的解決方法</p>
-<h2 id="其他解法-要確認使用者大部分-Device-在什麼版本"><a href="#其他解法-要確認使用者大部分-Device-在什麼版本" class="headerlink" title="其他解法(要確認使用者大部分 Device 在什麼版本)"></a>其他解法(要確認使用者大部分 Device 在什麼版本)</h2><ol>
-<li><p>touchmove prevent</p>
-</li>
-<li><p>使用 debounce 限制 scroll top 抓取事件 delay 50 ms 之類 然後判斷高度 可以使用 lodash.throttle 套件</p>
-</li>
-</ol>
-<h3 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h3><p><a target="_blank" rel="noopener" href="https://vueuse.org/core/useScroll/#usage">Vue Use</a></p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/28/PreventElasticScroll/" data-id="cmmn9wysa000rud1og140e8yu" data-title="iOS Safari Handle Elastic Scroll" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
 
 
   <nav id="page-nav">
     
-    <span class="page-number current">1</span><a class="page-number" href="/page/2/">2</a><a class="extend next" rel="next" href="/page/2/">下一頁 &raquo;</a>
+    <span class="page-number current">1</span><a class="page-number" href="/page/2/">2</a><a class="page-number" href="/page/3/">3</a><a class="extend next" rel="next" href="/page/2/">下一頁 &raquo;</a>
   </nav>
 
 </section>
@@ -957,7 +804,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
   <div class="widget-wrap">
     <h3 class="widget-title">標籤</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
     </div>
   </div>
 
@@ -978,6 +825,14 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
     <h3 class="widget-title">最新文章</h3>
     <div class="widget">
       <ul>
+        
+          <li>
+            <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/12/VuePartialView/">跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer</a>
+          </li>
         
           <li>
             <a href="/2026/03/11/ELKWatcher/">用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控</a>
@@ -1009,14 +864,6 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
         
           <li>
             <a href="/2023/10/07/JamWebDebugger/">JamWebDebugger</a>
-          </li>
-        
-          <li>
-            <a href="/2023/04/12/GitFlow/">GitFlow</a>
-          </li>
-        
-          <li>
-            <a href="/2023/03/28/PreventElasticScroll/">iOS Safari Handle Elastic Scroll</a>
           </li>
         
       </ul>

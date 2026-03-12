@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="前言在多產品平台中，每個產品（體育、娛樂城、棋牌等）可能由不同的合作夥伴（Provider）開發，使用的技術棧也各不相同——React、Angular、甚至純 JS。但平台需要在所有產品頁面上維持一致的品牌形象、導航列、會員狀態和法律聲明。 要求每個 Provider 自行實作這些 UI 元件既不現實也難以維護。因此我們設計了 star4partialview — 一個獨立打包的 Vue 3 應用">
+<meta property="og:type" content="article">
+<meta property="og:title" content="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header&#x2F;Footer">
+<meta property="og:url" content="https://josephmtsai.github.io/2026/03/12/VuePartialView/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="前言在多產品平台中，每個產品（體育、娛樂城、棋牌等）可能由不同的合作夥伴（Provider）開發，使用的技術棧也各不相同——React、Angular、甚至純 JS。但平台需要在所有產品頁面上維持一致的品牌形象、導航列、會員狀態和法律聲明。 要求每個 Provider 自行實作這些 UI 元件既不現實也難以維護。因此我們設計了 star4partialview — 一個獨立打包的 Vue 3 應用">
+<meta property="og:locale" content="zh_TW">
+<meta property="article:published_time" content="2026-03-12T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-12T10:50:42.051Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Architecture">
+<meta property="article:tag" content="TypeScript">
+<meta property="article:tag" content="Vue.js">
+<meta property="article:tag" content="Micro Frontend">
+<meta property="article:tag" content="postMessage">
+<meta name="twitter:card" content="summary">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-VuePartialView" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/12/VuePartialView/" class="article-date">
+  <time class="dt-published" datetime="2026-03-12T16:00:00.000Z" itemprop="datePublished">2026-03-13</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在多產品平台中，每個產品（體育、娛樂城、棋牌等）可能由不同的合作夥伴（Provider）開發，使用的技術棧也各不相同——React、Angular、甚至純 JS。但平台需要在所有產品頁面上維持一致的品牌形象、導航列、會員狀態和法律聲明。</p>
+<p>要求每個 Provider 自行實作這些 UI 元件既不現實也難以維護。因此我們設計了 <strong>star4partialview</strong> — 一個獨立打包的 Vue 3 應用，輸出單一 <code>partialView.js</code>，Provider 只需引入一個 <code>&lt;script&gt;</code> 標籤就能獲得完整的 Header + Footer。</p>
+<p>兩個獨立的 JS Runtime 透過 <code>window.postMessage</code> 通訊，實現了一種輕量級的 <strong>Micro Frontend</strong> 模式。</p>
+<span id="more"></span>
+
+<h2 id="整體架構"><a href="#整體架構" class="headerlink" title="整體架構"></a>整體架構</h2><pre class="mermaid">flowchart TD
+    subgraph providerPage ["Provider 頁面（如體育投注）"]
+        ProviderApp["Provider App<br/>任意框架"]
+        GV["window.gv<br/>平台設定"]
+        UV["window.uv<br/>使用者 Session"]
+        MountHeader["div#oee-header.star4"]
+        MountFooter["div#oee-footer.star4"]
+        ProviderApp --- GV
+        ProviderApp --- UV
+    end
+    subgraph partialViewBundle ["partialView.js（Vue 3 Bundle）"]
+        Entry["partialView.ts<br/>進入點"]
+        PV["PartialView.vue<br/>根元件"]
+        Header["TheHeader.vue<br/>+ TheQuickMenu.vue"]
+        Footer["TheFooter.vue"]
+        Receiver["ReceiveMessage.vue<br/>postMessage 監聽器"]
+        Entry --> PV
+        PV --> Header
+        PV -->|"Vue Teleport"| Footer
+        PV --> Receiver
+    end
+    Entry -->|"app.mount()"| MountHeader
+    Footer -->|"teleport to"| MountFooter
+    ProviderApp -->|"window.postMessage"| Receiver
+    PV -->|"window.postMessage"| ProviderApp</pre>
+
+<h3 id="關鍵設計決策"><a href="#關鍵設計決策" class="headerlink" title="關鍵設計決策"></a>關鍵設計決策</h3><table>
+<thead>
+<tr>
+<th>面向</th>
+<th>決策</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>掛載策略</td>
+<td>直接 DOM 掛載（非 iframe）</td>
+<td>共享 Cookie&#x2F;Session、無 CORS 問題、原生捲動行為</td>
+</tr>
+<tr>
+<td>通訊方式</td>
+<td><code>window.postMessage</code></td>
+<td>解耦、框架無關、同源和跨域都能用</td>
+</tr>
+<tr>
+<td>CSS 隔離</td>
+<td>Tailwind 限定在 <code>.star4</code> class 下</td>
+<td>避免樣式污染 Provider 頁面</td>
+</tr>
+<tr>
+<td>打包策略</td>
+<td><code>all-in-one</code> 單一 chunk</td>
+<td>Provider 只需引入一個 <code>&lt;script&gt;</code></td>
+</tr>
+</tbody></table>
+<h2 id="打包與部署"><a href="#打包與部署" class="headerlink" title="打包與部署"></a>打包與部署</h2><p>使用 Rsbuild (<code>@rsbuild/core</code>) 搭配 Vue Plugin 打包。</p>
+<h3 id="產出檔案"><a href="#產出檔案" class="headerlink" title="產出檔案"></a>產出檔案</h3><table>
+<thead>
+<tr>
+<th>資源</th>
+<th>路徑</th>
+<th>命名規則</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>主要 JS</td>
+<td><code>cdn/star4partialview/js/partialView.js</code></td>
+<td>固定檔名（無 hash）</td>
+</tr>
+<tr>
+<td>CSS</td>
+<td><code>cdn/star4partialview/css/partialView.css</code></td>
+<td>固定檔名</td>
+</tr>
+<tr>
+<td>非同步 chunk</td>
+<td><code>cdn/star4partialview/js/async/</code></td>
+<td>含 content hash</td>
+</tr>
+<tr>
+<td>圖片</td>
+<td><code>cdn/star4partialview/img/</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>字型</td>
+<td><code>cdn/star4partialview/woff/</code></td>
+<td>—</td>
+</tr>
+</tbody></table>
+<h3 id="CSS-隔離策略"><a href="#CSS-隔離策略" class="headerlink" title="CSS 隔離策略"></a>CSS 隔離策略</h3><p>Tailwind CSS 透過 <code>important: &#39;.star4&#39;</code> 限定作用範圍：</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// tailwind.config.js</span></span><br><span class="line"><span class="keyword">const</span> settings = &#123;</span><br><span class="line">  <span class="attr">important</span>: <span class="string">&#x27;.star4&#x27;</span>,       <span class="comment">// 所有 utility 限定在 .star4 內</span></span><br><span class="line">  <span class="attr">corePlugins</span>: &#123;</span><br><span class="line">    <span class="attr">preflight</span>: <span class="literal">false</span>,         <span class="comment">// 關閉 CSS reset，避免影響 Provider 樣式</span></span><br><span class="line">  &#125;,</span><br><span class="line">  <span class="attr">darkMode</span>: <span class="string">&#x27;class&#x27;</span>,</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>Provider 頁面的掛載點需要加上 <code>.star4</code> class：</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">div</span> <span class="attr">id</span>=<span class="string">&quot;oee-header&quot;</span> <span class="attr">class</span>=<span class="string">&quot;star4 !star4&quot;</span>&gt;</span><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">div</span> <span class="attr">id</span>=<span class="string">&quot;oee-footer&quot;</span> <span class="attr">class</span>=<span class="string">&quot;star4 !star4&quot;</span>&gt;</span><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br></pre></td></tr></table></figure>
+
+<p>這確保所有 Tailwind utility 只在 <code>.star4</code> 容器內生效，不會與 Provider 自身的樣式衝突。</p>
+<h2 id="掛載機制"><a href="#掛載機制" class="headerlink" title="掛載機制"></a>掛載機制</h2><h3 id="Provider-需要準備的前置條件"><a href="#Provider-需要準備的前置條件" class="headerlink" title="Provider 需要準備的前置條件"></a>Provider 需要準備的前置條件</h3><p><strong>1. DOM 掛載點</strong></p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">div</span> <span class="attr">id</span>=<span class="string">&quot;oee-header&quot;</span> <span class="attr">class</span>=<span class="string">&quot;star4 !star4&quot;</span>&gt;</span><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line"><span class="comment">&lt;!-- Provider 內容 --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">div</span> <span class="attr">id</span>=<span class="string">&quot;oee-footer&quot;</span> <span class="attr">class</span>=<span class="string">&quot;star4 !star4&quot;</span>&gt;</span><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br></pre></td></tr></table></figure>
+
+<p><strong>2. 全域變數</strong></p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// window.gv — 平台設定（由 Server Side Render 注入）</span></span><br><span class="line"><span class="variable language_">window</span>.<span class="property">gv</span> = &#123;</span><br><span class="line">  <span class="attr">cooperativeSet</span>: &#123; ... &#125;,  <span class="comment">// 贊助商、社群媒體、授權資訊</span></span><br><span class="line">  <span class="attr">modules</span>: [ ... ],         <span class="comment">// 各模組維護狀態</span></span><br><span class="line">  <span class="attr">prods</span>: [ ... ],           <span class="comment">// 可用產品（體育、娛樂城、棋牌等）</span></span><br><span class="line">  <span class="attr">domains</span>: &#123;</span><br><span class="line">    <span class="attr">cdn</span>: <span class="string">&quot;https://cdn.example.com&quot;</span>,</span><br><span class="line">    <span class="attr">content</span>: <span class="string">&quot;https://cdn.example.com/content&quot;</span></span><br><span class="line">  &#125;,</span><br><span class="line">  <span class="attr">r</span>: <span class="string">&quot;China&quot;</span>,               <span class="comment">// 當前地區</span></span><br><span class="line">  <span class="attr">lan</span>: <span class="string">&quot;zh-cn&quot;</span>,             <span class="comment">// 當前語系</span></span><br><span class="line">  <span class="attr">productName</span>: <span class="string">&quot;sports&quot;</span>,    <span class="comment">// 目前產品</span></span><br><span class="line">  <span class="attr">logoUrl</span>: &#123; ... &#125;,         <span class="comment">// 地區對應的 Logo URL</span></span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="comment">// window.uv — 使用者 Session（登入後更新）</span></span><br><span class="line"><span class="variable language_">window</span>.<span class="property">uv</span> = &#123;</span><br><span class="line">  <span class="attr">prod</span>: <span class="string">&#x27;sports&#x27;</span>,</span><br><span class="line">  <span class="attr">ssid</span>: <span class="string">&#x27;&#x27;</span>,                 <span class="comment">// Session ID（未登入時為空）</span></span><br><span class="line">  <span class="attr">newLogin</span>: <span class="literal">false</span>,</span><br><span class="line">  <span class="attr">abl</span>: <span class="string">&#x27;&#x27;</span>,                  <span class="comment">// 可用餘額</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<h3 id="初始化流程"><a href="#初始化流程" class="headerlink" title="初始化流程"></a>初始化流程</h3><pre class="mermaid">sequenceDiagram
+    participant Provider as Provider 頁面
+    participant Entry as partialView.ts
+    participant Vue as Vue App
+    participant Header as "#oee-header"
+    participant Footer as "#oee-footer"
+    Provider->>Provider: 設定 window.gv 和 window.uv
+    Provider->>Entry: 載入 partialView.js
+    Entry->>Entry: 設定 CDN 路徑
+    Entry->>Entry: setupI18n() 載入翻譯
+    Entry->>Vue: createApp(PartialView)
+    Vue->>Vue: 掛載 i18n, pinia 等 plugins
+    Vue->>Header: app.mount("#oee-header")
+    Vue->>Footer: Vue Teleport 渲染 Footer
+    Note over Vue: ReceiveMessage.vue 註冊 message listener
+    Vue->>Provider: postMessage("partialViewLoaded")
+    Vue->>Provider: postMessage("footerLoaded")
+    Provider->>Vue: postMessage("uvInitized")
+    Note over Vue: loginWithToken(), 更新 stores</pre>
+
+<p>進入點程式碼：</p>
+<figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="title function_">setupI18n</span>().<span class="title function_">then</span>(<span class="function">(<span class="params">i18n</span>) =&gt;</span> &#123;</span><br><span class="line">  <span class="keyword">const</span> app = <span class="title function_">createApp</span>(<span class="title class_">PartialView</span>)</span><br><span class="line">    .<span class="title function_">use</span>(i18n)</span><br><span class="line">    .<span class="title function_">use</span>(<span class="title class_">VWave</span>, &#123;&#125;)</span><br><span class="line">    .<span class="title function_">use</span>(<span class="title class_">VueSanitize</span>)</span><br><span class="line">    .<span class="title function_">use</span>(<span class="title class_">VueLazyload</span>, &#123; ... &#125;)</span><br><span class="line">    .<span class="title function_">use</span>(pinia);</span><br><span class="line">  app.<span class="title function_">mount</span>(<span class="string">&#x27;#oee-header&#x27;</span>);</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<h2 id="PostMessage-通訊協議"><a href="#PostMessage-通訊協議" class="headerlink" title="PostMessage 通訊協議"></a>PostMessage 通訊協議</h2><h3 id="Topic-定義"><a href="#Topic-定義" class="headerlink" title="Topic 定義"></a>Topic 定義</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">enum</span> <span class="title class_">Topic</span> &#123;</span><br><span class="line">  <span class="title class_">PartialViewLoaded</span> = <span class="string">&#x27;partialViewLoaded&#x27;</span>,</span><br><span class="line">  <span class="title class_">FooterLoaded</span> = <span class="string">&#x27;footerLoaded&#x27;</span>,</span><br><span class="line">  <span class="title class_">Logout</span> = <span class="string">&#x27;logout&#x27;</span>,</span><br><span class="line">  <span class="title class_">UpdateBalance</span> = <span class="string">&#x27;updateBalance&#x27;</span>,</span><br><span class="line">  <span class="title class_">UvInitized</span> = <span class="string">&#x27;uvInitized&#x27;</span>,</span><br><span class="line">  <span class="title class_">QuickMenuDialog</span> = <span class="string">&#x27;quickMenuDialog&#x27;</span>,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">export</span> <span class="keyword">enum</span> <span class="title class_">Key</span> &#123;</span><br><span class="line">  <span class="title class_">Unauthorized</span> = <span class="string">&#x27;unauthorized&#x27;</span>,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="Provider-→-PartialView"><a href="#Provider-→-PartialView" class="headerlink" title="Provider → PartialView"></a>Provider → PartialView</h3><table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Payload</th>
+<th>用途</th>
+<th>PartialView 動作</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>uvInitized</code></td>
+<td><code>&#123; topic: &#39;uvInitized&#39; &#125;</code></td>
+<td>通知使用者 Session 就緒</td>
+<td>讀取 <code>window.uv</code>，呼叫 <code>loginWithToken()</code></td>
+</tr>
+<tr>
+<td><code>updateBalance</code></td>
+<td><code>&#123; topic: &#39;updateBalance&#39; &#125;</code></td>
+<td>餘額變更</td>
+<td>從 <code>window.uv.abl</code> 或 API 重新取得餘額</td>
+</tr>
+<tr>
+<td><code>quickMenuDialog</code></td>
+<td><code>&#123; topic: &#39;quickMenuDialog&#39; &#125;</code></td>
+<td>切換漢堡選單</td>
+<td><code>rootStore.toggleQuickMenu()</code></td>
+</tr>
+</tbody></table>
+<h3 id="PartialView-→-Provider"><a href="#PartialView-→-Provider" class="headerlink" title="PartialView → Provider"></a>PartialView → Provider</h3><table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Payload</th>
+<th>觸發時機</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>partialViewLoaded</code></td>
+<td><code>&#123; topic: &#39;partialViewLoaded&#39; &#125;</code></td>
+<td>Footer 元件掛載完成</td>
+</tr>
+<tr>
+<td><code>footerLoaded</code></td>
+<td><code>&#123; topic: &#39;footerLoaded&#39;, data: &#123; footerLoaded: true &#125; &#125;</code></td>
+<td>Footer 元件掛載完成</td>
+</tr>
+<tr>
+<td><code>logout</code></td>
+<td><code>&#123; topic: &#39;logout&#39;, data: &#123; key: &#39;unauthorized&#39; &#125; &#125;</code></td>
+<td>API 回傳 401（Session 過期）</td>
+</tr>
+</tbody></table>
+<h3 id="完整生命週期"><a href="#完整生命週期" class="headerlink" title="完整生命週期"></a>完整生命週期</h3><pre class="mermaid">sequenceDiagram
+    participant Provider as Provider（體育投注）
+    participant PV as PartialView（Vue 3）
+    participant API as 後端 API
+    Note over Provider: 頁面載入，設定 window.gv / window.uv
+    Provider->>PV: 載入 partialView.js
+    PV->>PV: 掛載 Header 到 #oee-header
+    PV->>PV: Teleport Footer 到 #oee-footer
+    PV->>Provider: postMessage("partialViewLoaded")
+    PV->>Provider: postMessage("footerLoaded")
+    Provider->>Provider: 使用者透過 Provider UI 登入
+    Provider->>Provider: 更新 window.uv
+    Provider->>PV: postMessage("uvInitized")
+    PV->>PV: rootStore.setUserVariable(window.uv)
+    PV->>API: POST /member/loginWithToken
+    API-->>PV: 驗證成功
+    PV->>PV: 更新 Header（顯示餘額、通知）
+    Note over Provider: 使用者下注，餘額變更
+    Provider->>Provider: 更新 window.uv.abl
+    Provider->>PV: postMessage("updateBalance")
+    PV->>PV: 更新餘額顯示
+    Provider->>PV: postMessage("quickMenuDialog")
+    PV->>PV: 切換快速選單開關
+    Note over PV: API 回傳 401（Session 過期）
+    PV->>Provider: postMessage("logout", key: "unauthorized")
+    Provider->>Provider: 處理 Session 過期</pre>
+
+<h3 id="訊息處理器"><a href="#訊息處理器" class="headerlink" title="訊息處理器"></a>訊息處理器</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">async</span> <span class="keyword">function</span> <span class="title function_">receiveMessage</span>(<span class="params">ev</span>) &#123;</span><br><span class="line">  <span class="keyword">let</span> payload = ev.<span class="property">data</span>;</span><br><span class="line">  <span class="keyword">switch</span> (payload.<span class="property">topic</span>) &#123;</span><br><span class="line">    <span class="keyword">case</span> <span class="title class_">Topic</span>.<span class="property">UpdateBalance</span>:</span><br><span class="line">      <span class="keyword">if</span> (payload.<span class="property">data</span>?.<span class="property">key</span> === <span class="title class_">Topic</span>.<span class="property">UvInitized</span>) &#123;</span><br><span class="line">        rootStore.<span class="title function_">setUserVariable</span>(<span class="variable language_">window</span>.<span class="property">uv</span>);</span><br><span class="line">        <span class="keyword">await</span> authStore.<span class="title function_">loginWithToken</span>();</span><br><span class="line">        eventBus.<span class="title function_">emit</span>(<span class="title class_">Topic</span>.<span class="property">UvInitized</span>, <span class="literal">true</span>);</span><br><span class="line">      &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="comment">// 重新整理餘額顯示</span></span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">case</span> <span class="title class_">Topic</span>.<span class="property">UvInitized</span>:</span><br><span class="line">      rootStore.<span class="title function_">setUserVariable</span>(<span class="variable language_">window</span>.<span class="property">uv</span>);</span><br><span class="line">      <span class="keyword">await</span> authStore.<span class="title function_">loginWithToken</span>();</span><br><span class="line">      eventBus.<span class="title function_">emit</span>(<span class="title class_">Topic</span>.<span class="property">UvInitized</span>, <span class="literal">true</span>);</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">case</span> <span class="title class_">Topic</span>.<span class="property">QuickMenuDialog</span>:</span><br><span class="line">      rootStore.<span class="title function_">toggleQuickMenu</span>();</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="Header-功能"><a href="#Header-功能" class="headerlink" title="Header 功能"></a>Header 功能</h2><h3 id="App-Bar（桌面版-手機版）"><a href="#App-Bar（桌面版-手機版）" class="headerlink" title="App Bar（桌面版 + 手機版）"></a>App Bar（桌面版 + 手機版）</h3><table>
+<thead>
+<tr>
+<th>功能</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Logo</td>
+<td>依地區顯示對應 Logo，連結到首頁</td>
+</tr>
+<tr>
+<td>產品導航</td>
+<td>體育、電競、娛樂城、真人、棋牌、虛擬、彩票，含維護狀態標記</td>
+</tr>
+<tr>
+<td>登入按鈕</td>
+<td>導向 Provider 的註冊&#x2F;登入頁面</td>
+</tr>
+<tr>
+<td>會員餘額</td>
+<td>顯示&#x2F;隱藏切換，透過 postMessage 即時更新</td>
+</tr>
+<tr>
+<td>通知徽章</td>
+<td>KYC 狀態、收件匣未讀、通知數量</td>
+</tr>
+<tr>
+<td>語系選擇</td>
+<td>切換語言後重新載入頁面</td>
+</tr>
+<tr>
+<td>快速選單</td>
+<td>漢堡圖示開啟側邊抽屜</td>
+</tr>
+</tbody></table>
+<h3 id="快速選單（側邊抽屜）"><a href="#快速選單（側邊抽屜）" class="headerlink" title="快速選單（側邊抽屜）"></a>快速選單（側邊抽屜）</h3><table>
+<thead>
+<tr>
+<th>區塊</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>時鐘</td>
+<td>當前時間與 GMT 時區偏移</td>
+</tr>
+<tr>
+<td>餘額</td>
+<td>可用餘額、顯示&#x2F;隱藏、重新整理</td>
+</tr>
+<tr>
+<td>產品導航</td>
+<td>方塊圖示快速切換產品</td>
+</tr>
+<tr>
+<td>帳戶連結</td>
+<td>我的帳戶、獎勵、銀行、通知、訊息</td>
+</tr>
+<tr>
+<td>資訊連結</td>
+<td>優惠活動、推薦好友、APP 下載、客服、線上聊天</td>
+</tr>
+<tr>
+<td>設定</td>
+<td>地區選擇、語系選擇、網站地圖</td>
+</tr>
+<tr>
+<td>認證</td>
+<td>登出按鈕</td>
+</tr>
+</tbody></table>
+<p>所有導航使用 <code>window.location.href</code> 做整頁跳轉（Partial View 內不使用 SPA 路由）。</p>
+<h2 id="Footer-功能"><a href="#Footer-功能" class="headerlink" title="Footer 功能"></a>Footer 功能</h2><table>
+<thead>
+<tr>
+<th>區塊</th>
+<th>內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>常用連結</td>
+<td>條款與條件、隱私權政策、責任博弈、客服、合作夥伴、聯盟</td>
+</tr>
+<tr>
+<td>安全與信任</td>
+<td>授權標章（IOM、Anjouan）含外部連結</td>
+</tr>
+<tr>
+<td>責任博弈</td>
+<td>相關組織標章（ResGame、GameCare、GambleAware）</td>
+</tr>
+<tr>
+<td>授權聲明</td>
+<td>Anjouan 授權免責聲明文字</td>
+</tr>
+<tr>
+<td>伺服器版本</td>
+<td>點擊顯示伺服器版本代碼</td>
+</tr>
+<tr>
+<td>開發工具</td>
+<td>連點 9 次「責任博弈」載入 Eruda 除錯器</td>
+</tr>
+</tbody></table>
+<p>Footer 掛載完成後會發送 <code>partialViewLoaded</code> 和 <code>footerLoaded</code> 訊息，通知 Provider 可以開始互動。</p>
+<h2 id="跨框架設計模式分析"><a href="#跨框架設計模式分析" class="headerlink" title="跨框架設計模式分析"></a>跨框架設計模式分析</h2><h3 id="模式：透過直接-DOM-掛載的嵌入式-Micro-Frontend"><a href="#模式：透過直接-DOM-掛載的嵌入式-Micro-Frontend" class="headerlink" title="模式：透過直接 DOM 掛載的嵌入式 Micro Frontend"></a>模式：透過直接 DOM 掛載的嵌入式 Micro Frontend</h3><pre class="mermaid">flowchart LR
+    subgraph samePage ["同一個瀏覽器 Tab"]
+        subgraph providerRuntime ["Provider Runtime"]
+            ProvFW["Provider 框架<br/>React / Angular / JS"]
+            ProvDOM["Provider DOM 區域"]
+        end
+        subgraph partialRuntime ["PartialView Runtime"]
+            VueApp["Vue 3 App"]
+            HeaderDOM["#oee-header DOM"]
+            FooterDOM["#oee-footer DOM"]
+        end
+        SharedWindow["共享 window 物件<br/>gv, uv, postMessage"]
+    end
+    ProvFW --> ProvDOM
+    VueApp --> HeaderDOM
+    VueApp --> FooterDOM
+    ProvFW <-->|"postMessage"| VueApp
+    ProvFW --> SharedWindow
+    VueApp --> SharedWindow</pre>
+
+<h3 id="為什麼選擇-postMessage？"><a href="#為什麼選擇-postMessage？" class="headerlink" title="為什麼選擇 postMessage？"></a>為什麼選擇 postMessage？</h3><table>
+<thead>
+<tr>
+<th>方案</th>
+<th>優點</th>
+<th>缺點</th>
+<th>結論</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>postMessage</strong></td>
+<td>框架無關、非同步、解耦、支援跨域</td>
+<td>需定義訊息協議</td>
+<td><strong>採用</strong></td>
+</tr>
+<tr>
+<td>Custom Events</td>
+<td>簡單、原生 DOM</td>
+<td>需共享 DOM 節點參考、不支援跨域</td>
+<td>不適用</td>
+</tr>
+<tr>
+<td>共享全域狀態</td>
+<td>零延遲</td>
+<td>緊耦合、競態條件、跨框架無響應性</td>
+<td>不適用</td>
+</tr>
+<tr>
+<td>iframe</td>
+<td>完全隔離</td>
+<td>CORS 複雜、無法共享 Cookie、捲動&#x2F;縮放問題</td>
+<td>過度設計</td>
+</tr>
+</tbody></table>
+<h3 id="CSS-隔離策略-1"><a href="#CSS-隔離策略-1" class="headerlink" title="CSS 隔離策略"></a>CSS 隔離策略</h3><table>
+<thead>
+<tr>
+<th>層級</th>
+<th>技術</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tailwind 作用域</td>
+<td><code>important: &#39;.star4&#39;</code> 確保 utility 只在 <code>.star4</code> 容器內生效</td>
+</tr>
+<tr>
+<td>關閉 Preflight</td>
+<td><code>preflight: false</code> 避免 Tailwind 的 CSS reset 影響 Provider</td>
+</tr>
+<tr>
+<td>容器 class</td>
+<td><code>#oee-header</code> 和 <code>#oee-footer</code> 都加上 <code>class=&quot;star4&quot;</code></td>
+</tr>
+<tr>
+<td>字型隔離</td>
+<td>自訂字型在 PartialView.vue 的 <code>&lt;style&gt;</code> 區塊內宣告</td>
+</tr>
+</tbody></table>
+<h3 id="資料傳遞契約：全域變數注入"><a href="#資料傳遞契約：全域變數注入" class="headerlink" title="資料傳遞契約：全域變數注入"></a>資料傳遞契約：全域變數注入</h3><p>Provider 在載入 bundle 前設定兩個全域變數，而非透過 API 或複雜的握手協議：</p>
+<table>
+<thead>
+<tr>
+<th>變數</th>
+<th>擁有者</th>
+<th>更新者</th>
+<th>消費者</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>window.gv</code></td>
+<td>Server Side Render</td>
+<td>Provider（頁面初始載入）</td>
+<td>PartialView（唯讀）</td>
+</tr>
+<tr>
+<td><code>window.uv</code></td>
+<td>Provider</td>
+<td>Provider（登入&#x2F;餘額變更時）</td>
+<td>PartialView（透過 postMessage 觸發讀取）</td>
+</tr>
+</tbody></table>
+<p>postMessage 在這裡扮演的是<strong>通知機制</strong>（「資料已更新，請重新讀取」），實際資料傳遞透過共享的 <code>window</code> 物件完成。這避免了大型設定物件的序列化開銷。</p>
+<h2 id="Pinia-Stores"><a href="#Pinia-Stores" class="headerlink" title="Pinia Stores"></a>Pinia Stores</h2><table>
+<thead>
+<tr>
+<th>Store</th>
+<th>State</th>
+<th>主要 Actions</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>root</strong></td>
+<td><code>gv</code>, <code>uv</code>, <code>domains</code>, <code>showQuickMenu</code></td>
+<td><code>setDomainVariable</code>, <code>setLanguageCode</code>, <code>setUserVariable</code>, <code>toggleQuickMenu</code></td>
+</tr>
+<tr>
+<td><strong>auth</strong></td>
+<td>登入狀態, trading info</td>
+<td><code>loginWithToken</code>, <code>healthCheck</code></td>
+</tr>
+<tr>
+<td><strong>my-account</strong></td>
+<td>餘額, 可提領金額, rollover</td>
+<td><code>fetchBalanceInfo</code>, <code>fetchBalanceInfoRealTime</code>, <code>updateAvailableBalance</code></td>
+</tr>
+<tr>
+<td><strong>message</strong></td>
+<td><code>inboxUnreadCount</code>, <code>notificationsUnreadCount</code></td>
+<td>取得未讀數量</td>
+</tr>
+<tr>
+<td><strong>kyc</strong></td>
+<td><code>redStatusCount</code></td>
+<td>KYC 狀態檢查</td>
+</tr>
+<tr>
+<td><strong>rewards</strong></td>
+<td><code>availableRewardsCount</code></td>
+<td>獎勵數量</td>
+</tr>
+<tr>
+<td><strong>theme</strong></td>
+<td><code>regionTheme</code>, <code>logoUrl</code></td>
+<td>依地區解析主題</td>
+</tr>
+</tbody></table>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VuePartialView/" data-id="cmmnckfes006lvi1oa1ywd3t6" data-title="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/03/12/VueBroadCastImplement/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/03/11/ELKWatcher/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Debug/">Debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Troubleshooting/">Troubleshooting</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/12/VuePartialView/">跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/11/ELKWatcher/">用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/10/GitHotfixRevertFlow/">Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/10/ErrorContentDecoding/">ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/09/Nuxt3ApiLoggerHandler/">在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/08/RateLimitInplementation/">使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/07/LazyCacheIssue/">LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期</a>
+          </li>
+        
+          <li>
+            <a href="/2026/02/03/ApiFeatureVersionControl/">Feature Version Control — APP 版本功能控管架構</a>
+          </li>
+        
+          <li>
+            <a href="/2023/10/07/JamWebDebugger/">JamWebDebugger</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+
+  <script src='https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({startOnLoad: true, theme: 'default'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>

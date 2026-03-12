@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="front-end,seo,back-end">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Joseph&#39;s Work Note">
+<meta property="og:url" content="https://josephmtsai.github.io/page/3/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="front-end,seo,back-end">
+<meta property="og:locale" content="zh_TW">
+<meta property="article:author" content="Joseph M Tsai">
+<meta name="twitter:card" content="summary">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main">
+  
+    <article id="post-UCBrowserSupport" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2022/05/07/UCBrowserSupport/" class="article-date">
+  <time class="dt-published" datetime="2022-05-07T15:38:50.000Z" itemprop="datePublished">2022-05-07</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Troubleshooting/">Troubleshooting</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2022/05/07/UCBrowserSupport/">UC Browser Support</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>在開發 Global 的網頁的時候，通常會去評估各種網頁的支援度，如果沒有通常會請放 Upgrade your Browser.</p>
+<p>因為 UC Browser 在中國大陸其實還是有一些比較舊的手機在使用，剛好在開發 Vue 的時候遇到一些問題順便記錄下來</p>
+<p>使用的 Framework and config</p>
+<ul>
+<li>Vue 3 with Vite</li>
+<li>Tailwind CSS 3 (Dark Mode)</li>
+</ul>
+<p>想要支援舊版的 UC Browsr</p>
+<h1 id="瀏覽器支援度"><a href="#瀏覽器支援度" class="headerlink" title="瀏覽器支援度"></a>瀏覽器支援度</h1><p>一開始以為是 ES module 導致 Build 出來有問題<br><a target="_blank" rel="noopener" href="https://caniuse.com/es6-module">ES Module</a></p>
+<p><a target="_blank" rel="noopener" href="https://caniuse.com/es6-module-dynamic-import">Dynamic Import</a></p>
+<p>所以針對這點我們有安裝了<a target="_blank" rel="noopener" href="https://www.npmjs.com/package/@vitejs/plugin-legacy">plugin-legacy plugin</a></p>
+<p>但是還是遇到問題，基本上 UC 瀏覽器 13 以上 legacy plugin 才有用，但是當下發現 CSS 有跑版.. 然後回頭去看發現有這行敘述</p>
+<blockquote>
+<p>Now instead of dark:{class} classes being applied based on prefers-color-scheme,<br>they will be applied whenever dark class is present earlier in the HTML tree.</p>
+</blockquote>
+<p>再回頭去查詢發現 其實到最新版本的 UC 瀏覽器才有支援這個設定….<br><a target="_blank" rel="noopener" href="https://caniuse.com/?search=prefers-color-scheme">prefers-color-scheme</a></p>
+<table>
+<thead>
+<tr>
+<th>UC Browser Version</th>
+<th>Vite</th>
+<th>Vite with Legacy Code</th>
+<th>CSS OK?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>11.2.0</td>
+<td>X</td>
+<td>X</td>
+<td>X</td>
+</tr>
+<tr>
+<td>11.3.8</td>
+<td>X</td>
+<td>X</td>
+<td>X</td>
+</tr>
+<tr>
+<td>13.0.5</td>
+<td>X</td>
+<td>O</td>
+<td>X(Display Wrong)</td>
+</tr>
+<tr>
+<td>13.4.0</td>
+<td>O</td>
+<td>O</td>
+<td>O</td>
+</tr>
+</tbody></table>
+<h2 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h2><p>Caniuse 的資訊不是最新的 實際支援的瀏覽器還是需要實測才知道… 如果用比較新的 framework 之類還是要考慮舊版的瀏覽器支援度<br>不然這個畫面都會是白色的.</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="cmmnckfe00016vi1o9ei92lbd" data-title="UC Browser Support" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-InterceptInApp" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2022/05/05/InterceptInApp/" class="article-date">
+  <time class="dt-published" datetime="2022-05-05T14:21:35.000Z" itemprop="datePublished">2022-05-05</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/Debug/">Debug</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2022/05/05/InterceptInApp/">在手機上如何攔截到 http Request</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <blockquote>
+<p>在開發 App 的過程中，最常會遇到的幾個問題是</p>
+</blockquote>
+<ol>
+<li>在 Native App 中 鑲嵌的 Api Request 是否有送出到 Server Side</li>
+<li>在 Native App 中 發送 Request 的格式以及原始資料是什麼?<br>(假定你想要觀看別人的 App 運作)</li>
+</ol>
+<h2 id="PreRequires"><a href="#PreRequires" class="headerlink" title="PreRequires"></a>PreRequires</h2><ol>
+<li><a target="_blank" rel="noopener" href="https://www.charlesproxy.com/">Charles</a> 攔截 Http Request</li>
+<li>Wifi with App Device</li>
+</ol>
+<h3 id="Steps"><a href="#Steps" class="headerlink" title="Steps"></a>Steps</h3><p>打開 Charles 後</p>
+<ol>
+<li><p>先去 Proxy &#x3D;&gt;Proxy Setting<br>指定你想要的 port 以及把設定都打勾</p>
+<img src="/2022/05/05/InterceptInApp/01.png" class="" title="Proxy Setting">
+</li>
+<li><p>Help&#x3D;&gt; Local IP Address<br>確定自己的 IP</p>
+<img src="/2022/05/05/InterceptInApp/02.png" class="" title="IP Setting">
+</li>
+<li><p>回到手機 填上你的 Proxy 根據 1 &amp;2 的 ip &amp; port</p>
+<img src="/2022/05/05/InterceptInApp/03.jpg" class="" title="Phone Setting">
+</li>
+<li><p>接著應該會跳出下圖 點選 Allow (如果選錯的話請重開 Charles 並且讓手機重新連線)</p>
+<img src="/2022/05/05/InterceptInApp/04.png" class=""></li>
+<li><p>那接著就可以選取你手機上面的 App 去觀察 Request</p>
+<img src="/2022/05/05/InterceptInApp/05.png" class="">
+</li>
+<li><p>接著去 Charles 這裡就可以點開 Request 觀察</p>
+<img src="/2022/05/05/InterceptInApp/06.png" class="">
+<img src="/2022/05/05/InterceptInApp/07.png" class=""></li>
+</ol>
+<h3 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h3><p>從一些小地方可以看到 在 App 開發中 為了讓 User 不一直重複登入</p>
+<p>會發給類似 Token 的東西 以及 Device ID 去判斷此帳號是否登入</p>
+<p>我們也可以透過 Postman ….方式直接拿取 App 背後的 Api 資訊</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2022/05/05/InterceptInApp/" data-id="cmmnckfdo0006vi1o5io42kbs" data-title="在手機上如何攔截到 http Request" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+
+
+  <nav id="page-nav">
+    
+    <a class="extend prev" rel="prev" href="/page/2/">&laquo; 上一頁</a><a class="page-number" href="/">1</a><a class="page-number" href="/page/2/">2</a><span class="page-number current">3</span>
+  </nav>
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Debug/">Debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Troubleshooting/">Troubleshooting</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/12/VuePartialView/">跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/11/ELKWatcher/">用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/10/GitHotfixRevertFlow/">Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/10/ErrorContentDecoding/">ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/09/Nuxt3ApiLoggerHandler/">在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/08/RateLimitInplementation/">使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/07/LazyCacheIssue/">LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期</a>
+          </li>
+        
+          <li>
+            <a href="/2026/02/03/ApiFeatureVersionControl/">Feature Version Control — APP 版本功能控管架構</a>
+          </li>
+        
+          <li>
+            <a href="/2023/10/07/JamWebDebugger/">JamWebDebugger</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+
+  <script src='https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({startOnLoad: true, theme: 'default'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>
