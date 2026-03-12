@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控 | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="前言在生產環境中，很多問題不會立即被人發現——部署後新版本的 Error Log 悄悄飆升、第三方 Provider 突然故障導致遊戲啟動連續失敗、甚至遭受攻擊產生大量異常請求。如果只靠人工盯 Kibana Dashboard，往往等到使用者回報時已經影響了大量用戶。 本文分享我們實際使用的兩個 Elasticsearch Watcher 告警規則，透過定時查詢 + 條件判斷 + 自動寄信，讓團隊">
+<meta property="og:type" content="article">
+<meta property="og:title" content="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控">
+<meta property="og:url" content="https://josephmtsai.github.io/2026/03/11/ELKWatcher/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="前言在生產環境中，很多問題不會立即被人發現——部署後新版本的 Error Log 悄悄飆升、第三方 Provider 突然故障導致遊戲啟動連續失敗、甚至遭受攻擊產生大量異常請求。如果只靠人工盯 Kibana Dashboard，往往等到使用者回報時已經影響了大量用戶。 本文分享我們實際使用的兩個 Elasticsearch Watcher 告警規則，透過定時查詢 + 條件判斷 + 自動寄信，讓團隊">
+<meta property="og:locale" content="zh_TW">
+<meta property="article:published_time" content="2026-03-11T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-12T09:04:01.439Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Elasticsearch">
+<meta property="article:tag" content="ELK">
+<meta property="article:tag" content="Watcher">
+<meta property="article:tag" content="Monitoring">
+<meta property="article:tag" content="DevOps">
+<meta name="twitter:card" content="summary">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-ELKWatcher" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/11/ELKWatcher/" class="article-date">
+  <time class="dt-published" datetime="2026-03-11T16:00:00.000Z" itemprop="datePublished">2026-03-12</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在生產環境中，很多問題不會立即被人發現——部署後新版本的 Error Log 悄悄飆升、第三方 Provider 突然故障導致遊戲啟動連續失敗、甚至遭受攻擊產生大量異常請求。如果只靠人工盯 Kibana Dashboard，往往等到使用者回報時已經影響了大量用戶。</p>
+<p>本文分享我們實際使用的兩個 <strong>Elasticsearch Watcher</strong> 告警規則，透過定時查詢 + 條件判斷 + 自動寄信，讓團隊在問題擴大前就能收到通知並介入處理。</p>
+<span id="more"></span>
+
+<h2 id="Log-格式與索引設計"><a href="#Log-格式與索引設計" class="headerlink" title="Log 格式與索引設計"></a>Log 格式與索引設計</h2><p>在介紹 Watcher 之前，先說明我們的 Log 結構，這是告警規則能精確命中問題的基礎。</p>
+<h3 id="Event-Log（業務事件）"><a href="#Event-Log（業務事件）" class="headerlink" title="Event Log（業務事件）"></a>Event Log（業務事件）</h3><p>索引：<code>applications-event*</code></p>
+<p>格式：<code>[EVENT][event][status][subStatus][identity] Message</code></p>
+<table>
+<thead>
+<tr>
+<th>欄位</th>
+<th>說明</th>
+<th>範例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>category</code></td>
+<td>產品類別</td>
+<td><code>frontend</code></td>
+</tr>
+<tr>
+<td><code>module</code></td>
+<td>模組&#x2F;產品名稱</td>
+<td><code>sportsbook</code>、<code>casino</code></td>
+</tr>
+<tr>
+<td><code>event</code></td>
+<td>事件類型</td>
+<td><code>TokenAssignment</code></td>
+</tr>
+<tr>
+<td><code>status</code></td>
+<td>結果狀態</td>
+<td><code>SUCCESS</code>、<code>FAIL</code></td>
+</tr>
+<tr>
+<td><code>substatus</code></td>
+<td>子狀態 &#x2F; Partner</td>
+<td><code>PartnerA</code>、<code>PartnerB</code></td>
+</tr>
+</tbody></table>
+<h3 id="Error-Log（錯誤日誌）"><a href="#Error-Log（錯誤日誌）" class="headerlink" title="Error Log（錯誤日誌）"></a>Error Log（錯誤日誌）</h3><p>索引：<code>applications-error*</code></p>
+<p>格式：<code>[ERROR] Message</code></p>
+<table>
+<thead>
+<tr>
+<th>欄位</th>
+<th>說明</th>
+<th>範例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>category</code></td>
+<td>產品類別</td>
+<td><code>frontend</code></td>
+</tr>
+<tr>
+<td><code>module</code></td>
+<td>模組名稱</td>
+<td><code>sportsbook</code></td>
+</tr>
+<tr>
+<td><code>logger</code></td>
+<td>Logger 類別名稱</td>
+<td><code>GameService.LaunchHandler</code></td>
+</tr>
+</tbody></table>
+<h2 id="Watcher-運作原理"><a href="#Watcher-運作原理" class="headerlink" title="Watcher 運作原理"></a>Watcher 運作原理</h2><pre class="mermaid">flowchart TD
+    A["Trigger<br/>定時排程"] --> B["Input<br/>Elasticsearch 查詢"]
+    B --> C["Condition<br/>Painless Script 判斷"]
+    C -->|條件未達| D["不執行任何動作"]
+    C -->|條件達標| E["Transform<br/>組裝告警內容"]
+    E --> F["Action<br/>寄送 Email 通知"]
+    F --> G["Throttle<br/>冷卻期間不重複告警"]</pre>
+
+<p>每個 Watcher 由五個部分組成：</p>
+<table>
+<thead>
+<tr>
+<th>元件</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Trigger</strong></td>
+<td>定時排程（每 N 分鐘執行一次）</td>
+</tr>
+<tr>
+<td><strong>Input</strong></td>
+<td>對 Elasticsearch 發送聚合查詢</td>
+</tr>
+<tr>
+<td><strong>Condition</strong></td>
+<td>用 Painless Script 判斷是否需要告警</td>
+</tr>
+<tr>
+<td><strong>Transform</strong></td>
+<td>組裝 Email 內容（HTML 表格）</td>
+</tr>
+<tr>
+<td><strong>Action</strong></td>
+<td>寄送告警信件</td>
+</tr>
+</tbody></table>
+<h2 id="Watcher-1：Game-Launch-失敗率監控"><a href="#Watcher-1：Game-Launch-失敗率監控" class="headerlink" title="Watcher 1：Game Launch 失敗率監控"></a>Watcher 1：Game Launch 失敗率監控</h2><h3 id="監控目的"><a href="#監控目的" class="headerlink" title="監控目的"></a>監控目的</h3><p>偵測特定產品的遊戲啟動是否在短時間內大量失敗。如果某個 Provider 出問題或網路異常，使用者嘗試啟動遊戲會連續失敗，這個 Watcher 能在 10 分鐘內捕捉到異常。</p>
+<h3 id="觸發條件"><a href="#觸發條件" class="headerlink" title="觸發條件"></a>觸發條件</h3><table>
+<thead>
+<tr>
+<th>項目</th>
+<th>設定</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>執行頻率</td>
+<td>每 10 分鐘</td>
+</tr>
+<tr>
+<td>查詢範圍</td>
+<td>過去 10 分鐘的 <code>applications-event*</code></td>
+</tr>
+<tr>
+<td>篩選條件</td>
+<td><code>category=frontend</code>，<code>event=TokenAssignment</code></td>
+</tr>
+<tr>
+<td>分群方式</td>
+<td>依 <code>module</code>（產品）→ <code>substatus</code>（Partner）分組</td>
+</tr>
+<tr>
+<td>告警門檻</td>
+<td>任一組的<strong>失敗率超過 70%</strong></td>
+</tr>
+<tr>
+<td>冷卻時間</td>
+<td>10 分鐘（避免重複告警）</td>
+</tr>
+</tbody></table>
+<h3 id="查詢流程"><a href="#查詢流程" class="headerlink" title="查詢流程"></a>查詢流程</h3><pre class="mermaid">flowchart LR
+    A["過去 10 分鐘<br/>Event Log"] --> B["Group By Module"]
+    B --> C["Group By SubStatus<br/>Partner"]
+    C --> D["計算 Failed Count"]
+    C --> E["計算 Total Count"]
+    D --> F["Failure Rate<br/>= Failed / Total * 100"]
+    F --> G{"Rate > 70%？"}
+    G -->|Yes| H["寄送告警信"]
+    G -->|No| I["不動作"]</pre>
+
+<h3 id="Watcher-設定"><a href="#Watcher-設定" class="headerlink" title="Watcher 設定"></a>Watcher 設定</h3><figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;trigger&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;schedule&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;interval&quot;</span><span class="punctuation">:</span> <span class="string">&quot;10m&quot;</span></span><br><span class="line">    <span class="punctuation">&#125;</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;input&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;search&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;request&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">        <span class="attr">&quot;search_type&quot;</span><span class="punctuation">:</span> <span class="string">&quot;query_then_fetch&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;indices&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span><span class="string">&quot;applications-event*&quot;</span><span class="punctuation">]</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;rest_total_hits_as_int&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;body&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">          <span class="attr">&quot;query&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">            <span class="attr">&quot;bool&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">              <span class="attr">&quot;filter&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">                <span class="punctuation">&#123;</span> <span class="attr">&quot;term&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;category&quot;</span><span class="punctuation">:</span> <span class="string">&quot;frontend&quot;</span> <span class="punctuation">&#125;</span> <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">                <span class="punctuation">&#123;</span> <span class="attr">&quot;range&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;@timestamp&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;gte&quot;</span><span class="punctuation">:</span> <span class="string">&quot;now-10m&quot;</span> <span class="punctuation">&#125;</span> <span class="punctuation">&#125;</span> <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">                <span class="punctuation">&#123;</span> <span class="attr">&quot;terms&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;event.keyword&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span><span class="string">&quot;TokenAssignment&quot;</span><span class="punctuation">]</span> <span class="punctuation">&#125;</span> <span class="punctuation">&#125;</span></span><br><span class="line">              <span class="punctuation">]</span></span><br><span class="line">            <span class="punctuation">&#125;</span></span><br><span class="line">          <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">          <span class="attr">&quot;size&quot;</span><span class="punctuation">:</span> <span class="number">0</span><span class="punctuation">,</span></span><br><span class="line">          <span class="attr">&quot;aggs&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">            <span class="attr">&quot;by_module&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">              <span class="attr">&quot;terms&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;field&quot;</span><span class="punctuation">:</span> <span class="string">&quot;module.keyword&quot;</span><span class="punctuation">,</span> <span class="attr">&quot;size&quot;</span><span class="punctuation">:</span> <span class="number">10</span> <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">              <span class="attr">&quot;aggs&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                <span class="attr">&quot;by_event&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                  <span class="attr">&quot;terms&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;field&quot;</span><span class="punctuation">:</span> <span class="string">&quot;substatus.keyword&quot;</span><span class="punctuation">,</span> <span class="attr">&quot;size&quot;</span><span class="punctuation">:</span> <span class="number">100</span> <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">                  <span class="attr">&quot;aggs&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                    <span class="attr">&quot;failed_status&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                      <span class="attr">&quot;filter&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;term&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;status.keyword&quot;</span><span class="punctuation">:</span> <span class="string">&quot;FAIL&quot;</span> <span class="punctuation">&#125;</span> <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">                      <span class="attr">&quot;aggs&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                        <span class="attr">&quot;failed_count&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                          <span class="attr">&quot;value_count&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;field&quot;</span><span class="punctuation">:</span> <span class="string">&quot;status.keyword&quot;</span> <span class="punctuation">&#125;</span></span><br><span class="line">                        <span class="punctuation">&#125;</span></span><br><span class="line">                      <span class="punctuation">&#125;</span></span><br><span class="line">                    <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">                    <span class="attr">&quot;total_status&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                      <span class="attr">&quot;value_count&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;field&quot;</span><span class="punctuation">:</span> <span class="string">&quot;status.keyword&quot;</span> <span class="punctuation">&#125;</span></span><br><span class="line">                    <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">                    <span class="attr">&quot;failure_rate&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                      <span class="attr">&quot;bucket_script&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                        <span class="attr">&quot;buckets_path&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                          <span class="attr">&quot;failed&quot;</span><span class="punctuation">:</span> <span class="string">&quot;failed_status.failed_count&quot;</span><span class="punctuation">,</span></span><br><span class="line">                          <span class="attr">&quot;total&quot;</span><span class="punctuation">:</span> <span class="string">&quot;total_status&quot;</span></span><br><span class="line">                        <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">                        <span class="attr">&quot;script&quot;</span><span class="punctuation">:</span> <span class="string">&quot;if (params.total &gt; 0) &#123; return params.failed / params.total * 100 &#125; else &#123; return 0 &#125;&quot;</span></span><br><span class="line">                      <span class="punctuation">&#125;</span></span><br><span class="line">                    <span class="punctuation">&#125;</span></span><br><span class="line">                  <span class="punctuation">&#125;</span></span><br><span class="line">                <span class="punctuation">&#125;</span></span><br><span class="line">              <span class="punctuation">&#125;</span></span><br><span class="line">            <span class="punctuation">&#125;</span></span><br><span class="line">          <span class="punctuation">&#125;</span></span><br><span class="line">        <span class="punctuation">&#125;</span></span><br><span class="line">      <span class="punctuation">&#125;</span></span><br><span class="line">    <span class="punctuation">&#125;</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;condition&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;script&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;source&quot;</span><span class="punctuation">:</span> <span class="string">&quot;return ctx.payload.aggregations.by_module.buckets.stream().flatMap(module -&gt; module.by_event.buckets.stream()).anyMatch(event -&gt; event.failure_rate.value &gt; 70);&quot;</span><span class="punctuation">,</span></span><br><span class="line">      <span class="attr">&quot;lang&quot;</span><span class="punctuation">:</span> <span class="string">&quot;painless&quot;</span></span><br><span class="line">    <span class="punctuation">&#125;</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;transform&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;script&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;source&quot;</span><span class="punctuation">:</span> <span class="string">&quot;String emailBody = &#x27;&lt;table border=\&quot;1\&quot;&gt;&lt;tr&gt;&lt;th&gt;Module&lt;/th&gt;&lt;th&gt;Product Partner&lt;/th&gt;&lt;th&gt;Failure Rate&lt;/th&gt;&lt;th&gt;Total Count&lt;/th&gt;&lt;th&gt;Failed Count&lt;/th&gt;&lt;/tr&gt;&#x27;; for (def module : ctx.payload.aggregations.by_module.buckets) &#123; for (def event : module.by_event.buckets) &#123; if ((double)event.failure_rate.value &gt; 50) &#123; emailBody += &#x27;&lt;tr&gt;&lt;td&gt;&#x27; + module.key + &#x27;&lt;/td&gt;&lt;td&gt;&#x27; + event.key + &#x27;&lt;/td&gt;&lt;td&gt;&#x27; + event.failure_rate.value + &#x27;%&lt;/td&gt;&lt;td&gt;&#x27; + event.total_status.value + &#x27;&lt;/td&gt;&lt;td&gt;&#x27; + event.failed_status.doc_count + &#x27;&lt;/td&gt;&lt;/tr&gt;&#x27;; &#125; &#125; &#125; emailBody += &#x27;&lt;/table&gt;&#x27;; return [&#x27;email_body&#x27;: emailBody];&quot;</span><span class="punctuation">,</span></span><br><span class="line">      <span class="attr">&quot;lang&quot;</span><span class="punctuation">:</span> <span class="string">&quot;painless&quot;</span></span><br><span class="line">    <span class="punctuation">&#125;</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;actions&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;send_email&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;email&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">        <span class="attr">&quot;profile&quot;</span><span class="punctuation">:</span> <span class="string">&quot;standard&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;to&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span><span class="string">&quot;team@example.com&quot;</span><span class="punctuation">]</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;subject&quot;</span><span class="punctuation">:</span> <span class="string">&quot;[Alert] Game Launch Failed Over 70% - Please Check&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;body&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">          <span class="attr">&quot;html&quot;</span><span class="punctuation">:</span> <span class="string">&quot;&#123;&#123;ctx.payload.email_body&#125;&#125;&quot;</span></span><br><span class="line">        <span class="punctuation">&#125;</span></span><br><span class="line">      <span class="punctuation">&#125;</span></span><br><span class="line">    <span class="punctuation">&#125;</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;throttle_period_in_millis&quot;</span><span class="punctuation">:</span> <span class="number">600000</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="聚合邏輯拆解"><a href="#聚合邏輯拆解" class="headerlink" title="聚合邏輯拆解"></a>聚合邏輯拆解</h3><p>這個查詢使用了三層巢狀聚合搭配 <code>bucket_script</code>：</p>
+<ol>
+<li><strong>第一層</strong> — <code>by_module</code>：依產品模組分組</li>
+<li><strong>第二層</strong> — <code>by_event</code>：依 Partner（substatus）分組</li>
+<li><strong>第三層</strong> — 同時計算 <code>failed_count</code>（FAIL 筆數）和 <code>total_status</code>（總筆數）</li>
+<li><strong>bucket_script</strong> — 在每個 bucket 內即時算出 <code>failure_rate = failed / total * 100</code></li>
+</ol>
+<p>Condition 使用 Java Stream 遍歷所有 bucket，只要任一組的 failure_rate 超過 70% 就觸發告警。</p>
+<h2 id="Watcher-2：Error-Log-成長率監控"><a href="#Watcher-2：Error-Log-成長率監控" class="headerlink" title="Watcher 2：Error Log 成長率監控"></a>Watcher 2：Error Log 成長率監控</h2><h3 id="監控目的-1"><a href="#監控目的-1" class="headerlink" title="監控目的"></a>監控目的</h3><p>偵測部署後或異常情況下，Error Log 是否突然暴增。這個 Watcher 會比較「最近 15 分鐘」和「前 15~30 分鐘」的錯誤數量，如果某個 Logger 的錯誤成長率超過 20% 且數量達到 50 筆以上，就發出告警。</p>
+<p>適用場景：</p>
+<ul>
+<li><strong>部署後</strong> — 新版本引入了 Bug，Error Log 開始飆升</li>
+<li><strong>被攻擊</strong> — 異常請求導致大量錯誤</li>
+<li><strong>Provider 故障</strong> — 第三方服務異常導致錯誤集中爆發</li>
+</ul>
+<h3 id="觸發條件-1"><a href="#觸發條件-1" class="headerlink" title="觸發條件"></a>觸發條件</h3><table>
+<thead>
+<tr>
+<th>項目</th>
+<th>設定</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>執行頻率</td>
+<td>每 15 分鐘</td>
+</tr>
+<tr>
+<td>查詢範圍</td>
+<td>過去 30 分鐘的 <code>applications-error*</code></td>
+</tr>
+<tr>
+<td>篩選條件</td>
+<td><code>category=frontend</code>，排除已知噪音 Logger</td>
+</tr>
+<tr>
+<td>比較方式</td>
+<td>將 30 分鐘切為兩段（15<del>30 min vs 0</del>15 min），逐 Logger 比較</td>
+</tr>
+<tr>
+<td>告警門檻</td>
+<td>成長率 &gt;&#x3D; 20% <strong>且</strong> 最近 15 分鐘的錯誤數 &gt;&#x3D; 50</td>
+</tr>
+<tr>
+<td>冷卻時間</td>
+<td>15 分鐘</td>
+</tr>
+</tbody></table>
+<h3 id="比較邏輯"><a href="#比較邏輯" class="headerlink" title="比較邏輯"></a>比較邏輯</h3><pre class="mermaid">flowchart TD
+    A["查詢過去 30 分鐘 Error Log"] --> B["切分兩個時間段"]
+    B --> C["前 15~30 分鐘<br/>Previous Period"]
+    B --> D["最近 0~15 分鐘<br/>Current Period"]
+    C --> E["Group By Module → Logger<br/>計算各 Logger 的錯誤數"]
+    D --> F["Group By Module → Logger<br/>計算各 Logger 的錯誤數"]
+    E --> G["逐一比較同一個 Logger"]
+    F --> G
+    G --> H{"Current >= 50 且<br/>成長率 >= 20%？"}
+    H -->|Yes| I["加入告警表格"]
+    H -->|No| J["跳過"]
+    I --> K["寄送告警信"]</pre>
+
+<h3 id="Watcher-設定-1"><a href="#Watcher-設定-1" class="headerlink" title="Watcher 設定"></a>Watcher 設定</h3><figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;trigger&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;schedule&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;interval&quot;</span><span class="punctuation">:</span> <span class="string">&quot;15m&quot;</span></span><br><span class="line">    <span class="punctuation">&#125;</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;input&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;search&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;request&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">        <span class="attr">&quot;search_type&quot;</span><span class="punctuation">:</span> <span class="string">&quot;query_then_fetch&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;indices&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span><span class="string">&quot;applications-error*&quot;</span><span class="punctuation">]</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;rest_total_hits_as_int&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;body&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">          <span class="attr">&quot;query&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">            <span class="attr">&quot;bool&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">              <span class="attr">&quot;filter&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">                <span class="punctuation">&#123;</span> <span class="attr">&quot;term&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;category&quot;</span><span class="punctuation">:</span> <span class="string">&quot;frontend&quot;</span> <span class="punctuation">&#125;</span> <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">                <span class="punctuation">&#123;</span> <span class="attr">&quot;range&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;@timestamp&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;gte&quot;</span><span class="punctuation">:</span> <span class="string">&quot;now-30m&quot;</span> <span class="punctuation">&#125;</span> <span class="punctuation">&#125;</span> <span class="punctuation">&#125;</span></span><br><span class="line">              <span class="punctuation">]</span><span class="punctuation">,</span></span><br><span class="line">              <span class="attr">&quot;must_not&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">                <span class="punctuation">&#123;</span> <span class="attr">&quot;terms&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;logger.keyword&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span><span class="string">&quot;Seo.Prerender.SeoHttpModule&quot;</span><span class="punctuation">]</span> <span class="punctuation">&#125;</span> <span class="punctuation">&#125;</span></span><br><span class="line">              <span class="punctuation">]</span></span><br><span class="line">            <span class="punctuation">&#125;</span></span><br><span class="line">          <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">          <span class="attr">&quot;aggs&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">            <span class="attr">&quot;intervals&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">              <span class="attr">&quot;date_range&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                <span class="attr">&quot;field&quot;</span><span class="punctuation">:</span> <span class="string">&quot;@timestamp&quot;</span><span class="punctuation">,</span></span><br><span class="line">                <span class="attr">&quot;ranges&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">                  <span class="punctuation">&#123;</span> <span class="attr">&quot;from&quot;</span><span class="punctuation">:</span> <span class="string">&quot;now-30m/m&quot;</span><span class="punctuation">,</span> <span class="attr">&quot;to&quot;</span><span class="punctuation">:</span> <span class="string">&quot;now-15m/m&quot;</span> <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">                  <span class="punctuation">&#123;</span> <span class="attr">&quot;from&quot;</span><span class="punctuation">:</span> <span class="string">&quot;now-15m/m&quot;</span><span class="punctuation">,</span> <span class="attr">&quot;to&quot;</span><span class="punctuation">:</span> <span class="string">&quot;now/m&quot;</span> <span class="punctuation">&#125;</span></span><br><span class="line">                <span class="punctuation">]</span></span><br><span class="line">              <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">              <span class="attr">&quot;aggs&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                <span class="attr">&quot;by_module&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                  <span class="attr">&quot;terms&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;field&quot;</span><span class="punctuation">:</span> <span class="string">&quot;module.keyword&quot;</span><span class="punctuation">,</span> <span class="attr">&quot;size&quot;</span><span class="punctuation">:</span> <span class="number">10</span> <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">                  <span class="attr">&quot;aggs&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                    <span class="attr">&quot;by_logger&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">                      <span class="attr">&quot;terms&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span> <span class="attr">&quot;field&quot;</span><span class="punctuation">:</span> <span class="string">&quot;logger.keyword&quot;</span><span class="punctuation">,</span> <span class="attr">&quot;size&quot;</span><span class="punctuation">:</span> <span class="number">100</span> <span class="punctuation">&#125;</span></span><br><span class="line">                    <span class="punctuation">&#125;</span></span><br><span class="line">                  <span class="punctuation">&#125;</span></span><br><span class="line">                <span class="punctuation">&#125;</span></span><br><span class="line">              <span class="punctuation">&#125;</span></span><br><span class="line">            <span class="punctuation">&#125;</span></span><br><span class="line">          <span class="punctuation">&#125;</span></span><br><span class="line">        <span class="punctuation">&#125;</span></span><br><span class="line">      <span class="punctuation">&#125;</span></span><br><span class="line">    <span class="punctuation">&#125;</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;condition&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;script&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;source&quot;</span><span class="punctuation">:</span> <span class="string">&quot;boolean alert = false; Map previousSource = new HashMap(); def previousBucket = ctx.payload.aggregations.intervals.buckets[0]; for (def moduleBucket : previousBucket.by_module.buckets) &#123; for (def loggerBucket : moduleBucket.by_logger.buckets) &#123; previousSource.put(moduleBucket.key + &#x27;#&#x27; + loggerBucket.key, loggerBucket.doc_count); &#125; &#125; def currentBucket = ctx.payload.aggregations.intervals.buckets[1]; for (def moduleBucket : currentBucket.by_module.buckets) &#123; for (def loggerBucket : moduleBucket.by_logger.buckets) &#123; String key = moduleBucket.key + &#x27;#&#x27; + loggerBucket.key; if (previousSource.containsKey(key)) &#123; double previousCount = previousSource.get(key); double totalCount = previousCount + loggerBucket.doc_count; double preRate = (totalCount &gt; 0) ? (previousCount / totalCount * 100) : 0; double currRate = (totalCount &gt; 0) ? (loggerBucket.doc_count / totalCount * 100) : 0; if(currRate - preRate &gt;= 20 &amp;&amp; loggerBucket.doc_count &gt;= 50)&#123; alert = true; &#125; &#125; else if(loggerBucket.doc_count &gt;= 50) &#123; alert = true; &#125; &#125; &#125; return alert;&quot;</span><span class="punctuation">,</span></span><br><span class="line">      <span class="attr">&quot;lang&quot;</span><span class="punctuation">:</span> <span class="string">&quot;painless&quot;</span></span><br><span class="line">    <span class="punctuation">&#125;</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;actions&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;send_email&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;email&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">        <span class="attr">&quot;profile&quot;</span><span class="punctuation">:</span> <span class="string">&quot;standard&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;to&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span><span class="string">&quot;team@example.com&quot;</span><span class="punctuation">]</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;subject&quot;</span><span class="punctuation">:</span> <span class="string">&quot;[Alert] Error Rate Growth Over 20% - Last 15 mins vs Previous 15-30 mins&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;body&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">          <span class="attr">&quot;html&quot;</span><span class="punctuation">:</span> <span class="string">&quot;Error Log growth detected. Events in the last 15 mins that increased by more than 20% and occurred over 50 times are listed below. &#123;&#123;ctx.vars.message&#125;&#125;&quot;</span></span><br><span class="line">        <span class="punctuation">&#125;</span></span><br><span class="line">      <span class="punctuation">&#125;</span></span><br><span class="line">    <span class="punctuation">&#125;</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;throttle_period_in_millis&quot;</span><span class="punctuation">:</span> <span class="number">900000</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="Condition-邏輯拆解"><a href="#Condition-邏輯拆解" class="headerlink" title="Condition 邏輯拆解"></a>Condition 邏輯拆解</h3><p>這個 Watcher 的 Condition 做了比較複雜的跨時間段比較：</p>
+<ol>
+<li><strong>建立基準</strong>：遍歷前 15~30 分鐘的資料，建立 <code>Module#Logger → Count</code> 的 HashMap</li>
+<li><strong>逐一比較</strong>：遍歷最近 15 分鐘的每個 Logger，從 HashMap 中找出同一個 Logger 的前期數量</li>
+<li><strong>計算佔比</strong>：<code>currRate = current / (previous + current) * 100</code></li>
+<li><strong>判斷門檻</strong>：成長率差距 &gt;&#x3D; 20% <strong>且</strong> 最近 15 分鐘的數量 &gt;&#x3D; 50 才告警</li>
+<li><strong>新出現的 Logger</strong>：如果前期完全沒有出現過但最近 15 分鐘 &gt;&#x3D; 50 筆，也觸發告警</li>
+</ol>
+<h3 id="告警信範例"><a href="#告警信範例" class="headerlink" title="告警信範例"></a>告警信範例</h3><p>收到的告警信會包含一個 HTML 表格：</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Logger</th>
+<th>Previous Count</th>
+<th>Current Count</th>
+<th>Previous Rate</th>
+<th>Current Rate</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>sportsbook</td>
+<td>GameService.LaunchHandler</td>
+<td>20</td>
+<td>85</td>
+<td>19.05%</td>
+<td>80.95%</td>
+</tr>
+<tr>
+<td>casino</td>
+<td>SlotProvider.TokenService</td>
+<td>15</td>
+<td>62</td>
+<td>19.48%</td>
+<td>80.52%</td>
+</tr>
+</tbody></table>
+<h2 id="兩個-Watcher-的定位差異"><a href="#兩個-Watcher-的定位差異" class="headerlink" title="兩個 Watcher 的定位差異"></a>兩個 Watcher 的定位差異</h2><table>
+<thead>
+<tr>
+<th>面向</th>
+<th>Game Launch 失敗率</th>
+<th>Error Log 成長率</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>監控對象</td>
+<td>業務事件（Event Log）</td>
+<td>系統錯誤（Error Log）</td>
+</tr>
+<tr>
+<td>偵測方式</td>
+<td>絕對值 — 失敗率是否超過門檻</td>
+<td>相對值 — 與前一個時間段比較</td>
+</tr>
+<tr>
+<td>適用場景</td>
+<td>Provider 故障、網路異常</td>
+<td>部署後 Bug、被攻擊、服務異常</td>
+</tr>
+<tr>
+<td>反應速度</td>
+<td>10 分鐘內</td>
+<td>15 分鐘內</td>
+</tr>
+<tr>
+<td>分群維度</td>
+<td>Module → Partner</td>
+<td>Module → Logger</td>
+</tr>
+</tbody></table>
+<h2 id="結語"><a href="#結語" class="headerlink" title="結語"></a>結語</h2><p>Elasticsearch Watcher 的優勢在於查詢和告警邏輯都在 Elasticsearch 內部執行，不需要額外部署監控服務。搭配 Painless Script 的靈活性，可以實作出複雜的聚合比較邏輯——從簡單的失敗率計算到跨時間段的成長率比較。</p>
+<p>設計告警規則時的幾個關鍵思考：</p>
+<ul>
+<li><strong>門檻不要太敏感</strong>：設定最低數量門檻（如 50 筆）避免低流量時的假警報</li>
+<li><strong>加上 Throttle 冷卻</strong>：避免同一個問題在短時間內連續觸發大量告警信</li>
+<li><strong>排除已知噪音</strong>：用 <code>must_not</code> 過濾掉已知的無害 Logger，減少干擾</li>
+<li><strong>告警信要有足夠資訊</strong>：附上 Module、Logger、數量和比率，讓收信者能快速判斷嚴重程度</li>
+</ul>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmmn8r95l0001t6218ibp5yw7" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/03/10/GitHotfixRevertFlow/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Debug/">Debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Troubleshooting/">Troubleshooting</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/03/11/ELKWatcher/">用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/10/GitHotfixRevertFlow/">Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/10/ErrorContentDecoding/">ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/09/Nuxt3ApiLoggerHandler/">在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/08/RateLimitInplementation/">使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/07/LazyCacheIssue/">LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期</a>
+          </li>
+        
+          <li>
+            <a href="/2026/02/03/ApiFeatureVersionControl/">Feature Version Control — APP 版本功能控管架構</a>
+          </li>
+        
+          <li>
+            <a href="/2023/10/07/JamWebDebugger/">JamWebDebugger</a>
+          </li>
+        
+          <li>
+            <a href="/2023/04/12/GitFlow/">GitFlow</a>
+          </li>
+        
+          <li>
+            <a href="/2023/03/28/PreventElasticScroll/">iOS Safari Handle Elastic Scroll</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+
+  <script src='https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({startOnLoad: true, theme: 'default'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>
