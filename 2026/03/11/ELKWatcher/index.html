@@ -3,6 +3,17 @@
 <head>
   <meta charset="utf-8">
   
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-04LWQBG1HE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-04LWQBG1HE');
+</script>
+<!-- End Google Analytics -->
+
   
   <title>用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控 | Joseph&#39;s Work Note</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
@@ -14,7 +25,7 @@
 <meta property="og:description" content="前言在生產環境中，很多問題不會立即被人發現——部署後新版本的 Error Log 悄悄飆升、第三方 Provider 突然故障導致遊戲啟動連續失敗、甚至遭受攻擊產生大量異常請求。如果只靠人工盯 Kibana Dashboard，往往等到使用者回報時已經影響了大量用戶。 本文分享我們實際使用的兩個 Elasticsearch Watcher 告警規則，透過定時查詢 + 條件判斷 + 自動寄信，讓團隊">
 <meta property="og:locale" content="zh_TW">
 <meta property="article:published_time" content="2026-03-11T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-03-12T10:50:42.033Z">
+<meta property="article:modified_time" content="2026-03-13T02:58:11.247Z">
 <meta property="article:author" content="Joseph M Tsai">
 <meta property="article:tag" content="Elasticsearch">
 <meta property="article:tag" content="ELK">
@@ -388,7 +399,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmmnckfdj0001vi1o4vu42mol" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmmob4kdg0001uh1o8i7j6d9k" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控" class="article-share-link">Share</a>
       
       
       
