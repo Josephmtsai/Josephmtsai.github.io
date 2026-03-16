@@ -25,7 +25,7 @@
 <meta property="og:description" content="前言在開發後台管理系統時，我們經常會遇到一個問題：每個 API Handler 都需要處理認證驗證、日誌記錄、錯誤捕獲等重複性邏輯。如果在每個檔案中都寫一遍，不僅冗長，還容易遺漏。本文將介紹如何在 Nuxt 3 的 Server API 中，利用 Higher-Order Function (高階函式) 的概念，打造一個統一的 defineLogAndAuthHandler，讓所有 API 自動擁">
 <meta property="og:locale" content="zh_TW">
 <meta property="article:published_time" content="2026-03-09T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-03-16T03:13:40.142Z">
+<meta property="article:modified_time" content="2026-03-16T07:28:56.434Z">
 <meta property="article:author" content="Joseph M Tsai">
 <meta property="article:tag" content="API Design">
 <meta property="article:tag" content="Nuxt3">
@@ -255,7 +255,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmmslzyxp000jw31o93js2u5p" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmmsv48oc000juf21e1d69r1e" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
       
       
       
@@ -329,6 +329,10 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       <ul>
         
           <li>
+            <a href="/2026/03/15/VueDialogQueue/">TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</a>
+          </li>
+        
+          <li>
             <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
           </li>
         
@@ -362,10 +366,6 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
         
           <li>
             <a href="/2026/02/03/ApiFeatureVersionControl/">Feature Version Control — APP 版本功能控管架構</a>
-          </li>
-        
-          <li>
-            <a href="/2025/03/15/ASP.NET-Client-Side-Integration/">ASP.NET + Rsbuild + Vue 3 整合架構：不用 Nuxt，也能優雅串接前後端</a>
           </li>
         
       </ul>

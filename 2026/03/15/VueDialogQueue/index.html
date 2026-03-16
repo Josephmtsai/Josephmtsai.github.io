@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-04LWQBG1HE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-04LWQBG1HE');
+</script>
+<!-- End Google Analytics -->
+
+  
+  <title>TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制 | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="前言在平台系統中，操作過程經常同時觸發多個彈窗——HTTP 錯誤、銀行維護提示、KYC 驗證結果、交易確認等。如果各元件各自管理 v-model，多個 overlay 會同時疊加在畫面上，不僅使用者體驗混亂，對開發者來說也極度難以維護。 我們需要一個統一的 Dialog 管理機制：所有需要彈窗的地方都不自己開 Dialog，而是把「要顯示什麼」丟進佇列，由一個元件依序一個一個渲染。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制">
+<meta property="og:url" content="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="前言在平台系統中，操作過程經常同時觸發多個彈窗——HTTP 錯誤、銀行維護提示、KYC 驗證結果、交易確認等。如果各元件各自管理 v-model，多個 overlay 會同時疊加在畫面上，不僅使用者體驗混亂，對開發者來說也極度難以維護。 我們需要一個統一的 Dialog 管理機制：所有需要彈窗的地方都不自己開 Dialog，而是把「要顯示什麼」丟進佇列，由一個元件依序一個一個渲染。">
+<meta property="og:locale" content="zh_TW">
+<meta property="og:image" content="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/Image1.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/Image2.png">
+<meta property="article:published_time" content="2026-03-15T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-16T07:28:56.444Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Vue.js">
+<meta property="article:tag" content="Architecture">
+<meta property="article:tag" content="TypeScript">
+<meta property="article:tag" content="Pinia">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/Image1.png">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-VueDialogQueue" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/15/VueDialogQueue/" class="article-date">
+  <time class="dt-published" datetime="2026-03-15T16:00:00.000Z" itemprop="datePublished">2026-03-16</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在平台系統中，操作過程經常同時觸發多個彈窗——HTTP 錯誤、銀行維護提示、KYC 驗證結果、交易確認等。如果各元件各自管理 <code>v-model</code>，多個 overlay 會同時疊加在畫面上，不僅使用者體驗混亂，對開發者來說也極度難以維護。</p>
+<p>我們需要一個統一的 Dialog 管理機制：所有需要彈窗的地方都不自己開 Dialog，而是把「要顯示什麼」丟進佇列，由一個元件依序一個一個渲染。</p>
+<span id="more"></span>
+
+<img src="/2026/03/15/VueDialogQueue/Image1.png" class="" title="多個彈窗同時疊加的問題">
+<img src="/2026/03/15/VueDialogQueue/Image2.png" class="" title="統一佇列管理後的效果">
+
+<h2 id="架構總覽"><a href="#架構總覽" class="headerlink" title="架構總覽"></a>架構總覽</h2><pre class="mermaid">flowchart LR
+    subgraph Callers ["呼叫端（散佈各處）"]
+        C1["composable"]
+        C2["Pinia store"]
+        C3["Vue component"]
+        C4["router guard"]
+    end
+    subgraph Store ["dialog-queue store"]
+        OQ["optionQueue<br/>FIFO Array"]
+        ST["visible / payload / setting<br/>reactive state"]
+    end
+    subgraph UI ["TheDialogQueue.vue"]
+        SD["SDialog<br/>統一渲染"]
+    end
+    C1 -->|"queue(payload, setting)"| OQ
+    C2 -->|"queue(payload, setting)"| OQ
+    C3 -->|"queue(payload, setting)"| OQ
+    C4 -->|"queue(payload, setting)"| OQ
+    OQ -->|"open(): 取第一個"| ST
+    ST -->|"storeToRefs 綁定"| SD
+    SD -->|"用戶操作 → close()"| OQ</pre>
+
+<p>涉及檔案：</p>
+<table>
+<thead>
+<tr>
+<th>檔案</th>
+<th>路徑</th>
+<th>職責</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Store</td>
+<td><code>stores/dialog-queue.ts</code></td>
+<td>佇列資料管理</td>
+</tr>
+<tr>
+<td>UI</td>
+<td><code>components/utilities/TheDialogQueue.vue</code></td>
+<td>統一渲染</td>
+</tr>
+<tr>
+<td>Types</td>
+<td><code>typings/dialog-queue.ts</code></td>
+<td>型別定義</td>
+</tr>
+</tbody></table>
+<h2 id="Store-運作機制"><a href="#Store-運作機制" class="headerlink" title="Store 運作機制"></a>Store 運作機制</h2><h3 id="資料結構"><a href="#資料結構" class="headerlink" title="資料結構"></a>資料結構</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">interface</span> <span class="title class_">Option</span> &#123;</span><br><span class="line">  <span class="attr">payload</span>: <span class="title class_">Payload</span>;</span><br><span class="line">  <span class="attr">setting</span>: <span class="title class_">Setting</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">interface</span> <span class="title class_">Payload</span> &#123;</span><br><span class="line">  <span class="attr">title</span>: <span class="built_in">string</span>;</span><br><span class="line">  <span class="attr">msg</span>: <span class="built_in">string</span>;                              <span class="comment">// 支援 HTML（經 v-sanitize）</span></span><br><span class="line">  <span class="attr">type</span>?: <span class="string">&#x27;success&#x27;</span> | <span class="string">&#x27;fail&#x27;</span> | <span class="string">&#x27;reject&#x27;</span>;    <span class="comment">// 對應不同圖示</span></span><br><span class="line">  <span class="attr">buttons</span>?: <span class="title class_">Button</span>[];</span><br><span class="line">  <span class="attr">closeAction</span>?: <span class="function">() =&gt;</span> <span class="built_in">void</span>;                 <span class="comment">// overlay 關閉時的 callback</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">interface</span> <span class="title class_">Setting</span> &#123;</span><br><span class="line">  <span class="attr">titleAlign</span>?: <span class="string">&#x27;left&#x27;</span> | <span class="string">&#x27;center&#x27;</span> | <span class="string">&#x27;right&#x27;</span>;</span><br><span class="line">  <span class="attr">buttonAlign</span>?: <span class="string">&#x27;left&#x27;</span> | <span class="string">&#x27;center&#x27;</span> | <span class="string">&#x27;right&#x27;</span> | <span class="string">&#x27;stacked-left&#x27;</span> | <span class="string">&#x27;stacked-center&#x27;</span> | <span class="string">&#x27;stacked-right&#x27;</span>;</span><br><span class="line">  <span class="attr">contentAlign</span>?: <span class="string">&#x27;left&#x27;</span> | <span class="string">&#x27;center&#x27;</span> | <span class="string">&#x27;right&#x27;</span>;</span><br><span class="line">  <span class="attr">persistent</span>?: <span class="built_in">boolean</span>;                     <span class="comment">// 禁止點 overlay 關閉</span></span><br><span class="line">  <span class="attr">beforeClose</span>?: <span class="built_in">number</span>;                     <span class="comment">// 自動關閉倒數（毫秒）</span></span><br><span class="line">  <span class="attr">showClose</span>?: <span class="built_in">boolean</span>;                      <span class="comment">// 右上角 X 按鈕</span></span><br><span class="line">  <span class="attr">titleAtTop</span>?: <span class="built_in">boolean</span>;                     <span class="comment">// 標題在圖示上方 or 下方</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>Payload</code> 管「顯示什麼」，<code>Setting</code> 管「怎麼顯示」，呼叫端不需要知道 UI 實作細節。</p>
+<h3 id="佇列流程"><a href="#佇列流程" class="headerlink" title="佇列流程"></a>佇列流程</h3><pre class="mermaid">sequenceDiagram
+    participant Caller as 呼叫端
+    participant Store as dialog-queue store
+    participant Vue as TheDialogQueue.vue
+    Caller->>Store: queue(payload, setting)
+    Store->>Store: fillUpWithDefault() 補齊預設值
+    Store->>Store: optionQueue.push(option)
+    Store->>Store: open()
+    Note over Store: 取 optionQueue[0]<br/>設給 payload / setting<br/>visible = true
+    Store-->>Vue: storeToRefs 響應式更新
+    Vue->>Vue: SDialog 顯示
+    Note over Vue: 用戶點擊按鈕
+    Vue->>Store: close()
+    Store->>Store: 執行 payload.closeAction()（如有）
+    Store->>Store: optionQueue.shift()
+    Note over Store: setTimeout 20ms
+    Store->>Store: open()
+    alt 佇列還有下一個
+        Store-->>Vue: 顯示下一個彈窗
+    else 佇列空了
+        Store-->>Vue: visible = false，關閉
+    end</pre>
+
+<h3 id="關鍵設計細節"><a href="#關鍵設計細節" class="headerlink" title="關鍵設計細節"></a>關鍵設計細節</h3><p><strong>20ms setTimeout</strong></p>
+<p><code>close()</code> 在 shift 掉當前項目後，等 20ms 才呼叫 <code>open()</code> 顯示下一個。這是為了讓 <code>SDialog</code> 的 <code>fab-transition</code> 離場動畫完成，再觸發下一個的進場動畫，避免兩個 transition 撞在一起。</p>
+<p><strong>fillUpWithDefault()</strong></p>
+<p>呼叫端可以只傳必要的欄位，其餘由預設值補齊：</p>
+<figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> <span class="attr">defaultSetting</span>: <span class="title class_">Setting</span> = &#123;</span><br><span class="line">  <span class="attr">titleAlign</span>: <span class="string">&#x27;left&#x27;</span>,</span><br><span class="line">  <span class="attr">buttonAlign</span>: <span class="string">&#x27;right&#x27;</span>,</span><br><span class="line">  <span class="attr">persistent</span>: <span class="literal">false</span>,</span><br><span class="line">  <span class="attr">showClose</span>: <span class="literal">false</span>,</span><br><span class="line">  <span class="attr">titleAtTop</span>: <span class="literal">true</span>,</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">function</span> <span class="title function_">fillUpWithDefault</span>(<span class="params"><span class="attr">option</span>: <span class="title class_">Option</span></span>) &#123;</span><br><span class="line">  <span class="keyword">return</span> &#123;</span><br><span class="line">    <span class="attr">payload</span>: <span class="title class_">Object</span>.<span class="title function_">assign</span>(&#123;&#125;, defaultPayload, option.<span class="property">payload</span>),</span><br><span class="line">    <span class="attr">setting</span>: <span class="title class_">Object</span>.<span class="title function_">assign</span>(&#123;&#125;, defaultSetting, option.<span class="property">setting</span>),</span><br><span class="line">  &#125;;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><strong>beforeClose 自動關閉</strong></p>
+<p><code>open()</code> 時如果 <code>setting.beforeClose &gt; 0</code>，會自動起一個 setTimeout，時間到了呼叫 <code>close()</code>：</p>
+<figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (<span class="variable language_">this</span>.<span class="property">setting</span>.<span class="property">beforeClose</span> &amp;&amp; <span class="variable language_">this</span>.<span class="property">setting</span>.<span class="property">beforeClose</span> &gt; <span class="number">0</span>) &#123;</span><br><span class="line">  <span class="built_in">setTimeout</span>(<span class="function">() =&gt;</span> &#123; <span class="variable language_">this</span>.<span class="title function_">close</span>(); &#125;, <span class="variable language_">this</span>.<span class="property">setting</span>.<span class="property">beforeClose</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="UI-元件設計"><a href="#UI-元件設計" class="headerlink" title="UI 元件設計"></a>UI 元件設計</h2><h3 id="掛載位置"><a href="#掛載位置" class="headerlink" title="掛載位置"></a>掛載位置</h3><p><code>TheDialogQueue</code> 掛在 <code>App.vue</code> 根層級，與 <code>router-view</code> 平行，確保任何頁面都能顯示：</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">router-view</span> /&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">TheDialogQueue</span> /&gt;</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="響應式綁定"><a href="#響應式綁定" class="headerlink" title="響應式綁定"></a>響應式綁定</h3><p>元件透過 <code>storeToRefs</code> 直接綁定 store state，store 更新時畫面自動響應：</p>
+<figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> dialogQueueStore = <span class="title function_">useDialogQueueStore</span>();</span><br><span class="line"><span class="keyword">const</span> &#123; visible, payload, setting &#125; = <span class="title function_">storeToRefs</span>(dialogQueueStore);</span><br><span class="line"><span class="keyword">const</span> &#123; close &#125; = dialogQueueStore;</span><br></pre></td></tr></table></figure>
+
+<h3 id="按鈕排版策略"><a href="#按鈕排版策略" class="headerlink" title="按鈕排版策略"></a>按鈕排版策略</h3><ul>
+<li><strong>2 個以內</strong>：水平排列，對齊方式由 <code>setting.buttonAlign</code> 控制</li>
+<li><strong>超過 2 個</strong>：強制垂直堆疊靠右</li>
+</ul>
+<p>多語系環境下按鈕文字長度差異很大，超過兩個水平排列容易破版。</p>
+<h3 id="XSS-防護"><a href="#XSS-防護" class="headerlink" title="XSS 防護"></a>XSS 防護</h3><p><code>payload.msg</code> 和按鈕文字 <code>item.text</code> 使用 <code>v-sanitize</code> 而非 <code>v-html</code>。部分內容來自後端回傳且帶有 HTML 格式化標籤，<code>v-sanitize</code> 可以允許安全的 HTML 同時過濾惡意腳本。</p>
+<h3 id="瀏覽器上一頁處理"><a href="#瀏覽器上一頁處理" class="headerlink" title="瀏覽器上一頁處理"></a>瀏覽器上一頁處理</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="title function_">useEventListener</span>(<span class="variable language_">window</span>, <span class="string">&#x27;popstate&#x27;</span>, <span class="function">() =&gt;</span> &#123;</span><br><span class="line">  dialogQueueStore.<span class="title function_">clearQueue</span>();</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<p>用戶按瀏覽器上一頁時直接清空整個佇列，避免前一頁觸發的彈窗殘留在新頁面上。</p>
+<h2 id="使用範例"><a href="#使用範例" class="headerlink" title="使用範例"></a>使用範例</h2><h3 id="基本用法"><a href="#基本用法" class="headerlink" title="基本用法"></a>基本用法</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> &#123; useDialogQueueStore &#125; <span class="keyword">from</span> <span class="string">&#x27;@star/common/stores/dialog-queue&#x27;</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">const</span> dialogQueueStore = <span class="title function_">useDialogQueueStore</span>();</span><br><span class="line"></span><br><span class="line">dialogQueueStore.<span class="title function_">queue</span>(&#123;</span><br><span class="line">  <span class="attr">title</span>: <span class="string">&#x27;操作成功&#x27;</span>,</span><br><span class="line">  <span class="attr">msg</span>: <span class="string">&#x27;您的資料已更新&#x27;</span>,</span><br><span class="line">  <span class="attr">type</span>: <span class="string">&#x27;success&#x27;</span>,</span><br><span class="line">  <span class="attr">buttons</span>: [&#123; <span class="attr">text</span>: <span class="string">&#x27;確定&#x27;</span>, <span class="attr">type</span>: <span class="string">&#x27;primary&#x27;</span> &#125;],</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<h3 id="帶-callback-的確認彈窗"><a href="#帶-callback-的確認彈窗" class="headerlink" title="帶 callback 的確認彈窗"></a>帶 callback 的確認彈窗</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">dialogQueueStore.<span class="title function_">queue</span>(</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="attr">title</span>: <span class="string">&#x27;確認提款&#x27;</span>,</span><br><span class="line">    <span class="attr">msg</span>: <span class="string">`即將提款 &lt;b&gt;<span class="subst">$&#123;amount&#125;</span>&lt;/b&gt; 至您的銀行帳戶`</span>,</span><br><span class="line">    <span class="attr">buttons</span>: [</span><br><span class="line">      &#123; <span class="attr">text</span>: <span class="string">&#x27;取消&#x27;</span>, <span class="attr">type</span>: <span class="string">&#x27;text&#x27;</span> &#125;,</span><br><span class="line">      &#123; <span class="attr">text</span>: <span class="string">&#x27;確認&#x27;</span>, <span class="attr">type</span>: <span class="string">&#x27;primary&#x27;</span>, <span class="attr">action</span>: <span class="function">() =&gt;</span> <span class="title function_">submitWithdrawal</span>() &#125;,</span><br><span class="line">    ],</span><br><span class="line">  &#125;,</span><br><span class="line">  &#123; <span class="attr">persistent</span>: <span class="literal">true</span>, <span class="attr">buttonAlign</span>: <span class="string">&#x27;right&#x27;</span> &#125;,</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
+
+<h3 id="自動消失的提示"><a href="#自動消失的提示" class="headerlink" title="自動消失的提示"></a>自動消失的提示</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">dialogQueueStore.<span class="title function_">queue</span>(</span><br><span class="line">  &#123; <span class="attr">title</span>: <span class="string">&#x27;&#x27;</span>, <span class="attr">msg</span>: <span class="string">&#x27;系統維護中，請稍後再試&#x27;</span> &#125;,</span><br><span class="line">  &#123; <span class="attr">beforeClose</span>: <span class="number">3000</span> &#125;,</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
+
+<h2 id="結語"><a href="#結語" class="headerlink" title="結語"></a>結語</h2><p>這套機制的核心其實很簡單——一個 FIFO 陣列加上一個 Pinia Store。但它解決的問題很實際：在多模組、多非同步操作的平台中，讓所有彈窗都有秩序地排隊顯示，而不是互相覆蓋。</p>
+<p>呼叫端只需要一行 <code>dialogQueueStore.queue()</code>，不需要關心 Dialog 的 <code>v-model</code>、z-index、transition 動畫、還是同時有幾個彈窗在排隊。所有複雜度都被封裝在 Store 和 TheDialogQueue 元件裡。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/" data-id="cmmsv48pc006buf219bq6572u" data-title="TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/03/12/VueBroadCastImplement/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Debug/">Debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Troubleshooting/">Troubleshooting</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/03/15/VueDialogQueue/">TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/12/VuePartialView/">跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/11/ELKWatcher/">用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/10/GitHotfixRevertFlow/">Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/10/ErrorContentDecoding/">ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/09/Nuxt3ApiLoggerHandler/">在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/08/RateLimitInplementation/">使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/07/LazyCacheIssue/">LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期</a>
+          </li>
+        
+          <li>
+            <a href="/2026/02/03/ApiFeatureVersionControl/">Feature Version Control — APP 版本功能控管架構</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+
+  <script src='https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({startOnLoad: true, theme: 'default'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>

@@ -74,6 +74,56 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-VueDialogQueue" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/15/VueDialogQueue/" class="article-date">
+  <time class="dt-published" datetime="2026-03-15T16:00:00.000Z" itemprop="datePublished">2026-03-16</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/03/15/VueDialogQueue/">TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在平台系統中，操作過程經常同時觸發多個彈窗——HTTP 錯誤、銀行維護提示、KYC 驗證結果、交易確認等。如果各元件各自管理 <code>v-model</code>，多個 overlay 會同時疊加在畫面上，不僅使用者體驗混亂，對開發者來說也極度難以維護。</p>
+<p>我們需要一個統一的 Dialog 管理機制：所有需要彈窗的地方都不自己開 Dialog，而是把「要顯示什麼」丟進佇列，由一個元件依序一個一個渲染。</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/03/15/VueDialogQueue/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/" data-id="cmmsv48pc006buf219bq6572u" data-title="TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-VueBroadCastImplement" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2026/03/12/VueBroadCastImplement/" class="article-date">
@@ -110,7 +160,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/12/VueBroadCastImplement/" data-id="cmmslzyxy001bw31o4y78cfb9" data-title="Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VueBroadCastImplement/" data-id="cmmsv48ok001buf21dyv233sa" data-title="Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計" class="article-share-link">Share</a>
       
       
       
@@ -161,7 +211,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/12/VuePartialView/" data-id="cmmslzyys0070w31o8g1j4ah1" data-title="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VuePartialView/" data-id="cmmsv48pf006kuf216dst6x23" data-title="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer" class="article-share-link">Share</a>
       
       
       
@@ -211,7 +261,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmmslzyxg0004w31ocay71cwd" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmmsv48o30004uf21czkt0zvx" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控" class="article-share-link">Share</a>
       
       
       
@@ -261,7 +311,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmmslzyxj0009w31odktibb6j" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmmsv48o70009uf21dgsqe2ik" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
       
       
       
@@ -376,7 +426,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/ErrorContentDecoding/" data-id="cmmslzyxg0005w31o4o8scvbz" data-title="ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/10/ErrorContentDecoding/" data-id="cmmsv48o40005uf21ata93wew" data-title="ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄" class="article-share-link">Share</a>
       
       
       
@@ -566,7 +616,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmmslzyxp000jw31o93js2u5p" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmmsv48oc000juf21e1d69r1e" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
       
       
       
@@ -616,7 +666,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/08/RateLimitInplementation/" data-id="cmmslzyxv000vw31ofvql7crd" data-title="使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/08/RateLimitInplementation/" data-id="cmmsv48oh000vuf219ee194cy" data-title="使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制" class="article-share-link">Share</a>
       
       
       
@@ -666,7 +716,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/07/LazyCacheIssue/" data-id="cmmslzyxn000fw31odhor5z4c" data-title="LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/07/LazyCacheIssue/" data-id="cmmsv48oa000fuf21gvudhx1o" data-title="LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期" class="article-share-link">Share</a>
       
       
       
@@ -721,62 +771,11 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/02/03/ApiFeatureVersionControl/" data-id="cmmslzyx90001w31o683a3vj0" data-title="Feature Version Control — APP 版本功能控管架構" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/02/03/ApiFeatureVersionControl/" data-id="cmmsv48o00001uf211var2300" data-title="Feature Version Control — APP 版本功能控管架構" class="article-share-link">Share</a>
       
       
       
   <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-ASP.NET-Client-Side-Integration" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2025/03/15/ASP.NET-Client-Side-Integration/" class="article-date">
-  <time class="dt-published" datetime="2025-03-15T16:00:00.000Z" itemprop="datePublished">2025-03-16</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2025/03/15/ASP.NET-Client-Side-Integration/">ASP.NET + Rsbuild + Vue 3 整合架構：不用 Nuxt，也能優雅串接前後端</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>大多數 Vue 專案如果需要 Server Side Rendering，通常會選擇 Nuxt.js 作為全端框架。但我們的情境不一樣——後端是既有的 <strong>ASP.NET MVC</strong> 應用，負責身份驗證、Session 管理、多語系路由等，不可能整個換成 Node.js。</p>
-<p>因此我們設計了一套特殊的整合架構：<strong>ASP.NET 只負責輸出 HTML Shell</strong>（<code>_Layout.cshtml</code>），<strong>Vue 3 SPA 由 Rsbuild 獨立建置</strong>，兩者透過一份 <code>manifest.json</code> 在 Debug 和 Release 模式下各自連到對應的前端資源。</p>
-<p>這套架構讓前後端可以獨立演進——前端換打包工具（Webpack → Rsbuild）、改 chunk 策略、升級 Vue 版本，都不需要動後端程式碼。</p>
-        
-          <p class="article-more-link">
-            <a href="/2025/03/15/ASP.NET-Client-Side-Integration/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2025/03/15/ASP.NET-Client-Side-Integration/" data-id="cmmslzyx50000w31oc37sego5" data-title="ASP.NET + Rsbuild + Vue 3 整合架構：不用 Nuxt，也能優雅串接前後端" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li></ul>
 
     </footer>
   </div>
@@ -834,6 +833,10 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       <ul>
         
           <li>
+            <a href="/2026/03/15/VueDialogQueue/">TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</a>
+          </li>
+        
+          <li>
             <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
           </li>
         
@@ -867,10 +870,6 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
         
           <li>
             <a href="/2026/02/03/ApiFeatureVersionControl/">Feature Version Control — APP 版本功能控管架構</a>
-          </li>
-        
-          <li>
-            <a href="/2025/03/15/ASP.NET-Client-Side-Integration/">ASP.NET + Rsbuild + Vue 3 整合架構：不用 Nuxt，也能優雅串接前後端</a>
           </li>
         
       </ul>

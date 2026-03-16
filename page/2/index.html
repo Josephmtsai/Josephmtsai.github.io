@@ -74,6 +74,57 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-ASP.NET-Client-Side-Integration" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/03/15/ASP.NET-Client-Side-Integration/" class="article-date">
+  <time class="dt-published" datetime="2025-03-15T16:00:00.000Z" itemprop="datePublished">2025-03-16</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2025/03/15/ASP.NET-Client-Side-Integration/">ASP.NET + Rsbuild + Vue 3 整合架構：不用 Nuxt，也能優雅串接前後端</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>大多數 Vue 專案如果需要 Server Side Rendering，通常會選擇 Nuxt.js 作為全端框架。但我們的情境不一樣——後端是既有的 <strong>ASP.NET MVC</strong> 應用，負責身份驗證、Session 管理、多語系路由等，不可能整個換成 Node.js。</p>
+<p>因此我們設計了一套特殊的整合架構：<strong>ASP.NET 只負責輸出 HTML Shell</strong>（<code>_Layout.cshtml</code>），<strong>Vue 3 SPA 由 Rsbuild 獨立建置</strong>，兩者透過一份 <code>manifest.json</code> 在 Debug 和 Release 模式下各自連到對應的前端資源。</p>
+<p>這套架構讓前後端可以獨立演進——前端換打包工具（Webpack → Rsbuild）、改 chunk 策略、升級 Vue 版本，都不需要動後端程式碼。</p>
+        
+          <p class="article-more-link">
+            <a href="/2025/03/15/ASP.NET-Client-Side-Integration/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2025/03/15/ASP.NET-Client-Side-Integration/" data-id="cmmsv48nw0000uf218t3g9t3t" data-title="ASP.NET + Rsbuild + Vue 3 整合架構：不用 Nuxt，也能優雅串接前後端" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-JamWebDebugger" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2023/10/07/JamWebDebugger/" class="article-date">
@@ -115,7 +166,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/10/07/JamWebDebugger/" data-id="cmmslzyxm000ew31o6xr36yh1" data-title="JamWebDebugger" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/10/07/JamWebDebugger/" data-id="cmmsv48o9000euf21f3iy2j4n" data-title="JamWebDebugger" class="article-share-link">Share</a>
       
       
       
@@ -299,7 +350,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/04/12/GitFlow/" data-id="cmmslzyxh0006w31o2nvyhki4" data-title="GitFlow" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/04/12/GitFlow/" data-id="cmmsv48o50006uf215qxb9pv9" data-title="GitFlow" class="article-share-link">Share</a>
       
       
       
@@ -369,7 +420,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/28/PreventElasticScroll/" data-id="cmmslzyxt000sw31ohh5v0e7r" data-title="iOS Safari Handle Elastic Scroll" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/28/PreventElasticScroll/" data-id="cmmsv48og000suf2158jl454o" data-title="iOS Safari Handle Elastic Scroll" class="article-share-link">Share</a>
       
       
       
@@ -490,7 +541,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="cmmslzyxs000pw31o79q882nv" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="cmmsv48of000puf21f1ezci6j" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
       
       
       
@@ -617,7 +668,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="cmmslzyxq000kw31o5yjj41jl" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="cmmsv48od000kuf218uuch2bk" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
       
       
       
@@ -702,7 +753,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="cmmslzyxw0013w31o9aq9axpk" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="cmmsv48oh000zuf21awp59beu" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
       
       
       
@@ -819,7 +870,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="cmmslzyxs000ow31ofnxmab3e" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="cmmsv48oe000ouf211j6ed4lo" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
       
       
       
@@ -905,7 +956,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="cmmslzyxz001ew31oeft46g6s" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="cmmsv48pe006huf21h38cabmr" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
       
       
       
@@ -971,61 +1022,11 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="cmmslzyxx0017w31ohcr7gbn7" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="cmmsv48oj0017uf21c5iabq1p" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
       
       
       
   <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-VueJsErrorHandling" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2022/06/05/VueJsErrorHandling/" class="article-date">
-  <time class="dt-published" datetime="2022-06-05T12:20:04.000Z" itemprop="datePublished">2022-06-05</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2022/06/05/VueJsErrorHandling/">Vue 前端錯誤處理架構 — 從基礎 ErrorHandler 到生產級 Exception Handler</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>前端開發中最難追蹤的不是語法錯誤，而是那些只在特定操作流程下才會出現的邏輯錯誤。使用者通常無法準確描述發生了什麼，如果沒有錯誤記錄機制，等於瞎子摸象。</p>
-<p>本文分享我們從<strong>基礎版 Vue Error Handler</strong>演進到<strong>生產級 Exception Handler 架構</strong>的完整過程，涵蓋 Vue 元件錯誤捕捉、Pinia Store Action 錯誤攔截、錯誤去重、自動重試、Source Map 還原等實戰經驗。</p>
-        
-          <p class="article-more-link">
-            <a href="/2022/06/05/VueJsErrorHandling/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="cmmslzyy0001hw31o6pjrhwgo" data-title="Vue 前端錯誤處理架構 — 從基礎 ErrorHandler 到生產級 Exception Handler" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
 
     </footer>
   </div>
@@ -1083,6 +1084,10 @@
       <ul>
         
           <li>
+            <a href="/2026/03/15/VueDialogQueue/">TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</a>
+          </li>
+        
+          <li>
             <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
           </li>
         
@@ -1116,10 +1121,6 @@
         
           <li>
             <a href="/2026/02/03/ApiFeatureVersionControl/">Feature Version Control — APP 版本功能控管架構</a>
-          </li>
-        
-          <li>
-            <a href="/2025/03/15/ASP.NET-Client-Side-Integration/">ASP.NET + Rsbuild + Vue 3 整合架構：不用 Nuxt，也能優雅串接前後端</a>
           </li>
         
       </ul>

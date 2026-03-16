@@ -25,7 +25,7 @@
 <meta property="og:description" content="前言這是一個只在正式環境才暴露的問題。我們使用 LazyCache + Redis 搭建了一個兩層快取架構：MemoryCache 作為 L1 熱快取，Redis 作為 L2 資料來源。在 Dev、QAT、UAT 環境一切正常，但上了 Production 後發現 Redis 資料更新了，應用卻永遠拿到舊值。 原因？LazyCache 的 GetOrAdd 直接傳入 TimeSpan，預設行為是">
 <meta property="og:locale" content="zh_TW">
 <meta property="article:published_time" content="2026-03-07T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-03-16T03:13:40.142Z">
+<meta property="article:modified_time" content="2026-03-16T07:28:56.434Z">
 <meta property="article:author" content="Joseph M Tsai">
 <meta property="article:tag" content=".NET">
 <meta property="article:tag" content="LazyCache">
@@ -269,7 +269,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/07/LazyCacheIssue/" data-id="cmmslzyxn000fw31odhor5z4c" data-title="LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/07/LazyCacheIssue/" data-id="cmmsv48oa000fuf21gvudhx1o" data-title="LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期" class="article-share-link">Share</a>
       
       
       
@@ -343,6 +343,10 @@
       <ul>
         
           <li>
+            <a href="/2026/03/15/VueDialogQueue/">TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</a>
+          </li>
+        
+          <li>
             <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
           </li>
         
@@ -376,10 +380,6 @@
         
           <li>
             <a href="/2026/02/03/ApiFeatureVersionControl/">Feature Version Control — APP 版本功能控管架構</a>
-          </li>
-        
-          <li>
-            <a href="/2025/03/15/ASP.NET-Client-Side-Integration/">ASP.NET + Rsbuild + Vue 3 整合架構：不用 Nuxt，也能優雅串接前後端</a>
           </li>
         
       </ul>
