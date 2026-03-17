@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-04LWQBG1HE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-04LWQBG1HE');
+</script>
+<!-- End Google Analytics -->
+
+  
+  <title>自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理 | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="前言在多品牌、多區域、多語系的平台中，首頁的 Banner、Widget、行銷活動區塊都需要能夠由運營人員自行管理，而不是每次改內容都要動到程式碼。市面上有很多成熟的 CMS（WordPress、Strapi 等），但我們的需求比較特殊：  內容需要**依區域（Region）和語系（Language）**動態切換 版位採用 CSS Grid（grid-cols-12） 設計，運營人員可以自行調整">
+<meta property="og:type" content="article">
+<meta property="og:title" content="自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理">
+<meta property="og:url" content="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="前言在多品牌、多區域、多語系的平台中，首頁的 Banner、Widget、行銷活動區塊都需要能夠由運營人員自行管理，而不是每次改內容都要動到程式碼。市面上有很多成熟的 CMS（WordPress、Strapi 等），但我們的需求比較特殊：  內容需要**依區域（Region）和語系（Language）**動態切換 版位採用 CSS Grid（grid-cols-12） 設計，運營人員可以自行調整">
+<meta property="og:locale" content="zh_TW">
+<meta property="og:image" content="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/Image4.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/Image5.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/Image6.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/Image1.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/Image2.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/Image3.png">
+<meta property="article:published_time" content="2026-03-16T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-17T08:36:18.842Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content=".NET">
+<meta property="article:tag" content="Architecture">
+<meta property="article:tag" content="MongoDB">
+<meta property="article:tag" content="CMS">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/Image4.png">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-ContentManagementSystem" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/16/ContentManagementSystem/" class="article-date">
+  <time class="dt-published" datetime="2026-03-16T16:00:00.000Z" itemprop="datePublished">2026-03-17</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在多品牌、多區域、多語系的平台中，首頁的 Banner、Widget、行銷活動區塊都需要能夠由運營人員自行管理，而不是每次改內容都要動到程式碼。市面上有很多成熟的 CMS（WordPress、Strapi 等），但我們的需求比較特殊：</p>
+<ul>
+<li>內容需要**依區域（Region）和語系（Language）**動態切換</li>
+<li>版位採用 <strong>CSS Grid（grid-cols-12）</strong> 設計，運營人員可以自行調整 RWD 排版</li>
+<li>支援<strong>定時排程</strong>，廣告可以設定上下架時間、週期性顯示</li>
+<li>最終輸出是 HTML 片段，由前端 Vue.js 應用動態 compile 並渲染</li>
+</ul>
+<p>因此我們自建了一套簡易 CMS 系統（代號 CMS），本文完整介紹這套系統的架構設計。</p>
+<span id="more"></span>
+<p>系統內部設定大概如下 可以設定每一個頁面Display + Layout +HTML</p>
+<img src="/2026/03/16/ContentManagementSystem/Image4.png" class="">
+<img src="/2026/03/16/ContentManagementSystem/Image5.png" class="">
+<img src="/2026/03/16/ContentManagementSystem/Image6.png" class="">
+
+<p>Demo Sample</p>
+<img src="/2026/03/16/ContentManagementSystem/Image1.png" class="" title="Story Book 提供給User觀看可以放什麼Widget">
+<img src="/2026/03/16/ContentManagementSystem/Image2.png" class="" title="Widget顯示">
+<img src="/2026/03/16/ContentManagementSystem/Image3.png" class="" title="Widget顯示">
+
+
+<h2 id="系統概述"><a href="#系統概述" class="headerlink" title="系統概述"></a>系統概述</h2><pre class="mermaid">flowchart LR
+    CMS["CMS 後台管理介面<br/>運營人員操作"] --> DB[(MongoDB<br/>Piper DB)]
+    API["GetContent API<br/>外部系統呼叫"] --> DB
+    API --> External["外部系統<br/>動態 compile HTML"]</pre>
+
+<p>系統的核心目標：</p>
+<ul>
+<li>透過後台管理介面讓運營人員配置品牌頁面的廣告版位（Placement）、內容（Advert）與排程策略（Strategy）</li>
+<li>透過 <code>GetContent</code> API 將配置好的 CMS 內容（多語系 HTML 片段）提供給外部系統</li>
+<li>外部系統接收 HTML 後，動態 compile 成最終使用者看到的頁面</li>
+</ul>
+<p><strong>技術棧</strong>：</p>
+<ul>
+<li>後端：ASP.NET MVC 5 + WebApi 2</li>
+<li>資料庫：MongoDB（Driver 2.9.1）</li>
+<li>快取：MemoryCache</li>
+<li>套件：MongoDB.Driver 2.9.1、HtmlAgilityPack、Newtonsoft.Json</li>
+</ul>
+<h2 id="MongoDB-連線設定"><a href="#MongoDB-連線設定" class="headerlink" title="MongoDB 連線設定"></a>MongoDB 連線設定</h2><h3 id="設定來源"><a href="#設定來源" class="headerlink" title="設定來源"></a>設定來源</h3><p>連線資訊儲存在 XML 設定檔，部署時透過變數替換注入實際連線值：</p>
+<figure class="highlight xml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">SystemSetting</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">MongoDbSetting</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">Connection</span>&gt;</span>$(db_mongodb_piper)<span class="tag">&lt;/<span class="name">Connection</span>&gt;</span></span><br><span class="line">        <span class="tag">&lt;<span class="name">DbName</span>&gt;</span>$(PIPER_MongoDb_DbName)<span class="tag">&lt;/<span class="name">DbName</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;/<span class="name">MongoDbSetting</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">SystemSetting</span>&gt;</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="初始化流程"><a href="#初始化流程" class="headerlink" title="初始化流程"></a>初始化流程</h3><pre class="mermaid">flowchart TD
+    A["Global.asax<br/>Application_Start"] --> B["ConfigFileHelper.Initialize<br/>讀取 SystemSetting.config<br/>反序列化為 SystemSettingModel"]
+    A --> C["AppDataManager.LoadAppData<br/>快取 SystemSetting 至靜態變數"]
+    A --> D["MongoDbClient 靜態初始化<br/>建立 MongoClient +<br/>IMongoDatabase 單例"]
+    B --> C --> D</pre>
+
+<h3 id="MongoDbClient-存取模式"><a href="#MongoDbClient-存取模式" class="headerlink" title="MongoDbClient 存取模式"></a>MongoDbClient 存取模式</h3><p>系統使用自訂 <code>[BsonCollection]</code> Attribute 搭配靜態 <code>MongoDbClient.GetCollection&lt;T&gt;()</code> 方法，透過反射自動取得 Collection 名稱：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">[<span class="meta">BsonCollection(<span class="string">&quot;Page&quot;</span>)</span>]</span><br><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title">PageModel</span> &#123; ... &#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">var</span> collection = MongoDbClient.GetCollection&lt;PageModel&gt;();</span><br></pre></td></tr></table></figure>
+
+<h2 id="Collections-與-Models-對照表"><a href="#Collections-與-Models-對照表" class="headerlink" title="Collections 與 Models 對照表"></a>Collections 與 Models 對照表</h2><p>資料庫名稱：<strong>Piper</strong></p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Collection</th>
+<th>Model</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><code>Page</code></td>
+<td><code>PageModel</code></td>
+<td>頁面定義，綁定品牌、區域、產品，內嵌版位清單</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>Advert</code></td>
+<td><code>AdvertModel</code></td>
+<td>廣告內容，含多語系 HTML 片段</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>Strategy</code></td>
+<td><code>StrategyModel</code></td>
+<td>策略排程，管理廣告的顯示時間與順序</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>Region</code></td>
+<td><code>BrandRegionModel</code></td>
+<td>品牌區域定義，含國家與語言清單</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>User</code></td>
+<td><code>UserModel</code></td>
+<td>系統使用者</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>Group</code></td>
+<td><code>GroupModel</code></td>
+<td>廣告群組（支援巢狀）</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>GroupTree</code></td>
+<td><code>GroupTreeModel</code></td>
+<td>群組樹狀結構（扁平化儲存）</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>BrandSetting</code></td>
+<td><code>BrandModel</code></td>
+<td>品牌設定（名稱、CSS、DataFeed）</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>LanguageSetting</code></td>
+<td><code>LanguageModel</code></td>
+<td>語言設定</td>
+</tr>
+<tr>
+<td>10</td>
+<td><code>ProductTemplate</code></td>
+<td><code>ProductTemplate</code></td>
+<td>產品範本（對應產品索引）</td>
+</tr>
+<tr>
+<td>11</td>
+<td><code>CountryTemplate</code></td>
+<td><code>CountryTemplate</code></td>
+<td>國家範本</td>
+</tr>
+<tr>
+<td>12</td>
+<td><code>WidgetProduct</code></td>
+<td><code>WidgetProductModel</code></td>
+<td>Widget 產品與可用 Widget 清單</td>
+</tr>
+<tr>
+<td>13</td>
+<td><code>RegionTheme</code></td>
+<td><code>RegionThemeModel</code></td>
+<td>區域主題樣式設定</td>
+</tr>
+</tbody></table>
+<h2 id="核心資料模型"><a href="#核心資料模型" class="headerlink" title="核心資料模型"></a>核心資料模型</h2><h3 id="PageModel"><a href="#PageModel" class="headerlink" title="PageModel"></a>PageModel</h3><p>頁面是系統的核心實體，代表一個特定品牌 + 區域 + 產品的頁面配置。<code>PlacementList</code> 直接內嵌於 Page 中。</p>
+<table>
+<thead>
+<tr>
+<th>欄位</th>
+<th>型別</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Id</code></td>
+<td>ObjectId</td>
+<td>主鍵</td>
+</tr>
+<tr>
+<td><code>BrandId</code></td>
+<td>int</td>
+<td>品牌 ID</td>
+</tr>
+<tr>
+<td><code>Name</code></td>
+<td>string</td>
+<td>頁面名稱</td>
+</tr>
+<tr>
+<td><code>MappingProduct</code></td>
+<td>ProductTemplate（嵌入）</td>
+<td>對應的產品範本</td>
+</tr>
+<tr>
+<td><code>Region</code></td>
+<td>BrandRegionModel（嵌入）</td>
+<td>對應的品牌區域</td>
+</tr>
+<tr>
+<td><code>PlacementList</code></td>
+<td>List&lt;PlacementModel&gt;（嵌入）</td>
+<td>版位清單</td>
+</tr>
+</tbody></table>
+<h3 id="PlacementModel（嵌入於-Page）"><a href="#PlacementModel（嵌入於-Page）" class="headerlink" title="PlacementModel（嵌入於 Page）"></a>PlacementModel（嵌入於 Page）</h3><p>版位定義了一個廣告區塊的屬性與對應的策略。運營人員可以透過 <code>gridClass</code> 和 <code>Width</code> 控制版位在 CSS Grid 中的 RWD 排版。</p>
+<table>
+<thead>
+<tr>
+<th>欄位</th>
+<th>型別</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Id</code></td>
+<td>ObjectId</td>
+<td>版位 ID</td>
+</tr>
+<tr>
+<td><code>StrategyId</code></td>
+<td>string</td>
+<td>對應的策略 ID</td>
+</tr>
+<tr>
+<td><code>Name</code></td>
+<td>string</td>
+<td>版位名稱</td>
+</tr>
+<tr>
+<td><code>Width</code></td>
+<td>int</td>
+<td>寬度</td>
+</tr>
+<tr>
+<td><code>gridClass</code></td>
+<td>List&lt;string&gt;</td>
+<td>CSS grid class 列表</td>
+</tr>
+<tr>
+<td><code>Type</code></td>
+<td>PlacementType</td>
+<td>版位類型（Carousel、General 等）</td>
+</tr>
+</tbody></table>
+<h3 id="AdvertModel"><a href="#AdvertModel" class="headerlink" title="AdvertModel"></a>AdvertModel</h3><p>廣告是實際的內容載體，儲存多語系的 HTML 片段。</p>
+<table>
+<thead>
+<tr>
+<th>欄位</th>
+<th>型別</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Id</code></td>
+<td>ObjectId</td>
+<td>主鍵</td>
+</tr>
+<tr>
+<td><code>BrandId</code></td>
+<td>int</td>
+<td>品牌 ID</td>
+</tr>
+<tr>
+<td><code>Name</code></td>
+<td>string</td>
+<td>廣告名稱</td>
+</tr>
+<tr>
+<td><code>Active</code></td>
+<td>bool</td>
+<td>是否啟用</td>
+</tr>
+<tr>
+<td><code>WidgetContexts</code></td>
+<td>List&lt;Dictionary&lt;string, string&gt;&gt;</td>
+<td><strong>多語系 HTML 內容</strong>，key 為語言碼，value 為 HTML</td>
+</tr>
+<tr>
+<td><code>GroupId</code></td>
+<td>string</td>
+<td>所屬群組 ID</td>
+</tr>
+<tr>
+<td><code>CurrentEdit</code></td>
+<td>string</td>
+<td>目前編輯者（鎖定用）</td>
+</tr>
+<tr>
+<td><code>EditExpireTime</code></td>
+<td>string</td>
+<td>編輯鎖定過期時間</td>
+</tr>
+</tbody></table>
+<h3 id="StrategyModel-StrategyAdvert"><a href="#StrategyModel-StrategyAdvert" class="headerlink" title="StrategyModel &#x2F; StrategyAdvert"></a>StrategyModel &#x2F; StrategyAdvert</h3><p>策略管理廣告在版位中的排程與排序。<code>StrategyAdvert</code> 嵌入於 Strategy 中。</p>
+<table>
+<thead>
+<tr>
+<th>欄位</th>
+<th>型別</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Sequence</code></td>
+<td>int</td>
+<td>排序序號（同序號視為備援）</td>
+</tr>
+<tr>
+<td><code>StartDate</code></td>
+<td>long</td>
+<td>開始時間（Unix 毫秒）</td>
+</tr>
+<tr>
+<td><code>EndDate</code></td>
+<td>long</td>
+<td>結束時間（Unix 毫秒）</td>
+</tr>
+<tr>
+<td><code>IsUnlimited</code></td>
+<td>bool</td>
+<td>是否無限期</td>
+</tr>
+<tr>
+<td><code>AdvertId</code></td>
+<td>string</td>
+<td>對應的廣告 ID</td>
+</tr>
+<tr>
+<td><code>Iteration</code></td>
+<td>int?</td>
+<td>迭代類型：1&#x3D;Single, 2&#x3D;Recurring</td>
+</tr>
+<tr>
+<td><code>RecurringPattern</code></td>
+<td>int?</td>
+<td>週期模式：0&#x3D;None, 2&#x3D;Weekly, 3&#x3D;Monthly</td>
+</tr>
+<tr>
+<td><code>RecurringStartTime</code></td>
+<td>string</td>
+<td>週期開始時間（HH:mm UTC）</td>
+</tr>
+<tr>
+<td><code>RecurringEndTime</code></td>
+<td>string</td>
+<td>週期結束時間（HH:mm UTC）</td>
+</tr>
+<tr>
+<td><code>RecurringWeekDays</code></td>
+<td>int[]</td>
+<td>週期星期幾（0&#x3D;Sunday ~ 6&#x3D;Saturday）</td>
+</tr>
+<tr>
+<td><code>RecurringMonthDays</code></td>
+<td>int[]</td>
+<td>週期每月幾號</td>
+</tr>
+</tbody></table>
+<h3 id="其他模型"><a href="#其他模型" class="headerlink" title="其他模型"></a>其他模型</h3><ul>
+<li><strong>BrandRegionModel</strong>：品牌區域，內嵌國家清單和語言清單，含預設語言</li>
+<li><strong>BrandModel</strong>：品牌設定，含預設 CSS 和 DataFeed 清單</li>
+<li><strong>WidgetProductModel</strong>：Widget 產品，定義可用的 Widget 清單（每個 Widget 有 DirectiveName 供前端 compile）</li>
+<li><strong>RegionThemeModel</strong>：區域主題樣式，支援排程（StartDate &#x2F; EndDate）</li>
+<li><strong>UserModel</strong>：系統使用者，含角色（Admin &#x2F; PowerUser &#x2F; User）和可存取的品牌清單</li>
+<li><strong>GroupModel &#x2F; GroupTreeModel</strong>：廣告群組管理，支援巢狀結構</li>
+</ul>
+<h2 id="模型關聯圖"><a href="#模型關聯圖" class="headerlink" title="模型關聯圖"></a>模型關聯圖</h2><pre class="mermaid">erDiagram
+    Page }o--|| Region : "Region embedded"
+    Page }o--|| ProductTemplate : "MappingProduct embedded"
+    Page ||--|{ Placement : "PlacementList embedded"
+    Placement ||--o| Strategy : "StrategyId"
+    Strategy ||--|{ StrategyAdvert : "StrategyAdvertList embedded"
+    StrategyAdvert }o--|| Advert : "AdvertId"
+    Region ||--|{ Country : "CountryList embedded"
+    Region ||--|{ Language : "LanguageList embedded"
+    Brand ||--|{ Region : "BrandId"
+    Brand ||--|{ Page : "BrandId"
+    Brand ||--|{ Advert : "BrandId"
+    Advert }o--o| WidgetProduct : "WidgetProduct embedded ref"
+    Advert }o--o| Group : "GroupId"
+    Group ||--o{ GroupTree : "GroupId"</pre>
+
+<h2 id="GetContent-API"><a href="#GetContent-API" class="headerlink" title="GetContent API"></a>GetContent API</h2><h3 id="端點"><a href="#端點" class="headerlink" title="端點"></a>端點</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">GET /api/Service/GetContent</span><br></pre></td></tr></table></figure>
+
+<h3 id="請求參數"><a href="#請求參數" class="headerlink" title="請求參數"></a>請求參數</h3><table>
+<thead>
+<tr>
+<th>參數</th>
+<th>型別</th>
+<th>必填</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>brandId</code></td>
+<td>int</td>
+<td>是</td>
+<td>品牌 ID</td>
+</tr>
+<tr>
+<td><code>productIndex</code></td>
+<td>int</td>
+<td>是</td>
+<td>產品索引</td>
+</tr>
+<tr>
+<td><code>languageId</code></td>
+<td>int</td>
+<td>是</td>
+<td>語言 ID</td>
+</tr>
+<tr>
+<td><code>countryId</code></td>
+<td>int</td>
+<td>是</td>
+<td>國家 ID</td>
+</tr>
+<tr>
+<td><code>date</code></td>
+<td>string</td>
+<td>否</td>
+<td>指定時間（Unix 毫秒），用於預覽排程</td>
+</tr>
+</tbody></table>
+<h3 id="回應格式"><a href="#回應格式" class="headerlink" title="回應格式"></a>回應格式</h3><figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;ResultType&quot;</span><span class="punctuation">:</span> <span class="string">&quot;Success&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;Message&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">null</span></span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;Content&quot;</span><span class="punctuation">:</span> <span class="string">&quot;&lt;div class=\&quot;grid grid-cols-12 gap-4\&quot;&gt;...HTML 內容...&lt;/div&gt;&quot;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p><code>Content</code> 欄位包含組裝完成的 HTML 片段，外部系統接收後進行動態 compile（如 Vue directive 解析）。</p>
+<h3 id="完整資料流"><a href="#完整資料流" class="headerlink" title="完整資料流"></a>完整資料流</h3><pre class="mermaid">flowchart TD
+    Client["外部系統呼叫<br/>GET /api/Service/GetContent"]
+    subgraph step1 ["Step 1: Region 解析"]
+        RegionCache{"MemoryCache 命中？"}
+        RegionQuery["查詢 Region Collection<br/>brandId + countryId + languageId"]
+    end
+    subgraph step2 ["Step 2: Page 查詢"]
+        PageQuery["查詢 Page Collection<br/>brandId + regionId + productIndex"]
+    end
+    subgraph step3 ["Step 3: Placement 處理"]
+        PlacementLoop["遍歷 page.PlacementList"]
+        StrategyQuery["依 StrategyId 查詢 Strategy"]
+        AdvertFilter["StrategyAdvertHelper<br/>時間篩選 + 排序"]
+        AdvertQuery["依 AdvertId 查詢 Advert<br/>取對應語言的 HTML"]
+        TemplateApply["依 PlacementType<br/>套用 HTML 模板"]
+    end
+    subgraph step4 ["Step 4: 組裝與回傳"]
+        Assemble["組裝所有 Placement HTML<br/>包裹 grid container"]
+        CacheResult{"寫入 MemoryCache"}
+        Response["回傳 HTML"]
+    end
+    Client --> RegionCache
+    RegionCache -->|miss| RegionQuery --> step2
+    RegionCache -->|hit| step2
+    step2 --> PageQuery --> PlacementLoop
+    PlacementLoop --> StrategyQuery --> AdvertFilter --> AdvertQuery --> TemplateApply
+    TemplateApply --> Assemble
+    Assemble --> CacheResult --> Response</pre>
+
+<h3 id="資料解析步驟"><a href="#資料解析步驟" class="headerlink" title="資料解析步驟"></a>資料解析步驟</h3><p><strong>Step 1 - Region 解析</strong>：根據 <code>brandId</code>、<code>countryId</code>、<code>languageId</code> 查詢 Region collection，使用 <code>ElemMatch</code> 確認 CountryList 和 LanguageList 包含指定值。結果快取 60 秒。</p>
+<p><strong>Step 2 - Page 查詢</strong>：根據 <code>brandId</code>、<code>region.Id</code>、<code>productIndex</code> 查詢 Page。每個頁面唯一對應一個品牌 + 區域 + 產品組合。</p>
+<p><strong>Step 3 - Placement 處理</strong>：遍歷 Page 的 PlacementList，每個 Placement：</p>
+<ol>
+<li>依 StrategyId 查詢 Strategy，取得 StrategyAdvertList</li>
+<li>透過 <code>IsAdvertVisible()</code> 過濾可顯示的廣告</li>
+<li>依 Sequence 分組，每組取一個</li>
+<li>依 AdvertId 查詢 Advert，從 WidgetContexts 取得對應語言的 HTML</li>
+<li>依 PlacementType 套用模板</li>
+<li>無可用廣告的 Placement 整個隱藏</li>
+</ol>
+<p><strong>Step 4 - 組裝與回傳</strong>：所有 Placement HTML 串接後包裹在 <code>&lt;div class=&quot;grid grid-cols-12 gap-4&quot;&gt;</code> 中，結果快取 60 秒。</p>
+<h2 id="策略與排程系統"><a href="#策略與排程系統" class="headerlink" title="策略與排程系統"></a>策略與排程系統</h2><h3 id="策略廣告可見性判斷"><a href="#策略廣告可見性判斷" class="headerlink" title="策略廣告可見性判斷"></a>策略廣告可見性判斷</h3><p><code>StrategyAdvertHelper.IsAdvertVisible()</code> 的判斷邏輯：</p>
+<pre class="mermaid">flowchart TD
+    A["廣告是否可見？"] --> B{"Sequence < 0？"}
+    B -->|Yes| X1["不可見<br/>已停用"]
+    B -->|No| C{"在 StartDate ~ EndDate<br/>範圍內？"}
+    C -->|No| X2["不可見"]
+    C -->|Yes| D{"Iteration 類型？"}
+    D -->|Single| Y1["可見"]
+    D -->|Recurring| E{"在 RecurringStartTime ~<br/>RecurringEndTime 時段？"}
+    E -->|No| X3["不可見"]
+    E -->|Yes| F{"RecurringPattern？"}
+    F -->|Weekly| G{"今天星期幾<br/>在 RecurringWeekDays 中？"}
+    F -->|Monthly| H{"今天幾號<br/>在 RecurringMonthDays 中？"}
+    G -->|Yes| Y2["可見"]
+    G -->|No| X4["不可見"]
+    H -->|Yes| Y3["可見"]
+    H -->|No| X5["不可見"]</pre>
+
+<h3 id="同序號廣告衝突處理"><a href="#同序號廣告衝突處理" class="headerlink" title="同序號廣告衝突處理"></a>同序號廣告衝突處理</h3><p>當多個廣告擁有相同的 <code>Sequence</code> 時（備援機制），系統使用 <code>IComparable&lt;StrategyAdvert&gt;</code> 排序：</p>
+<ul>
+<li>有限期廣告優先於無限期廣告</li>
+<li>同為有限期或無限期時，<code>StartDate</code> 較早者優先</li>
+</ul>
+<h3 id="排程時間格式"><a href="#排程時間格式" class="headerlink" title="排程時間格式"></a>排程時間格式</h3><p>所有日期時間均使用 <strong>Unix 毫秒時間戳</strong>。<code>RecurringStartTime</code> 和 <code>RecurringEndTime</code> 使用 <code>HH:mm</code> 格式（UTC 時區）。</p>
+<h2 id="快取策略"><a href="#快取策略" class="headerlink" title="快取策略"></a>快取策略</h2><p>系統使用 <code>MemoryCache</code> 進行伺服器端快取：</p>
+<table>
+<thead>
+<tr>
+<th>快取鍵格式</th>
+<th>TTL</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>s_region_&#123;brandId&#125;_&#123;countryId&#125;_&#123;languageId&#125;</code></td>
+<td>60 秒</td>
+<td>Region 查詢結果</td>
+</tr>
+<tr>
+<td><code>s_page_&#123;pageId&#125;_&#123;languageId&#125;_&#123;timestamp&#125;</code></td>
+<td>60 秒</td>
+<td>組裝完成的 HTML</td>
+</tr>
+<tr>
+<td><code>s_&#123;placementType&#125;_html</code></td>
+<td>10 分鐘</td>
+<td>PlacementType HTML 模板</td>
+</tr>
+</tbody></table>
+<p>快取 timestamp 使用 <code>yyyyMMddhhmm</code> 格式，同一分鐘內的重複請求會命中快取。若帶 <code>date</code> 參數（預覽模式），timestamp 使用指定的時間。</p>
+<h2 id="PlacementType-與模板對應"><a href="#PlacementType-與模板對應" class="headerlink" title="PlacementType 與模板對應"></a>PlacementType 與模板對應</h2><h3 id="PlacementType-列舉"><a href="#PlacementType-列舉" class="headerlink" title="PlacementType 列舉"></a>PlacementType 列舉</h3><table>
+<thead>
+<tr>
+<th>值</th>
+<th>名稱</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td>Carousel</td>
+<td>輪播</td>
+</tr>
+<tr>
+<td>1</td>
+<td>General</td>
+<td>一般版位</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Splash</td>
+<td>全屏廣告</td>
+</tr>
+<tr>
+<td>3</td>
+<td>WinnersList</td>
+<td>得獎名單</td>
+</tr>
+<tr>
+<td>4</td>
+<td>MKTHighlights</td>
+<td>行銷亮點</td>
+</tr>
+<tr>
+<td>5</td>
+<td>TopCarousel</td>
+<td>頂部輪播</td>
+</tr>
+<tr>
+<td>6</td>
+<td>TrendingList</td>
+<td>趨勢列表</td>
+</tr>
+</tbody></table>
+<h3 id="模板檔案"><a href="#模板檔案" class="headerlink" title="模板檔案"></a>模板檔案</h3><table>
+<thead>
+<tr>
+<th>PlacementType</th>
+<th>模板檔案</th>
+<th>模板內容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Carousel</td>
+<td><code>_carousel.html</code></td>
+<td><code>&lt;carousel &#123;&#123;settings&#125;&#125;&gt;&#123;&#123;advertList&#125;&#125;&lt;/carousel&gt;</code></td>
+</tr>
+<tr>
+<td>General</td>
+<td><code>_general.html</code></td>
+<td><code>&lt;div class=&quot;&#123;&#123;width&#125;&#125;&quot;&gt;&#123;&#123;advertList&#125;&#125;&lt;/div&gt;</code></td>
+</tr>
+<tr>
+<td>Splash</td>
+<td><code>_splash.html</code></td>
+<td>Teleport + CardCarousel overlay</td>
+</tr>
+<tr>
+<td>WinnersList</td>
+<td><code>_winnersList.html</code></td>
+<td>自訂模板</td>
+</tr>
+<tr>
+<td>MKTHighlights</td>
+<td><code>_MKTHighlights.html</code></td>
+<td>自訂模板</td>
+</tr>
+<tr>
+<td>TopCarousel</td>
+<td><code>_topCarousel.html</code></td>
+<td>自訂模板</td>
+</tr>
+<tr>
+<td>TrendingList</td>
+<td><code>_trendingList.html</code></td>
+<td>自訂模板</td>
+</tr>
+</tbody></table>
+<h3 id="模板佔位符"><a href="#模板佔位符" class="headerlink" title="模板佔位符"></a>模板佔位符</h3><table>
+<thead>
+<tr>
+<th>佔位符</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>&#123;&#123;width&#125;&#125;</code></td>
+<td>Placement 的 <code>gridClass</code>（以空格連接）</td>
+</tr>
+<tr>
+<td><code>&#123;&#123;advertList&#125;&#125;</code></td>
+<td>所有廣告的 HTML 串接結果</td>
+</tr>
+<tr>
+<td><code>&#123;&#123;settings&#125;&#125;</code></td>
+<td><code>&lt;settings&gt;</code> 類型廣告的屬性（用於元件設定）</td>
+</tr>
+</tbody></table>
+<p><strong>靜態模式</strong>（General、WinnersList）：廣告 HTML 包裹在 <code>&lt;div&gt;</code> 中，CSS class 來自 <code>Advert.gridClass</code>。其他類型直接輸出。所有廣告 HTML 會被注入 <code>:cms-advertid</code> 屬性，供外部系統追蹤。</p>
+<h2 id="資料建立順序與前置條件"><a href="#資料建立順序與前置條件" class="headerlink" title="資料建立順序與前置條件"></a>資料建立順序與前置條件</h2><h3 id="資料依賴層次圖"><a href="#資料依賴層次圖" class="headerlink" title="資料依賴層次圖"></a>資料依賴層次圖</h3><pre class="mermaid">flowchart TD
+    subgraph layer1 ["Layer 1: 基礎主檔"]
+        Brand["BrandSetting<br/>品牌設定"]
+        Language["LanguageSetting<br/>語言設定"]
+        Country["CountryTemplate<br/>國家範本"]
+    end
+    subgraph layer2 ["Layer 2: 品牌相關設定"]
+        Region["Region<br/>品牌區域"]
+        Product["ProductTemplate<br/>產品範本"]
+    end
+    subgraph layer3 ["Layer 3: 頁面設定"]
+        PageNode["Page<br/>頁面"]
+    end
+    subgraph layer4 ["Layer 4: 版位與內容"]
+        Placement["Placement<br/>版位（自動建立 Strategy）"]
+        Advert["Advert<br/>廣告內容"]
+        WidgetProduct["WidgetProduct<br/>Widget 產品（選配）"]
+    end
+    subgraph layer5 ["Layer 5: 排程"]
+        StrategyAdvert["StrategyAdvert<br/>將廣告排入策略"]
+    end
+    Brand --> Region
+    Brand --> Product
+    Language --> Region
+    Country --> Region
+    Region --> PageNode
+    Product --> PageNode
+    PageNode --> Placement
+    WidgetProduct --> Advert
+    Placement --> StrategyAdvert
+    Advert --> StrategyAdvert</pre>
+
+<h3 id="各層說明"><a href="#各層說明" class="headerlink" title="各層說明"></a>各層說明</h3><p><strong>Layer 1 - 基礎主檔</strong>：BrandSetting（品牌）、LanguageSetting（語言清單）、CountryTemplate（國家清單），由後台 General Setting 管理。</p>
+<p><strong>Layer 2 - 品牌相關設定</strong>：Region（品牌區域，綁定國家和語言）、ProductTemplate（產品範本，每個產品有唯一的 ProductIndex）。</p>
+<p><strong>Layer 3 - 頁面設定</strong>：Page 綁定一個 Region + Product，系統驗證名稱不重複、組合不重複。</p>
+<p><strong>Layer 4 - 版位與內容</strong>：Placement 新增時系統自動建立空 Strategy。Advert 編輯多語系 HTML，設為 Active。</p>
+<p><strong>Layer 5 - 排程</strong>：將 Advert 排入 Placement 的 Strategy 中，設定排程規則。</p>
+<h3 id="自動建立行為"><a href="#自動建立行為" class="headerlink" title="自動建立行為"></a>自動建立行為</h3><ul>
+<li><strong>新增 Placement</strong> 時，自動在 Strategy collection 建立空的 StrategyModel，StrategyId 寫入 Placement</li>
+<li><strong>刪除 Placement</strong> 時，連帶刪除對應的 Strategy</li>
+<li><strong>刪除 Page</strong> 時，遍歷所有 Placement 並刪除各自的 Strategy</li>
+</ul>
+<h3 id="最小可用設定流程"><a href="#最小可用設定流程" class="headerlink" title="最小可用設定流程"></a>最小可用設定流程</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">1. 確認 BrandSetting 存在</span><br><span class="line">2. 確認 LanguageSetting 有語言資料</span><br><span class="line">3. 確認 CountryTemplate 有國家資料</span><br><span class="line">4. 建立 Region（選擇國家 + 語言）</span><br><span class="line">5. 建立 ProductTemplate（定義產品名稱 + ProductIndex）</span><br><span class="line">6. 建立 Page（選擇 Region + Product）</span><br><span class="line">7. 在 Page 中新增 Placement（系統自動建立 Strategy）</span><br><span class="line">8. 建立 Advert（編輯多語系 HTML，設為 Active）</span><br><span class="line">9. 在 Strategy 中新增 StrategyAdvert（關聯 Advert，設定排程時間）</span><br></pre></td></tr></table></figure>
+
+<p>完成後，外部系統即可透過 <code>GetContent(brandId, productIndex, languageId, countryId)</code> 取得組裝好的 HTML。</p>
+<h2 id="WebApi-端點一覽"><a href="#WebApi-端點一覽" class="headerlink" title="WebApi 端點一覽"></a>WebApi 端點一覽</h2><h3 id="公開-API"><a href="#公開-API" class="headerlink" title="公開 API"></a>公開 API</h3><table>
+<thead>
+<tr>
+<th>端點</th>
+<th>方法</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/api/Service/GetContent</code></td>
+<td>GET</td>
+<td>取得頁面 HTML 內容</td>
+</tr>
+<tr>
+<td><code>/api/Service/GetRegionTheme</code></td>
+<td>GET</td>
+<td>取得區域主題設定</td>
+</tr>
+</tbody></table>
+<h3 id="後台管理-API（需-Session-驗證）"><a href="#後台管理-API（需-Session-驗證）" class="headerlink" title="後台管理 API（需 Session 驗證）"></a>後台管理 API（需 Session 驗證）</h3><table>
+<thead>
+<tr>
+<th>控制器</th>
+<th>路由前綴</th>
+<th>主要功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>PageController</td>
+<td><code>/api/session/Page/</code></td>
+<td>頁面 CRUD、複製、取得可用區域</td>
+</tr>
+<tr>
+<td>PlacementController</td>
+<td><code>/api/session/Placement/</code></td>
+<td>版位 CRUD、排序</td>
+</tr>
+<tr>
+<td>AdvertController</td>
+<td><code>/api/session/Advert/</code></td>
+<td>廣告 CRUD、排程檢查、編輯鎖定</td>
+</tr>
+<tr>
+<td>StrategyController</td>
+<td><code>/api/session/Strategy/</code></td>
+<td>策略廣告 CRUD、排序、移除過期</td>
+</tr>
+<tr>
+<td>RegionController</td>
+<td><code>/api/session/Region/</code></td>
+<td>區域 CRUD</td>
+</tr>
+<tr>
+<td>GroupController</td>
+<td><code>/api/session/Group/</code></td>
+<td>群組 CRUD</td>
+</tr>
+<tr>
+<td>SettingController</td>
+<td><code>/api/session/Setting/</code></td>
+<td>語言、品牌、產品範本、Widget 設定</td>
+</tr>
+<tr>
+<td>RegionThemeController</td>
+<td><code>/api/session/RegionTheme/</code></td>
+<td>區域主題 CRUD</td>
+</tr>
+<tr>
+<td>UserController</td>
+<td><code>/api/session/User/</code></td>
+<td>使用者 CRUD</td>
+</tr>
+</tbody></table>
+<h3 id="API-路由規則"><a href="#API-路由規則" class="headerlink" title="API 路由規則"></a>API 路由規則</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">公開 API：     /api/&#123;controller&#125;/&#123;action&#125;/&#123;id?&#125;</span><br><span class="line">後台管理 API： /api/session/&#123;controller&#125;/&#123;action&#125;/&#123;id?&#125;   （啟用 Session）</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/" data-id="cmmucyr3n0001u9219fit2crh" data-title="自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/03/15/VueDialogQueue/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Debug/">Debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Troubleshooting/">Troubleshooting</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/03/16/ContentManagementSystem/">自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/15/VueDialogQueue/">TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/12/VuePartialView/">跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/11/ELKWatcher/">用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/10/GitHotfixRevertFlow/">Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/10/ErrorContentDecoding/">ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/09/Nuxt3ApiLoggerHandler/">在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/08/RateLimitInplementation/">使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/07/LazyCacheIssue/">LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+
+  <script src='https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({startOnLoad: true, theme: 'default'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>
