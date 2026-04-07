@@ -110,11 +110,161 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/04/01/LazyMemoryCacheRedisTwoTier/" data-id="cmno1mv4q000luhzf2pkjchxn" data-title="雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/04/01/LazyMemoryCacheRedisTwoTier/" data-id="cmno2fdpw000pnxzfal67aoyt" data-title="雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede" class="article-share-link">Share</a>
       
       
       
   <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-ChainOfResponsibilityGeneric" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/30/ChainOfResponsibilityGeneric/" class="article-date">
+  <time class="dt-published" datetime="2026-03-30T16:00:00.000Z" itemprop="datePublished">2026-03-31</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/03/30/ChainOfResponsibilityGeneric/">責任鏈模式（Chain of Responsibility）泛型實作 — 遊戲驗證與頁面權限的真實案例</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="什麼是責任鏈模式？"><a href="#什麼是責任鏈模式？" class="headerlink" title="什麼是責任鏈模式？"></a>什麼是責任鏈模式？</h2><p>當一個請求需要經過多個獨立的檢查／處理步驟，且每個步驟都可以決定「繼續往下傳」或「在這裡中止」，就是責任鏈（Chain of Responsibility）的使用場景。</p>
+<h3 id="實務上：一連串檢查，拆開再組合"><a href="#實務上：一連串檢查，拆開再組合" class="headerlink" title="實務上：一連串檢查，拆開再組合"></a>實務上：一連串檢查，拆開再組合</h3><p>在後端我們很常把 <strong>同一條業務路徑</strong> 上的條件拆成 <strong>多個彼此獨立的檢查</strong>，而不是寫成一大段 <code>if/else</code> 攪在一起。例如提款或資金相關流程可能依序要確認：</p>
+<ul>
+<li><strong>帳號狀態</strong>（凍結、風控、KYC 等）</li>
+<li><strong>存款／餘額門檻</strong>（是否達最低可提、餘額是否足夠）</li>
+<li><strong>是否已有進行中的提款設定</strong>（避免重複提交、與進行中單據衝突）</li>
+</ul>
+<p>每一項都是 <strong>不同的業務規則、不同的失敗原因與錯誤訊息</strong>。用責任鏈時，<strong>一個檢查一個 Handler</strong>：職責單一、單元測試好寫、命名也清楚。更重要的是，<strong>同一個 Handler 可以在別的流程再組一條鏈</strong>——例如「帳號狀態檢查」同時出現在提款、轉帳、兌換；<strong>順序與要不要掛某一關，只在組裝鏈的地方決定</strong>，不必複製貼上整段邏輯。</p>
+<p>下列為 <strong>示意</strong>（實際類別名與順序依專案而定），重點是 <strong>每一關可獨立抽換、也可在別的情境重用</strong>：</p>
+<pre class="mermaid">flowchart TD
+    W[資金流程請求示意] --> ACC[帳號狀態檢查]
+    ACC -->|pass| BAL[存款餘額或門檻檢查]
+    BAL -->|pass| PEND[進行中提款設定檢查]
+    PEND -->|pass| DONE[後續業務邏輯]
+    ACC -->|fail| X1[中止並回傳原因]
+    BAL -->|fail| X2[中止並回傳原因]
+    PEND -->|fail| X3[中止並回傳原因]</pre>
+        
+          <p class="article-more-link">
+            <a href="/2026/03/30/ChainOfResponsibilityGeneric/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/30/ChainOfResponsibilityGeneric/" data-id="cmno2fdpl0001nxzf76uwheb4" data-title="責任鏈模式（Chain of Responsibility）泛型實作 — 遊戲驗證與頁面權限的真實案例" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Chain-of-Responsibility/" rel="tag">Chain of Responsibility</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GoF/" rel="tag">GoF</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-MfaLoginNewDeviceVerification" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/27/MfaLoginNewDeviceVerification/" class="article-date">
+  <time class="dt-published" datetime="2026-03-27T16:00:00.000Z" itemprop="datePublished">2026-03-28</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/03/27/MfaLoginNewDeviceVerification/">Login MFA — 新裝置驗證架構設計 </a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>傳統登入只驗證帳號 + 密碼，一旦帳密外洩即全面失守。本需求在既有登入流程中加入第二層驗證（MFA）：在使用者完成密碼驗證後、正式取得 Passport 之前，須通過以下其中一種驗證：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Push Notification</td>
+<td>向已登入的可信裝置推播，由舊手機批准</td>
+</tr>
+<tr>
+<td>Email OTP</td>
+<td>發送一次性驗證碼到註冊信箱</td>
+</tr>
+<tr>
+<td>TOTP</td>
+<td>使用 Authenticator App（時間型）驗證碼</td>
+</tr>
+</tbody></table>
+<p><strong>驗證優先級</strong>：Push Notification &gt; Email OTP &gt; TOTP（<code>availableMethods[0]</code> 為預設）</p>
+<h2 id="核心設計決策：Passport-在驗證成功後才產生"><a href="#核心設計決策：Passport-在驗證成功後才產生" class="headerlink" title="核心設計決策：Passport 在驗證成功後才產生"></a>核心設計決策：Passport 在驗證成功後才產生</h2><pre class="mermaid">flowchart LR
+    subgraph Legacy["傳統做法 有安全風險"]
+        L1[Login API] --> L2[驗證帳密]
+        L2 --> L3[立即回傳 Passport]
+        L3 --> L4[前端再做 MFA]
+    end
+    subgraph CC["CC1-4638 做法"]
+        C1[Login API] --> C2[驗證帳密]
+        C2 --> C3["returnCode 0018 不含 Passport"]
+        C3 --> C4[MFA 驗證通過]
+        C4 --> C5[產生 Passport]
+        C5 --> C6[PostLogin]
+    end</pre>
+
+<p>這確保未完成 MFA 的使用者無法取得任何有效 Passport。</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/03/27/MfaLoginNewDeviceVerification/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/27/MfaLoginNewDeviceVerification/" data-id="cmno2fdpx000unxzf0lg87pfc" data-title="Login MFA — 新裝置驗證架構設計 " class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
 
     </footer>
   </div>
@@ -166,7 +316,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/" data-id="cmno1mv4f0004uhzf2uok6ifh" data-title="自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/" data-id="cmno2fdpo0005nxzffzagaxi6" data-title="自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理" class="article-share-link">Share</a>
       
       
       
@@ -216,7 +366,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/" data-id="cmno1mv4z001juhzffpybdc4j" data-title="TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/" data-id="cmno2fdq4001rnxzf924h22mf" data-title="TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制" class="article-share-link">Share</a>
       
       
       
@@ -266,7 +416,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/12/VueBroadCastImplement/" data-id="cmno1mv50001luhzf6zm46my7" data-title="Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VueBroadCastImplement/" data-id="cmno2fdq3001pnxzfatvybpo0" data-title="Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計" class="article-share-link">Share</a>
       
       
       
@@ -317,7 +467,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/12/VuePartialView/" data-id="cmno1mv62007ouhzf17872b9f" data-title="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VuePartialView/" data-id="cmno2fdqx008enxzfesq2eudl" data-title="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer" class="article-share-link">Share</a>
       
       
       
@@ -367,7 +517,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmno1mv4g0005uhzf8gh8fc33" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmno2fdpt000gnxzfett8hou1" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控" class="article-share-link">Share</a>
       
       
       
@@ -417,7 +567,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmno1mv4l000auhzff6se1ci5" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmno2fdpq0009nxzf1lktbu69" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
       
       
       
@@ -532,251 +682,11 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/ErrorContentDecoding/" data-id="cmno1mv4h0006uhzf5wr6atyl" data-title="ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/10/ErrorContentDecoding/" data-id="cmno2fdpr000anxzfd5mq5imv" data-title="ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄" class="article-share-link">Share</a>
       
       
       
   <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-Nuxt3ApiLoggerHandler" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2026/03/09/Nuxt3ApiLoggerHandler/" class="article-date">
-  <time class="dt-published" datetime="2026-03-09T16:00:00.000Z" itemprop="datePublished">2026-03-10</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2026/03/09/Nuxt3ApiLoggerHandler/">在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在開發後台管理系統時，我們經常會遇到一個問題：每個 API Handler 都需要處理<strong>認證驗證</strong>、<strong>日誌記錄</strong>、<strong>錯誤捕獲</strong>等重複性邏輯。如果在每個檔案中都寫一遍，不僅冗長，還容易遺漏。<br>本文將介紹如何在 Nuxt 3 的 Server API 中，利用 <strong>Higher-Order Function (高階函式)</strong> 的概念，打造一個統一的 <code>defineLogAndAuthHandler</code>，讓所有 API 自動擁有以下功能：</p>
-<ul>
-<li>✅ Session 認證與過期檢查</li>
-<li>✅ 請求&#x2F;回應日誌記錄</li>
-<li>✅ 敏感資料自動遮蔽</li>
-<li>✅ 效能監控 (API 執行時間)</li>
-<li>✅ 統一錯誤處理與格式化</li>
-</ul>
-<h2 id="核心概念：Higher-Order-Function"><a href="#核心概念：Higher-Order-Function" class="headerlink" title="核心概念：Higher-Order Function"></a>核心概念：Higher-Order Function</h2><p>在 JavaScript&#x2F;TypeScript 中，<strong>高階函式 (HOF)</strong> 是指「接收函式作為參數」或「回傳函式」的函式。我們的設計正是利用這個概念：</p>
-<pre><code class="language-typescript">export const defineLogAndAuthHandler = &lt;T extends EventHandlerRequest&gt;(
-  handler: EventHandler&lt;T&gt;
-): EventHandler&lt;T&gt; =&gt; defineEventHandler&lt;T&gt;(async (event) =&gt; &#123;
-  // 在這裡加入認證、日誌等邏輯
-  const response = await handler(event); // 執行原本的 Handler
-  // 在這裡加入回應處理邏輯
-  return response;
-&#125;);
-這就像是在原本的 API Handler 外面「包一層糖衣」，讓它自動具備額外的能力。
-
-功能拆解
-1. Session 認證與過期檢查
-// 檢查是否已認證
-if (!event.context?.session?.isAuthenticated &amp;&amp; !isPublicRoute) &#123;
-  return createError(&#123;
-    statusCode: 401,
-    statusText: &#39;Session Expired&#39;,
-  &#125;);
-&#125;
-// 檢查 Session 是否已過期
-const currentTime = new Date().getTime();
-const lastLoginTimestamp = event.context?.session?.lastLoginTime;
-const maxTimeDiff = (currentTime - lastLoginTimestamp) / 1000;
-if (maxTimeDiff &gt;= parseInt(maxExpiryInSeconds, 10)) &#123;
-  // 清除 Session 並回傳 401
-  event.context.session.isAuthenticated = false;
-  return createError(&#123; statusCode: 401, statusText: &#39;Session Expired&#39; &#125;);
-&#125;
-設計重點：
-
-白名單機制：登入、登出等 API 不需要認證
-雙重檢查：不只檢查是否登入，還檢查 Session 是否超時
-2. 請求日誌記錄與敏感資料遮蔽
-const ignoreLogParams = [&#39;password&#39;, &#39;newPassword&#39;, &#39;oldPassword&#39;];
-// 遮蔽敏感欄位
-if (typeof body === &#39;object&#39;) &#123;
-  const filterBody = Object.assign(&#123;&#125;, body);
-  for (const key in filterBody) &#123;
-    if (ignoreLogParams.includes(key)) &#123;
-      filterBody[key] = &#39;***mask***&#39;;
-    &#125;
-  &#125;
-  logger.log(&#39;info&#39;, `[POST] $&#123;JSON.stringify(filterBody)&#125;`);
-&#125;
-設計重點：
-
-自動遮蔽密碼等敏感欄位，避免日誌外洩
-支援 GET/POST/PUT/DELETE 不同方法的日誌格式
-3. 效能監控
-const startTime = Date.now();
-const response = await handler(event);
-const endTime = Date.now();
-const duration = endTime - startTime;
-logger.performance.log(&#39;info&#39;, `[$&#123;pathWithoutQueryString&#125;] [$&#123;duration&#125;ms]`);
-設計重點：
-
-記錄每個 API 的執行時間
-方便後續分析效能瓶頸
-4. 回應日誌與大型回應處理
-const byPassLogUrls = [&#39;/api/general/settings&#39;, &#39;/api/promotion/promotions&#39;];
-function truncateString(body: string) &#123;
-  const resultSizeLimit = 1024;
-  const stringSize = Buffer.byteLength(body);
-  
-  if (stringSize &gt; resultSizeLimit) &#123;
-    return `Result size - $&#123;stringSize&#125; bytes`;
-  &#125;
-  return body;
-&#125;
-設計重點：
-
-大型回應只記錄大小，避免日誌檔案爆炸
-特定 API 可跳過輸出日誌（如設定檔、大量資料查詢）
-5. 統一錯誤處理
-catch (error: any) &#123;
-  console.error(&#39;API Error:&#39;, error);
-  
-  logger.error.log(&#39;error&#39;, `URL: $&#123;event.path&#125;, Message: $&#123;error.message&#125;`);
-  
-  return createError(&#123;
-    statusCode: error.statusCode || 500,
-    statusMessage: error.statusMessage || &#39;Internal Server Error&#39;,
-    message: error.message || &#39;An unexpected error occurred&#39;,
-  &#125;);
-&#125;
-設計重點：
-
-所有未捕獲的異常都會被統一處理
-錯誤資訊會被記錄到日誌中，方便追蹤
-使用方式
-使用這個封裝後，原本的 API Handler 變得非常簡潔：
-
-// server/api/member/summary.get.ts
-import &#123; GetMemberSummary &#125; from &#39;@/bospi/GetMemberSummary&#39;;
-export default defineLogAndAuthHandler(async (event) =&gt; &#123;
-  const query = getQuery(event);
-  const api = new GetMemberSummary();
-  const response = await api.getMemberSummary(query);
-  return response.data;
-&#125;);
-只需要專注在業務邏輯，認證、日誌、錯誤處理全部自動搞定！
-
-架構圖
-┌─────────────────────────────────────────────────────────┐
-│                    Frontend (Browser)                    │
-└─────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│              defineLogAndAuthHandler (Wrapper)           │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │ 1. Session 認證檢查                                  ││
-│  │ 2. 請求日誌記錄 (含敏感資料遮蔽)                      ││
-│  │ 3. 效能計時開始                                      ││
-│  └─────────────────────────────────────────────────────┘│
-│                          │                               │
-│                          ▼                               │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │           實際的 API Handler (業務邏輯)              ││
-│  └─────────────────────────────────────────────────────┘│
-│                          │                               │
-│                          ▼                               │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │ 4. 效能計時結束                                      ││
-│  │ 5. 回應日誌記錄                                      ││
-│  │ 6. 錯誤捕獲與格式化                                  ││
-│  └─────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Backend SPI (ASP.NET)                 │
-└─────────────────────────────────────────────────────────┘
-
-
-這個設計模式其實就是 AOP (Aspect-Oriented Programming) 的體現——將「橫切關注點」（如日誌、認證、錯誤處理）從業務邏輯中抽離出來。
-</code></pre>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmno1mv4s000puhzf05gwah5z" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-RateLimitInplementation" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2026/03/08/RateLimitInplementation/" class="article-date">
-  <time class="dt-published" datetime="2026-03-08T16:00:00.000Z" itemprop="datePublished">2026-03-09</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2026/03/08/RateLimitInplementation/">使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在面向全球用戶的平台系統中，API 被濫用幾乎是必然會遇到的問題——無論是攻擊者暴力嘗試登入、<br>爬蟲高頻抓取資料，還是用戶無意間重複提交表單。</p>
-<p>本文分享一個我們實際在生產環境中使用的 <strong>Redis-based API Rate Limiting 架構</strong>，<br>涵蓋兩種策略：<strong>滑動視窗（Sliding Window）</strong> 和 <strong>滑動視窗 + 封鎖鎖定（Sliding Window + Block Lock）</strong>，<br>並支援以 Session ID、IP、Member Code 等多種身份維度進行限流。</p>
-        
-          <p class="article-more-link">
-            <a href="/2026/03/08/RateLimitInplementation/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/08/RateLimitInplementation/" data-id="cmno1mv4w0015uhzfd5lk9gvx" data-title="使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li></ul>
 
     </footer>
   </div>
@@ -811,7 +721,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
   <div class="widget-wrap">
     <h3 class="widget-title">標籤</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Chain-of-Responsibility/" rel="tag">Chain of Responsibility</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GoF/" rel="tag">GoF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
     </div>
   </div>
 
@@ -835,6 +745,14 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
         
           <li>
             <a href="/2026/04/01/LazyMemoryCacheRedisTwoTier/">雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/30/ChainOfResponsibilityGeneric/">責任鏈模式（Chain of Responsibility）泛型實作 — 遊戲驗證與頁面權限的真實案例</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/27/MfaLoginNewDeviceVerification/">Login MFA — 新裝置驗證架構設計 </a>
           </li>
         
           <li>
@@ -863,14 +781,6 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
         
           <li>
             <a href="/2026/03/10/ErrorContentDecoding/">ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄</a>
-          </li>
-        
-          <li>
-            <a href="/2026/03/09/Nuxt3ApiLoggerHandler/">在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</a>
-          </li>
-        
-          <li>
-            <a href="/2026/03/08/RateLimitInplementation/">使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制</a>
           </li>
         
       </ul>
