@@ -74,6 +74,56 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-LazyMemoryCacheRedisTwoTier" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/04/01/LazyMemoryCacheRedisTwoTier/" class="article-date">
+  <time class="dt-published" datetime="2026-04-01T16:00:00.000Z" itemprop="datePublished">2026-04-02</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/04/01/LazyMemoryCacheRedisTwoTier/">雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="為什麼需要雙層快取？"><a href="#為什麼需要雙層快取？" class="headerlink" title="為什麼需要雙層快取？"></a>為什麼需要雙層快取？</h2><h3 id="使用場景"><a href="#使用場景" class="headerlink" title="使用場景"></a>使用場景</h3><p>典型情境是 <strong>多台 App Server 水平擴展</strong>，讀取路徑上會先查本機記憶體、再查 <strong>共用的 Redis（L2）</strong> 當成跨機器的快取來源。業務資料可能在後端更新後寫回 Redis，或依 TTL 在 Redis 上過期；各機的 L1 也會依自己的 TTL 失效。只要出現「<strong>同一時間很多請求都認為快取不可用</strong>」——例如熱點 key 的 TTL 一起到期、部署後快取清空、或 Redis 短暫不可用後恢復——<strong>每一台機、每一條執行緒若都各自回源</strong>，後端與 Redis 會在瞬間承受 <strong>N 台 × 每機併發</strong> 的壓力。</p>
+<p>這套 <strong>L1（LazyCache）+ L2（Redis）</strong> 的組合，目的就是在這種 <strong>多機共享快取、又需要週期或事件驅動更新</strong> 的架構下，把「miss 之後誰負責載入」收斂成 <strong>單機內合併請求</strong>，必要時再在 L2 層用分散式鎖（例如 RedLock，見 CacheLayerManager）避免多機同時把同一個 key 打穿到資料庫。<strong>它不是取代「資料在業務上如何同步」的設計</strong>，而是降低 <strong>快取重建瞬間</strong> 的並發災難。</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/04/01/LazyMemoryCacheRedisTwoTier/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/04/01/LazyMemoryCacheRedisTwoTier/" data-id="cmno1mv4q000luhzf2pkjchxn" data-title="雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-ContentManagementSystem" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2026/03/16/ContentManagementSystem/" class="article-date">
@@ -116,7 +166,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/" data-id="cmmucyr3n0001u9219fit2crh" data-title="自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/" data-id="cmno1mv4f0004uhzf2uok6ifh" data-title="自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理" class="article-share-link">Share</a>
       
       
       
@@ -166,7 +216,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/" data-id="cmmucyr47001hu921caxkc64o" data-title="TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/" data-id="cmno1mv4z001juhzffpybdc4j" data-title="TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制" class="article-share-link">Share</a>
       
       
       
@@ -216,7 +266,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/12/VueBroadCastImplement/" data-id="cmmucyr46001eu9217i3d17na" data-title="Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VueBroadCastImplement/" data-id="cmno1mv50001luhzf6zm46my7" data-title="Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計" class="article-share-link">Share</a>
       
       
       
@@ -267,7 +317,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/12/VuePartialView/" data-id="cmmucyr54006zu92187rgf1dy" data-title="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VuePartialView/" data-id="cmno1mv62007ouhzf17872b9f" data-title="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer" class="article-share-link">Share</a>
       
       
       
@@ -317,7 +367,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmmucyr3r0005u9218n6q14yw" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmno1mv4g0005uhzf8gh8fc33" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — Game Launch 失敗率與 Error Log 成長監控" class="article-share-link">Share</a>
       
       
       
@@ -367,7 +417,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmmucyr3v000au9216qxfdku3" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmno1mv4l000auhzff6se1ci5" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
       
       
       
@@ -482,7 +532,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/ErrorContentDecoding/" data-id="cmmucyr3s0006u9210ftnde00" data-title="ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/10/ErrorContentDecoding/" data-id="cmno1mv4h0006uhzf5wr6atyl" data-title="ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄" class="article-share-link">Share</a>
       
       
       
@@ -672,7 +722,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmmucyr3z000lu92152j36818" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmno1mv4s000puhzf05gwah5z" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
       
       
       
@@ -722,61 +772,11 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/08/RateLimitInplementation/" data-id="cmmucyr430012u9218rpn54ue" data-title="使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/08/RateLimitInplementation/" data-id="cmno1mv4w0015uhzfd5lk9gvx" data-title="使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制" class="article-share-link">Share</a>
       
       
       
   <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-LazyCacheIssue" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2026/03/07/LazyCacheIssue/" class="article-date">
-  <time class="dt-published" datetime="2026-03-07T16:00:00.000Z" itemprop="datePublished">2026-03-08</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/Troubleshooting/">Troubleshooting</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2026/03/07/LazyCacheIssue/">LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>這是一個只在正式環境才暴露的問題。<br>我們使用 LazyCache + Redis 搭建了一個兩層快取架構：<br>MemoryCache 作為 L1 熱快取，Redis 作為 L2 資料來源。<br>在 Dev、QAT、UAT 環境一切正常，<br>但上了 Production 後發現 <strong>Redis 資料更新了，應用卻永遠拿到舊值</strong>。</p>
-<p>原因？<strong>LazyCache 的 <code>GetOrAdd</code> 直接傳入 <code>TimeSpan</code>，預設行為是 <code>SlidingExpiration</code></strong>。</p>
-        
-          <p class="article-more-link">
-            <a href="/2026/03/07/LazyCacheIssue/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/07/LazyCacheIssue/" data-id="cmmucyr3x000gu921e52x0z5s" data-title="LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li></ul>
 
     </footer>
   </div>
@@ -821,7 +821,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
   <div class="widget-wrap">
     <h3 class="widget-title">彙整</h3>
     <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
     </div>
   </div>
 
@@ -832,6 +832,10 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
     <h3 class="widget-title">最新文章</h3>
     <div class="widget">
       <ul>
+        
+          <li>
+            <a href="/2026/04/01/LazyMemoryCacheRedisTwoTier/">雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede</a>
+          </li>
         
           <li>
             <a href="/2026/03/16/ContentManagementSystem/">自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理</a>
@@ -867,10 +871,6 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
         
           <li>
             <a href="/2026/03/08/RateLimitInplementation/">使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制</a>
-          </li>
-        
-          <li>
-            <a href="/2026/03/07/LazyCacheIssue/">LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期</a>
           </li>
         
       </ul>
