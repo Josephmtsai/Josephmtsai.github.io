@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-04LWQBG1HE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-04LWQBG1HE');
+</script>
+<!-- End Google Analytics -->
+
+  
+  <title>CC1-2443 Responsible Gambling Remap — 自助解除機制與多層權限守衛設計 | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="前言本文記錄 CC1-2443 票號的 Responsible Gambling（RG）功能重構，核心目的是：  讓用戶可以自助解除 TimeOut 與 SelfExclusion，不再需要透過客服介入。  改版後系統在 RG 狀態到期時，主動在頁面讓用戶決定是否延長或移除限制；同時全面收緊了頁面可見性與帳號功能的權限控管，並在前後端各層都加入了守衛機制。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="CC1-2443 Responsible Gambling Remap — 自助解除機制與多層權限守衛設計">
+<meta property="og:url" content="https://josephmtsai.github.io/2023/10/04/ResponsibleGamblingRemap/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="前言本文記錄 CC1-2443 票號的 Responsible Gambling（RG）功能重構，核心目的是：  讓用戶可以自助解除 TimeOut 與 SelfExclusion，不再需要透過客服介入。  改版後系統在 RG 狀態到期時，主動在頁面讓用戶決定是否延長或移除限制；同時全面收緊了頁面可見性與帳號功能的權限控管，並在前後端各層都加入了守衛機制。">
+<meta property="og:locale" content="zh_TW">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/10/04/ResponsibleGamblingRemap/rg-01.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/10/04/ResponsibleGamblingRemap/rg-02.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/10/04/ResponsibleGamblingRemap/rg-03.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/10/04/ResponsibleGamblingRemap/rg-04.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/10/04/ResponsibleGamblingRemap/rg-05.png">
+<meta property="article:published_time" content="2023-10-04T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-04-15T08:29:49.185Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Architecture">
+<meta property="article:tag" content="Redis">
+<meta property="article:tag" content="Responsible Gambling">
+<meta property="article:tag" content="ActionFilter">
+<meta property="article:tag" content="Vue Router">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://josephmtsai.github.io/2023/10/04/ResponsibleGamblingRemap/rg-01.png">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-ResponsibleGamblingRemap" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2023/10/04/ResponsibleGamblingRemap/" class="article-date">
+  <time class="dt-published" datetime="2023-10-04T16:00:00.000Z" itemprop="datePublished">2023-10-05</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      CC1-2443 Responsible Gambling Remap — 自助解除機制與多層權限守衛設計
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>本文記錄 CC1-2443 票號的 Responsible Gambling（RG）功能重構，核心目的是：</p>
+<blockquote>
+<p><strong>讓用戶可以自助解除 TimeOut 與 SelfExclusion，不再需要透過客服介入。</strong></p>
+</blockquote>
+<p>改版後系統在 RG 狀態到期時，主動在頁面讓用戶決定是否延長或移除限制；同時全面收緊了頁面可見性與帳號功能的權限控管，並在前後端各層都加入了守衛機制。</p>
+<span id="more"></span>
+
+<hr>
+<h2 id="Responsible-Gambling-狀態說明"><a href="#Responsible-Gambling-狀態說明" class="headerlink" title="Responsible Gambling 狀態說明"></a>Responsible Gambling 狀態說明</h2><p>系統共有五種 RG 狀態，互斥關係與觸發方式各不相同：</p>
+<table>
+<thead>
+<tr>
+<th>狀態</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Family Exclusion &#x2F; Third Party Exclusion</strong></td>
+<td>後台設定。設定後用戶會被踢出，無法再登入</td>
+</tr>
+<tr>
+<td><strong>TimeOut</strong></td>
+<td>與 SelfExclusion、Permanent Exclusion <strong>互斥</strong></td>
+</tr>
+<tr>
+<td><strong>SelfExclusion</strong></td>
+<td>與 TimeOut、Permanent Exclusion <strong>互斥</strong>；設定完成後有額外功能限制</td>
+</tr>
+<tr>
+<td><strong>Permanent Exclusion</strong></td>
+<td>與 TimeOut、SelfExclusion <strong>互斥</strong>。Family Exclusion + SelfExclusion 累計 3 次會自動轉成 Permanent，或設定 SelfExclusion 時選擇 Permanent；登出後無法再登入</td>
+</tr>
+<tr>
+<td><strong>Admin Exclusion</strong></td>
+<td>不屬於標準 RG 流程，用於管理員對用戶做功能限制（如禁止遊戲），與 RG 邏輯分離</td>
+</tr>
+</tbody></table>
+<pre class="mermaid">flowchart TD
+    RG["Responsible Gambling 狀態"]
+    RG --> FE["Family / Third Party Exclusion<br/>後台設定，直接踢出"]
+    RG --> TO["TimeOut<br/>用戶自設，可自助解除"]
+    RG --> SE["SelfExclusion<br/>用戶自設，功能限制最多"]
+    RG --> PE["Permanent Exclusion<br/>最嚴格，無法自行解除"]
+    RG --> AE["Admin Exclusion<br/>管理員設定，功能限制"]
+
+    TO <-->|"互斥"| SE
+    SE -->|"累計 3 次 + Family"| PE
+    TO <-->|"互斥"| PE</pre>
+
+<hr>
+<h2 id="SelfExclusion-改版比較"><a href="#SelfExclusion-改版比較" class="headerlink" title="SelfExclusion 改版比較"></a>SelfExclusion 改版比較</h2><h3 id="行為對照表"><a href="#行為對照表" class="headerlink" title="行為對照表"></a>行為對照表</h3><table>
+<thead>
+<tr>
+<th>操作</th>
+<th>改版前（Now）</th>
+<th>改版後（CC1-2443）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Set SelfExclusion</strong></td>
+<td>設定完成後其他平台會被踢掉</td>
+<td>設定完成後其他平台會被踢掉（不變）</td>
+</tr>
+<tr>
+<td><strong>Banking（存款）</strong></td>
+<td>不允許存款</td>
+<td>不允許存款（不變）</td>
+</tr>
+<tr>
+<td><strong>Login</strong></td>
+<td>登出後不能再登入，時間到只能請<strong>客服</strong>解除</td>
+<td>時間到會在 Page 讓 <strong>Member 自己決定</strong> extend 或移除（24 hrs 後由 EOD Job 自動移除）</td>
+</tr>
+<tr>
+<td><strong>Game</strong></td>
+<td>不允許玩遊戲，但還是看得到遊戲</td>
+<td><strong>看不到遊戲</strong>，也不能玩</td>
+</tr>
+<tr>
+<td><strong>Statement</strong></td>
+<td>可看到 All product，Playcheck 可能有問題</td>
+<td>可看到 All product，Playcheck <strong>無法查看</strong></td>
+</tr>
+<tr>
+<td><strong>Other View Page</strong></td>
+<td>看得到，但部分功能有問題（未定義）</td>
+<td>依 Page Visibility &#x2F; Account Function Permission 規範</td>
+</tr>
+</tbody></table>
+<h3 id="SelfExclusion-設計流程"><a href="#SelfExclusion-設計流程" class="headerlink" title="SelfExclusion 設計流程"></a>SelfExclusion 設計流程</h3><img src="/2023/10/04/ResponsibleGamblingRemap/rg-01.png" class="" title="SelfExclusion Flow">
+
+<p>流程重點：</p>
+<ul>
+<li>進入 SelfExclusion Page 時先做 <strong>Status Check</strong></li>
+<li>若已 <strong>Expired</strong> → 自動移除，顯示設定訊息，用戶可重新設定</li>
+<li>若 <strong>Not Expired</strong> → 維持限制</li>
+<li>選擇 <strong>Permanent</strong> → 顯示提款或登出訊息（不可自助解除）</li>
+<li>選擇其他期間 → 顯示設定訊息，<strong>EOD Job 在設定 24 小時後自動移除</strong></li>
+</ul>
+<hr>
+<h2 id="TimeOut-改版比較"><a href="#TimeOut-改版比較" class="headerlink" title="TimeOut 改版比較"></a>TimeOut 改版比較</h2><h3 id="行為對照表-1"><a href="#行為對照表-1" class="headerlink" title="行為對照表"></a>行為對照表</h3><table>
+<thead>
+<tr>
+<th>操作</th>
+<th>改版前（Now）</th>
+<th>改版後（CC1-2443）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Set TimeOut</strong></td>
+<td>設定完成後<strong>立馬</strong>所有平台都被登出</td>
+<td>設定完成後其他平台會被踢掉</td>
+</tr>
+<tr>
+<td><strong>Banking（存款）</strong></td>
+<td>N&#x2F;A（無限制）</td>
+<td><strong>不允許存款</strong></td>
+</tr>
+<tr>
+<td><strong>Login</strong></td>
+<td>登出後不能再登入，時間到只能請<strong>客服</strong>解除</td>
+<td>時間到在 TimeOut Page 讓 Member <strong>手動移除</strong>；Auto 模式則由 EOD Job 自動移除</td>
+</tr>
+<tr>
+<td><strong>Game</strong></td>
+<td>N&#x2F;A（無限制）</td>
+<td><strong>看不到遊戲</strong>，也不能玩</td>
+</tr>
+<tr>
+<td><strong>Statement</strong></td>
+<td>N&#x2F;A（無限制）</td>
+<td>可看到 All product，Playcheck <strong>無法查看</strong></td>
+</tr>
+<tr>
+<td><strong>Other View Page</strong></td>
+<td>N&#x2F;A（無限制）</td>
+<td>依 Page Visibility &#x2F; Account Function Permission 規範</td>
+</tr>
+</tbody></table>
+<h3 id="TimeOut-設計流程"><a href="#TimeOut-設計流程" class="headerlink" title="TimeOut 設計流程"></a>TimeOut 設計流程</h3><img src="/2023/10/04/ResponsibleGamblingRemap/rg-02.png" class="" title="TimeOut Flow">
+
+<p>流程重點：</p>
+<ul>
+<li>進入 TimeOut Page 時做 <strong>Status Check</strong></li>
+<li>若 <strong>Expired 或 Manual Remove</strong> → 移除 TimeOut</li>
+<li>若 <strong>Not Expired</strong> → 維持限制</li>
+<li>設定 TimeOut 時選擇移除方式：<ul>
+<li><strong>Manual</strong>：Member 自行在到期後手動解除</li>
+<li><strong>Auto</strong>：EOD Job 在到期時自動移除</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="Mobile-App-過渡期行為"><a href="#Mobile-App-過渡期行為" class="headerlink" title="Mobile App 過渡期行為"></a>Mobile App 過渡期行為</h2><blockquote>
+<p><strong>適用情境</strong>：後端已部署 CC1-2443，但 App 尚未發版，新舊 App 並存約一週的過渡期。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>功能</th>
+<th>舊 App（約 1 週後過期）</th>
+<th>新 App（CC1-2443）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Login</strong></td>
+<td>不允許 TimeOut &#x2F; SelfExclusion 用戶登入</td>
+<td><strong>允許</strong> TimeOut &#x2F; SelfExclusion 用戶登入</td>
+</tr>
+<tr>
+<td><strong>ForgotAccount</strong></td>
+<td>允許 TimeOut &#x2F; SelfExclusion</td>
+<td>允許 TimeOut &#x2F; SelfExclusion（不變）</td>
+</tr>
+<tr>
+<td><strong>LostAccessToEmail</strong></td>
+<td>允許 TimeOut &#x2F; SelfExclusion</td>
+<td>允許 TimeOut &#x2F; SelfExclusion（不變）</td>
+</tr>
+<tr>
+<td><strong>Prod Tab</strong></td>
+<td>設定 TimeOut&#x2F;SelfExclusion 導頁至 Limit-Access Page</td>
+<td><strong>看不到 Tab</strong></td>
+</tr>
+<tr>
+<td><strong>Notification</strong></td>
+<td>看不到 Promotions &#x2F; NewsAndOffer &#x2F; Announcement</td>
+<td>看不到 Promotions &#x2F; NewsAndOffer &#x2F; Announcement（不變）</td>
+</tr>
+<tr>
+<td><strong>Statement</strong></td>
+<td>可看 All product，Playcheck 無法查看，SBK Statement 可見</td>
+<td>相同（不變）</td>
+</tr>
+<tr>
+<td><strong>Rules 等 Webview Page</strong></td>
+<td>設定 TimeOut&#x2F;SelfExclusion 導頁至 Limit-Access Page</td>
+<td>看不到受限頁面</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="Breaking-Change-—-Redis-Cache-欄位異動"><a href="#Breaking-Change-—-Redis-Cache-欄位異動" class="headerlink" title="Breaking Change — Redis Cache 欄位異動"></a>Breaking Change — Redis Cache 欄位異動</h2><p>此次改版對 Trading Cache 的 Redis 結構有 Breaking Change，新增多個 RG 相關欄位：</p>
+<img src="/2023/10/04/ResponsibleGamblingRemap/rg-03.png" class="" title="Breaking Change：Redis Trading Cache 欄位對照">
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th>改版前（Exist fields）</th>
+<th>改版後（New Fields）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Trading Cache</strong></td>
+<td><code>SelfExclusion</code>、<code>IsExcluded</code>、<code>IsAdminExclusion</code>、<code>UpliftDate</code>、<code>ExclusionPeriod</code></td>
+<td>新增：<code>IsTimeOut</code>、<code>TimeOutMethod</code>、<code>ExclusionExpiredDate</code>、<code>SelfExclusionEndDate</code>、<code>ExclusionAppliedDate</code></td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>注意</strong>：<code>IsExcluded</code> 原本包含了 <code>IsTimeOut</code> 的語義（此欄位代表不允許下注），CC1-2443 後兩者正式分離。</p>
+</blockquote>
+<hr>
+<h2 id="Permission-守衛架構"><a href="#Permission-守衛架構" class="headerlink" title="Permission 守衛架構"></a>Permission 守衛架構</h2><p>CC1-2443 將 RG 權限檢查分成三個層次，確保前後端都有完整防護：</p>
+<pre class="mermaid">flowchart TD
+    User["用戶請求"]
+    User --> CS["Client Side<br/>Vue Router"]
+    User --> SS1["Server Side<br/>Request 進入"]
+
+    CS --> HRG["HandleRGCheck<br/>依 Route meta 決定是否允許"]
+
+    SS1 --> PG["PageGuardActionFilter<br/>依 x-destination Header 決定"]
+    SS1 --> RGC["ResponsibleGamblingCheckerActionFilter<br/>依 Action 上設定決定"]</pre>
+
+<h3 id="Permission-Check-Point-總覽"><a href="#Permission-Check-Point-總覽" class="headerlink" title="Permission Check Point 總覽"></a>Permission Check Point 總覽</h3><table>
+<thead>
+<tr>
+<th>檢查點</th>
+<th>層次</th>
+<th>Filter &#x2F; Handler</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>HandleRGCheck</strong></td>
+<td>Client Side</td>
+<td>Vue Router Guard</td>
+<td>依 Routing 的 <code>meta.disAllowRGStatus</code> 決定是否允許進入</td>
+</tr>
+<tr>
+<td><strong>PageGuardActionFilter</strong></td>
+<td>Server Side</td>
+<td>ActionFilter</td>
+<td>依 Header <code>x-destination</code> 決定是否允許此路徑</td>
+</tr>
+<tr>
+<td><strong>ResponsibleGamblingCheckerActionFilter</strong></td>
+<td>Server Side</td>
+<td>ActionFilter</td>
+<td>依個別 Action 設定決定是否允許</td>
+</tr>
+<tr>
+<td><strong>Health Check</strong></td>
+<td>Server Side</td>
+<td>PageGuardActionFilter</td>
+<td>依當下 Routing 決定是否允許</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="HandleRGCheck（Client-Side）"><a href="#HandleRGCheck（Client-Side）" class="headerlink" title="HandleRGCheck（Client Side）"></a>HandleRGCheck（Client Side）</h2><p>在 Vue Router 的 route 定義中，透過 <code>meta.disAllowRGStatus</code> 陣列宣告哪些 RG 狀態不允許進入此路由：</p>
+<img src="/2023/10/04/ResponsibleGamblingRemap/rg-04.png" class="" title="HandleRGCheck：Vue Router meta 設定範例">
+
+<figure class="highlight js"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">&#123;</span><br><span class="line">  <span class="attr">name</span>: <span class="string">&#x27;Widget Page&#x27;</span>,</span><br><span class="line">  <span class="attr">path</span>: <span class="string">`:prod(...)/widget/:widget(...)`</span>,</span><br><span class="line">  <span class="attr">component</span>: <span class="function">() =&gt;</span> <span class="keyword">import</span>(<span class="string">&#x27;@star/common/pages/product/ProductWidget.vue&#x27;</span>),</span><br><span class="line">  <span class="attr">meta</span>: &#123;</span><br><span class="line">    <span class="attr">disAllowRGStatus</span>: [</span><br><span class="line">      <span class="title class_">RGType</span>.<span class="property">ProductDisable</span>,</span><br><span class="line">      <span class="title class_">RGType</span>.<span class="property">SelfExclusion</span>,</span><br><span class="line">      <span class="title class_">RGType</span>.<span class="property">TimeOut</span>,</span><br><span class="line">      <span class="title class_">RGType</span>.<span class="property">PermanentExclusion</span>,</span><br><span class="line">    ],</span><br><span class="line">    <span class="attr">theme</span>: <span class="title class_">Theme</span>.<span class="property">Dark</span>,</span><br><span class="line">  &#125;,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Guard 執行時遍歷用戶目前的 RG 狀態，只要命中任一 <code>disAllowRGStatus</code> 就阻擋進入，並導向對應的限制頁面。</p>
+<hr>
+<h2 id="PageGuardActionFilter（Server-Side）"><a href="#PageGuardActionFilter（Server-Side）" class="headerlink" title="PageGuardActionFilter（Server Side）"></a>PageGuardActionFilter（Server Side）</h2><p>伺服器端透過 ActionFilter 攔截每一個進入 Controller 的請求，分 Public &#x2F; Private Page 兩套流程：</p>
+<pre class="mermaid">flowchart TD
+    Req["Request 進入"]
+    Req --> IsPublic{"是否為 Public Page？"}
+
+    IsPublic -->|"Public"| PM["檢查 Maintenance"]
+    PM --> ProdCheck["檢查此產品是否允許此用戶存取"]
+    ProdCheck --> RGCheck_P["檢查用戶 RG 狀態<br/>若有不合法狀態 → 封鎖"]
+
+    IsPublic -->|"Private"| PM2["檢查 Maintenance"]
+    PM2 --> Auth["檢查是否已登入<br/>或是否有強制修改密碼 Flag"]
+    Auth --> RGCheck_Pr["檢查用戶 RG 狀態<br/>若有不合法狀態 → 導向 Blocking 路徑"]</pre>
+
+<hr>
+<h2 id="ResponsibleGamblingCheckerActionFilter（Server-Side）"><a href="#ResponsibleGamblingCheckerActionFilter（Server-Side）" class="headerlink" title="ResponsibleGamblingCheckerActionFilter（Server Side）"></a>ResponsibleGamblingCheckerActionFilter（Server Side）</h2><p>此 Filter 是更細粒度的 RG 狀態守衛，可在個別 Controller Action 上設定允許哪些狀態通過。</p>
+<h3 id="實作邏輯（1-2）—-核心程式碼"><a href="#實作邏輯（1-2）—-核心程式碼" class="headerlink" title="實作邏輯（1&#x2F;2）— 核心程式碼"></a>實作邏輯（1&#x2F;2）— 核心程式碼</h3><img src="/2023/10/04/ResponsibleGamblingRemap/rg-05.png" class="" title="ResponsibleGamblingCheckerActionFilter 核心邏輯">
+
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="built_in">bool</span> <span class="title">IsBlockedByRGCheck</span>(<span class="params"></span></span></span><br><span class="line"><span class="params"><span class="function">    ISession tradingSession,</span></span></span><br><span class="line"><span class="params"><span class="function">    RGType[] disallowMyStatus,</span></span></span><br><span class="line"><span class="params"><span class="function">    <span class="built_in">string</span> currentPathWithOutLanguage,</span></span></span><br><span class="line"><span class="params"><span class="function">    <span class="built_in">bool</span> byPassRgChecker</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span> (Session.Trading.IsExcluded)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="comment">// Default: All Status Blocked</span></span><br><span class="line">        <span class="keyword">foreach</span> (<span class="keyword">var</span> status <span class="keyword">in</span> disallowMyStatus)</span><br><span class="line">        &#123;</span><br><span class="line">            <span class="keyword">var</span> isExcluded = GetIsExcludedByStatus(tradingSession, status);</span><br><span class="line">            <span class="keyword">if</span> (isExcluded)</span><br><span class="line">            &#123;</span><br><span class="line">                <span class="keyword">if</span> (byPassRgChecker || IsInBlockListUri(status, currentPathWithOutLanguage))</span><br><span class="line">                    <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="邏輯說明（2-2）—-兩個判斷維度"><a href="#邏輯說明（2-2）—-兩個判斷維度" class="headerlink" title="邏輯說明（2&#x2F;2）— 兩個判斷維度"></a>邏輯說明（2&#x2F;2）— 兩個判斷維度</h3><p>Filter 在 Attribute 層面支援兩種設定方式，讓 Action 層級可以精細控制：</p>
+<table>
+<thead>
+<tr>
+<th>設定方式</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Responsible Gambling Status Check</strong></td>
+<td>直接宣告哪些 RG 狀態不被允許（對應 <code>disAllowRGStatus</code>）</td>
+</tr>
+<tr>
+<td><strong>Path Check（Block All path or By Status）</strong></td>
+<td>依路徑白名單或狀態組合決定是否封鎖，比 Status 更細</td>
+</tr>
+</tbody></table>
+<pre class="mermaid">flowchart TD
+    A["Request 進入 Action"]
+    A --> B{"用戶 IsExcluded？"}
+    B -->|"否"| Pass["允許通過"]
+    B -->|"是"| C["遍歷 disAllowMyStatus"]
+    C --> D{"當前狀態在清單內？"}
+    D -->|"否"| Pass
+    D -->|"是"| E{"byPassRgChecker 或<br/>在 BlockList URI 內？"}
+    E -->|"是"| Block["封鎖，返回 403 / 導頁"]
+    E -->|"否"| Pass</pre>
+
+<hr>
+<h2 id="TODO（後續優化）"><a href="#TODO（後續優化）" class="headerlink" title="TODO（後續優化）"></a>TODO（後續優化）</h2><ul>
+<li><input disabled="" type="checkbox"> <strong>PageGuardActionFilter</strong> 重構為全部使用 Responsible Chain Pattern，讓每個檢查步驟可獨立擴充</li>
+<li><input disabled="" type="checkbox"> 將 RG 相關的 <strong>Cache Data 抽成獨立 Object</strong>，避免散落在不同 Service 層</li>
+</ul>
+<hr>
+<h2 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h2><ul>
+<li><a href="#">CC1-2443 WBS</a></li>
+<li><a target="_blank" rel="noopener" href="https://en.wikipedia.org/wiki/Chain-of-responsibility_pattern">Chain-of-Responsibility Pattern</a></li>
+</ul>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2023/10/04/ResponsibleGamblingRemap/" data-id="cmnzsi4xe001prx0jccc43gyr" data-title="CC1-2443 Responsible Gambling Remap — 自助解除機制與多層權限守衛設計" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2023/10/07/JamWebDebugger/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          JamWebDebugger
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2023/04/12/GitFlow/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">GitFlow</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Debug/">Debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Troubleshooting/">Troubleshooting</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Chain-of-Responsibility/" rel="tag">Chain of Responsibility</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Decorator-Pattern/" rel="tag">Decorator Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Distributed-Lock/" rel="tag">Distributed Lock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Frontend/" rel="tag">Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GoF/" rel="tag">GoF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Manifest/" rel="tag">Manifest</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monolith/" rel="tag">Monolith</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RedLock/" rel="tag">RedLock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/11/">十一月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/04/06/RedLockCacheLayerManager/">RedLock 分散式鎖在 CacheLayerManager 的實作案例</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/06/WatcherUtilAopPerformance/">WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/01/LazyMemoryCacheRedisTwoTier/">雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/31/DebugManifestDynamicLoading/">Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/30/ChainOfResponsibilityGeneric/">責任鏈模式（Chain of Responsibility）泛型實作 — 遊戲驗證與頁面權限的真實案例</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/27/MfaLoginNewDeviceVerification/">Login MFA — 新裝置驗證架構設計 </a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/16/ContentManagementSystem/">自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/15/VueDialogQueue/">TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/12/VuePartialView/">跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+
+  <script src='https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({startOnLoad: true, theme: 'default'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>

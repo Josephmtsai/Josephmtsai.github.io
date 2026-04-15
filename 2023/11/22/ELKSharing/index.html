@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-04LWQBG1HE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-04LWQBG1HE');
+</script>
+<!-- End Google Analytics -->
+
+  
+  <title>ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="前言本文是團隊內部 ELK（Elasticsearch + Logstash + Kibana）使用分享，涵蓋四大主題：  Index 架構介紹 — 各索引的用途與對應情境 Field 介紹 — Elasticsearch Field Type 與 Common Field 說明 Log Pattern 格式 — 各類型 Log 的解析格式 Case Study — 實際問題排查流程示範">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study">
+<meta property="og:url" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="前言本文是團隊內部 ELK（Elasticsearch + Logstash + Kibana）使用分享，涵蓋四大主題：  Index 架構介紹 — 各索引的用途與對應情境 Field 介紹 — Elasticsearch Field Type 與 Common Field 說明 Log Pattern 格式 — 各類型 Log 的解析格式 Case Study — 實際問題排查流程示範">
+<meta property="og:locale" content="zh_TW">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-01.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-02.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-03.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-04.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-05.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-06.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-07.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-08.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-09.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-10.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-11.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-12.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-13.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-14.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-15.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-16.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-17.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-18.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-19.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-20.png">
+<meta property="article:published_time" content="2023-11-22T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-04-15T08:29:49.162Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="ELK">
+<meta property="article:tag" content="Elasticsearch">
+<meta property="article:tag" content="Kibana">
+<meta property="article:tag" content="Monitoring">
+<meta property="article:tag" content="Logging">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://josephmtsai.github.io/2023/11/22/ELKSharing/elk-01.png">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-ELKSharing" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2023/11/22/ELKSharing/" class="article-date">
+  <time class="dt-published" datetime="2023-11-22T16:00:00.000Z" itemprop="datePublished">2023-11-23</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>本文是團隊內部 ELK（Elasticsearch + Logstash + Kibana）使用分享，涵蓋四大主題：</p>
+<ol>
+<li><strong>Index 架構介紹</strong> — 各索引的用途與對應情境</li>
+<li><strong>Field 介紹</strong> — Elasticsearch Field Type 與 Common Field 說明</li>
+<li><strong>Log Pattern 格式</strong> — 各類型 Log 的解析格式</li>
+<li><strong>Case Study</strong> — 實際問題排查流程示範</li>
+</ol>
+<span id="more"></span>
+
+<hr>
+<h2 id="ELK-Index-架構"><a href="#ELK-Index-架構" class="headerlink" title="ELK Index 架構"></a>ELK Index 架構</h2><p>系統中使用的 ELK Index 依功能分為 Application Log、Server Log 與 System Monitor 三大類：</p>
+<h3 id="Application-Log"><a href="#Application-Log" class="headerlink" title="Application Log"></a>Application Log</h3><table>
+<thead>
+<tr>
+<th>Index</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>applications-error-*</code></td>
+<td>JS 或 Application 層的 Error Log</td>
+</tr>
+<tr>
+<td><code>applications-event-*</code></td>
+<td>系統功能、下注等業務事件 Log</td>
+</tr>
+<tr>
+<td><code>applications-message-*</code></td>
+<td>打到 Event Bus（RabbitMQ）的訊息 Log，依 Topic 分類</td>
+</tr>
+<tr>
+<td><code>applications-performance-*</code></td>
+<td>Application 層效能 Log</td>
+</tr>
+<tr>
+<td><code>applications-request-*</code></td>
+<td>Application 層 Request Log</td>
+</tr>
+<tr>
+<td><code>applications-statics-*</code></td>
+<td>已棄用（原用於收集 LiveChat 來源 SHP 資訊）</td>
+</tr>
+<tr>
+<td><code>applications-debug-*</code></td>
+<td>Debug 用途，理論上不應長期存放於 ELK</td>
+</tr>
+</tbody></table>
+<h3 id="Server-Risk-Log"><a href="#Server-Risk-Log" class="headerlink" title="Server &amp; Risk Log"></a>Server &amp; Risk Log</h3><table>
+<thead>
+<tr>
+<th>Index</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>servers-weblog-*</code></td>
+<td>IIS &#x2F; Jetty &#x2F; 其他 WebServer 的存取日誌</td>
+</tr>
+<tr>
+<td><code>risk-agilecheck-*</code></td>
+<td>收集 AgileCheck 呼叫 iOvation 驗證會員合法登入的記錄</td>
+</tr>
+</tbody></table>
+<h3 id="System-Monitor"><a href="#System-Monitor" class="headerlink" title="System Monitor"></a>System Monitor</h3><table>
+<thead>
+<tr>
+<th>Index</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>metricbeat-*</code></td>
+<td>Redis、Disk、Memory、CPU 等系統監控指標</td>
+</tr>
+<tr>
+<td><code>sys-proxysg*</code></td>
+<td>查詢透過 Proxy Server 對外發出的 Request</td>
+</tr>
+</tbody></table>
+<pre class="mermaid">flowchart TD
+    App["Application Layer"]
+    App --> AE["applications-error-*<br/>錯誤日誌"]
+    App --> AEV["applications-event-*<br/>業務事件"]
+    App --> AM["applications-message-*<br/>MQ 訊息"]
+    App --> AP["applications-performance-*<br/>效能日誌"]
+    App --> AR["applications-request-*<br/>請求日誌"]
+
+    Srv["Server Layer"]
+    Srv --> WL["servers-weblog-*<br/>WebServer 日誌"]
+    Srv --> RA["risk-agilecheck-*<br/>iOvation 驗證"]
+
+    Sys["System Monitor"]
+    Sys --> MB["metricbeat-*<br/>Redis/系統指標"]
+    Sys --> PX["sys-proxysg*<br/>Proxy 請求"]</pre>
+
+<h3 id="Kibana-Index-Management"><a href="#Kibana-Index-Management" class="headerlink" title="Kibana Index Management"></a>Kibana Index Management</h3><img src="/2023/11/22/ELKSharing/elk-01.png" class="" title="Kibana Index Management — 各 Index 狀態">
+
+<hr>
+<h2 id="Elasticsearch-Field-Type-介紹"><a href="#Elasticsearch-Field-Type-介紹" class="headerlink" title="Elasticsearch Field Type 介紹"></a>Elasticsearch Field Type 介紹</h2><p>理解 Field Type 對查詢效能與行為有直接影響：</p>
+<table>
+<thead>
+<tr>
+<th>Field Type</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>text</code></td>
+<td>全文搜尋用，<strong>不能</strong>用於 Aggregation，可搜尋片段字元</td>
+</tr>
+<tr>
+<td><code>keyword</code></td>
+<td>精確值搜尋與 Aggregation 用，搜尋<strong>必須完整符合</strong>（預設長度 256）</td>
+</tr>
+<tr>
+<td><code>date</code></td>
+<td>時間戳記欄位</td>
+</tr>
+<tr>
+<td><code>ip</code></td>
+<td>IP 位址格式</td>
+</tr>
+<tr>
+<td><code>geo_point</code></td>
+<td>地圖用，儲存經緯度</td>
+</tr>
+<tr>
+<td><code>long</code></td>
+<td>整數</td>
+</tr>
+<tr>
+<td><code>boolean</code></td>
+<td>布林值</td>
+</tr>
+<tr>
+<td><code>float</code></td>
+<td>浮點數</td>
+</tr>
+<tr>
+<td><code>_index</code></td>
+<td>Document 所屬 Index 名稱（meta field）</td>
+</tr>
+<tr>
+<td><code>_type</code></td>
+<td>Document 類型（meta field，新版已棄用）</td>
+</tr>
+<tr>
+<td><code>_id</code></td>
+<td>Document ID（meta field）</td>
+</tr>
+<tr>
+<td><code>_source</code></td>
+<td>Document 原始 JSON 資料（meta field）</td>
+</tr>
+<tr>
+<td><code>_version</code></td>
+<td>版本號，每次更新會遞增（meta field）</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>重要</strong>：排序（Sort）和聚合（Aggregation）必須使用 <code>keyword</code> 欄位；全文搜尋用 <code>text</code>。同一個欄位通常會同時有 <code>field</code> 和 <code>field.keyword</code> 兩種型態。</p>
+</blockquote>
+<h3 id="Field-Mapping-實際畫面"><a href="#Field-Mapping-實際畫面" class="headerlink" title="Field Mapping 實際畫面"></a>Field Mapping 實際畫面</h3><img src="/2023/11/22/ELKSharing/elk-02.png" class="" title="Kibana Field Mapping — applications-request-* 的欄位清單">
+
+<hr>
+<h2 id="Common-Field-各-Log-共用欄位"><a href="#Common-Field-各-Log-共用欄位" class="headerlink" title="Common Field 各 Log 共用欄位"></a>Common Field 各 Log 共用欄位</h2><p>所有 Index 共享以下基礎欄位，方便跨 Index 交叉查詢：</p>
+<img src="/2023/11/22/ELKSharing/elk-03.png" class="" title="Common Field 總覽（Excel 規格）">
+
+<table>
+<thead>
+<tr>
+<th>欄位</th>
+<th>欄位名稱</th>
+<th>型態</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>module</td>
+<td><code>module</code></td>
+<td>Custom Field</td>
+<td>服務&#x2F;站台名稱，例如 <code>web.star4</code></td>
+</tr>
+<tr>
+<td>tags&#x2F;category</td>
+<td><code>tags</code>&#x2F;<code>category</code></td>
+<td>Custom Field</td>
+<td>功能分類，例如 <code>frontend</code>、<code>integration</code></td>
+</tr>
+<tr>
+<td>processed</td>
+<td><code>processed</code> (loggedOrProcessed)</td>
+<td>bit</td>
+<td>是否已被處理</td>
+</tr>
+<tr>
+<td>logger</td>
+<td><code>logger</code></td>
+<td>Custom Field</td>
+<td>Logger 類別名稱</td>
+</tr>
+<tr>
+<td>category</td>
+<td><code>category</code></td>
+<td>Custom Field</td>
+<td>整合分類（payment backoffice 等）</td>
+</tr>
+<tr>
+<td>host.hostname</td>
+<td><code>host.hostname</code></td>
+<td>Custom Field</td>
+<td>主機名稱</td>
+</tr>
+<tr>
+<td>host.location</td>
+<td><code>host.location</code></td>
+<td>Custom Field</td>
+<td>機房位置</td>
+</tr>
+<tr>
+<td>geo.ip</td>
+<td><code>geo.ip</code></td>
+<td>Custom Field</td>
+<td>地理位置 IP</td>
+</tr>
+<tr>
+<td>geo.longitude</td>
+<td><code>geo.longitude</code></td>
+<td>geo_float</td>
+<td>經緯度</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="Log-Pattern-格式解析"><a href="#Log-Pattern-格式解析" class="headerlink" title="Log Pattern 格式解析"></a>Log Pattern 格式解析</h2><p>各類型 Log 在寫入 ELK 前都會依照固定的 Pattern 格式化，配合 <strong>log4net</strong> 的通用前綴：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">%date [%thread] [%level] [%logger]</span><br></pre></td></tr></table></figure>
+
+<img src="/2023/11/22/ELKSharing/elk-04.png" class="" title="ELK Log Pattern 完整規格表">
+
+<h3 id="Application-Log-Pattern"><a href="#Application-Log-Pattern" class="headerlink" title="Application Log Pattern"></a>Application Log Pattern</h3><table>
+<thead>
+<tr>
+<th>Log 類型</th>
+<th>Pattern 格式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Request Log</strong></td>
+<td><code>[REQUEST][Method|requestUrl][HTTPMethod][clientIP][sessionId][memberCode][refererURL|MobileAppVersion] Message</code></td>
+</tr>
+<tr>
+<td><strong>Event Log</strong></td>
+<td><code>[EVENT][event][status][subStatus][identity] Message</code></td>
+</tr>
+<tr>
+<td><strong>Performance Log</strong></td>
+<td><code>[Performance][Method][Time]</code></td>
+</tr>
+<tr>
+<td><strong>Error Log</strong></td>
+<td><code>[ERROR] Msg</code></td>
+</tr>
+<tr>
+<td><strong>Message Log</strong></td>
+<td><code>[MESSAGES][guid][worker][topic][queuename][action] Message</code></td>
+</tr>
+</tbody></table>
+<h3 id="Server-Log-Pattern"><a href="#Server-Log-Pattern" class="headerlink" title="Server Log Pattern"></a>Server Log Pattern</h3><table>
+<thead>
+<tr>
+<th>Log 類型 &#x2F; Server</th>
+<th>Pattern 格式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>WebLog（IIS）</strong></td>
+<td><code>date httpmethod method querystring port sourceuseragent refererurl hostname statuscode substatuscode responsetime</code></td>
+</tr>
+<tr>
+<td><strong>WebLog（Jetty）</strong></td>
+<td><code>clientip - - [date] &quot;httpmethod method protocol&quot; statuscode responsesize &quot;refererurl&quot; &quot;sourceuseragent&quot; - responsetime</code></td>
+</tr>
+</tbody></table>
+<h3 id="Risk-Log-Pattern"><a href="#Risk-Log-Pattern" class="headerlink" title="Risk Log Pattern"></a>Risk Log Pattern</h3><table>
+<thead>
+<tr>
+<th>Log 類型</th>
+<th>Pattern 格式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>AgileCheck</strong></td>
+<td><code>[Risk][Brand][Membercode][DeviceId][Result][&#123;&quot;deviceId&quot;:&quot;...&quot;,&quot;reason&quot;:&quot;...&quot;&#125;] Message</code></td>
+</tr>
+<tr>
+<td><strong>Suspect</strong></td>
+<td><code>[Risk][Brand][Membercode][IpAddress][Event][Result] Message</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="效能問題排查"><a href="#效能問題排查" class="headerlink" title="效能問題排查"></a>效能問題排查</h2><h3 id="General-Check-—-快速定位慢-API"><a href="#General-Check-—-快速定位慢-API" class="headerlink" title="General Check — 快速定位慢 API"></a>General Check — 快速定位慢 API</h3><p><strong>使用情境</strong>：檢查哪些 API 的回應時間偏高。</p>
+<p>查詢索引：</p>
+<ul>
+<li><code>applications-performance-*</code> — Application 內部計時</li>
+<li><code>servers-weblog-*</code> — WebServer 層計時（API 通常以 <code>/service/</code> 開頭）</li>
+</ul>
+<img src="/2023/11/22/ELKSharing/elk-05.png" class="" title="WebLog Category Overview Dashboard — 依 Module 統計請求量">
+
+<p><strong>查詢思路</strong>：</p>
+<ol>
+<li>先從 <code>servers-weblog-*</code> 找出整體哪個 host &#x2F; module 請求量最高</li>
+<li>搭配 Response Time 排序，找出最慢的前幾支 API</li>
+<li>再進入 <code>applications-performance-*</code> 做 Drill Down</li>
+</ol>
+<hr>
+<h3 id="Specified-API-Check-—-深入分析單一慢-API"><a href="#Specified-API-Check-—-深入分析單一慢-API" class="headerlink" title="Specified API Check — 深入分析單一慢 API"></a>Specified API Check — 深入分析單一慢 API</h3><p>當鎖定特定 API 後，透過<strong>雙 Index 對照</strong>找出瓶頸所在：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">查詢順序：</span><br><span class="line">1. servers-weblog-*    → 確認該 API 在 WebServer 層的 Response Time</span><br><span class="line">2. applications-performance-* → 確認 Application 內部的處理時間</span><br></pre></td></tr></table></figure>
+
+<p>若 WebServer 慢但 Application 快 → 瓶頸在<strong>網路 &#x2F; WebServer 吞吐量</strong><br>若 Application 本身就慢 → 瓶頸在<strong>程式邏輯或依賴服務</strong></p>
+<p><strong>Application Performance Log：</strong></p>
+<img src="/2023/11/22/ELKSharing/elk-06.png" class="" title="PerformanceLog Application Overview — 依 Method 顯示 avg cost 與 Percentile">
+
+<p><strong>WebLog 對照：</strong></p>
+<img src="/2023/11/22/ELKSharing/elk-07.png" class="" title="Weblog — 同一 API 的 Host Request 與 ResponseTime 對比">
+
+<hr>
+<h2 id="Request-Log-查詢"><a href="#Request-Log-查詢" class="headerlink" title="Request Log 查詢"></a>Request Log 查詢</h2><h3 id="主要使用情境"><a href="#主要使用情境" class="headerlink" title="主要使用情境"></a>主要使用情境</h3><ul>
+<li>Mobile App 版本分佈監控</li>
+<li>Internal Request 追蹤（Logger: <code>HttpWebRequest</code>）</li>
+<li>用戶行為稽核（Session、IP、Input Data）</li>
+</ul>
+<p>索引：<code>applications-request-*</code></p>
+<hr>
+<h3 id="Mobile-App-版本監控"><a href="#Mobile-App-版本監控" class="headerlink" title="Mobile App 版本監控"></a>Mobile App 版本監控</h3><p>在 MobileAppSpi 的 Request Log 中，<code>refererurl</code> 欄位記錄了 <strong>device + version</strong> 資訊。</p>
+<p>常見用途：</p>
+<ul>
+<li>App 更新後追蹤新版本的覆蓋速度</li>
+<li>計算仍未更新的會員比例</li>
+</ul>
+<img src="/2023/11/22/ELKSharing/elk-08.png" class="" title="Request Log — App Members &#x2F; Session &#x2F; IP 統計概覽">
+
+<hr>
+<h3 id="會員行為追蹤（Request-Event-交叉查詢）"><a href="#會員行為追蹤（Request-Event-交叉查詢）" class="headerlink" title="會員行為追蹤（Request + Event 交叉查詢）"></a>會員行為追蹤（Request + Event 交叉查詢）</h3><p><strong>查詢索引</strong>：</p>
+<ul>
+<li><code>applications-request-*</code></li>
+<li><code>applications-event-*</code></li>
+</ul>
+<p><strong>查詢策略</strong>：以 <code>sessionId</code>、<code>memberCode</code>、<code>clientIP</code> 三個維度交叉比對，必要時加入 IP 縮小範圍。</p>
+<img src="/2023/11/22/ELKSharing/elk-09.png" class="" title="Request Log — 依 memberCode &#x2F; sessionId 追蹤會員完整請求序列">
+
+<img src="/2023/11/22/ELKSharing/elk-10.png" class="" title="Event Log — 依 memberCode 追蹤 Login 等業務事件">
+
+<hr>
+<h3 id="iOvation-封鎖調查"><a href="#iOvation-封鎖調查" class="headerlink" title="iOvation 封鎖調查"></a>iOvation 封鎖調查</h3><p>當會員反映登入異常，可透過以下兩個 Index 交叉確認 iOvation 驗證結果：</p>
+<p><strong>Step 1 — Event Log 確認 Login 事件序列：</strong></p>
+<p>依 <code>memberCode</code> 查詢 Event Log 中的 <code>Login</code> 事件，確認事件狀態（SUCCESS &#x2F; FAIL）與 subStatus。</p>
+<p><strong>Step 2 — AgileCheck Log 確認 iOvation 結果：</strong></p>
+<img src="/2023/11/22/ELKSharing/elk-11.png" class="" title="AgileCheck Log — 查看 iOvation DENY 原因與 Device ID">
+
+<table>
+<thead>
+<tr>
+<th>欄位</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>membercode</code></td>
+<td>會員代號</td>
+</tr>
+<tr>
+<td><code>result</code></td>
+<td><code>ALLOW</code> &#x2F; <code>DENY</code> &#x2F; <code>BYPASS</code></td>
+</tr>
+<tr>
+<td><code>ioResponse.reason</code></td>
+<td>DENY 原因，例如 <code>2 Accounts per device in 15 minutes</code></td>
+</tr>
+<tr>
+<td><code>geoip.country_name</code></td>
+<td>來源國家</td>
+</tr>
+<tr>
+<td><code>deviceid</code></td>
+<td>設備識別碼</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="Error-Log-查詢"><a href="#Error-Log-查詢" class="headerlink" title="Error Log 查詢"></a>Error Log 查詢</h2><p>索引：<code>applications-error-*</code></p>
+<h3 id="常見-Logger-說明"><a href="#常見-Logger-說明" class="headerlink" title="常見 Logger 說明"></a>常見 Logger 說明</h3><table>
+<thead>
+<tr>
+<th>Logger</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>LoggerController</code></td>
+<td>Client Side 錯誤，或 Client 主動呼叫 Error Log API</td>
+</tr>
+<tr>
+<td><code>Global</code></td>
+<td>Request 層最底層 Catch 到的 Exception，含路徑 &#x2F; IP 資訊</td>
+</tr>
+<tr>
+<td><code>Utility</code></td>
+<td>通常是 CDN 檔案缺少或 Parsing 失敗（可能寫入 Warning Log）</td>
+</tr>
+<tr>
+<td><code>AccountStateManager</code></td>
+<td>會員 Session 遺失時觸發，將會員 Kick Out</td>
+</tr>
+</tbody></table>
+<hr>
+<h3 id="Case-Study：用戶登入後顯示-403-Forbidden"><a href="#Case-Study：用戶登入後顯示-403-Forbidden" class="headerlink" title="Case Study：用戶登入後顯示 403 Forbidden"></a>Case Study：用戶登入後顯示 403 Forbidden</h3><blockquote>
+<p><strong>UTIM-9867</strong>：用戶回報在某時間點後登入 App 持續出現 403 Forbidden 頁面</p>
+</blockquote>
+<p><strong>排查步驟</strong>：</p>
+<p>先從 Error Log 與 WebLog 確認問題發生時間與錯誤訊息：</p>
+<img src="/2023/11/22/ELKSharing/elk-12.png" class="" title="Error Log — 搜尋 " alt="unable to open database file">
+
+<p>從圖中可以看到：</p>
+<ul>
+<li>錯誤訊息：<code>unable to open database file</code></li>
+<li>時間集中在特定區間，呈爆量模式</li>
+<li>透過 Logger 與 Module 可進一步縮小影響範圍</li>
+</ul>
+<hr>
+<h2 id="Chatbot-Log-查詢"><a href="#Chatbot-Log-查詢" class="headerlink" title="Chatbot Log 查詢"></a>Chatbot Log 查詢</h2><h3 id="Chatbot-Error-Log"><a href="#Chatbot-Error-Log" class="headerlink" title="Chatbot Error Log"></a>Chatbot Error Log</h3><p>索引：<code>applications-error-*</code></p>
+<img src="/2023/11/22/ELKSharing/elk-13.png" class="" title="Chatbot Request Log — 查詢 InternalServerError 500 的詳細請求">
+
+<p>透過 <code>module</code> 欄位篩選 <code>webspi.chatbot</code>，可找出 Chatbot 呼叫下游服務失敗的詳細錯誤訊息與對應 API。</p>
+<hr>
+<h3 id="Chatbot-Event-Log"><a href="#Chatbot-Event-Log" class="headerlink" title="Chatbot Event Log"></a>Chatbot Event Log</h3><p>索引：<code>applications-event-*</code></p>
+<p>Chatbot 相關的 Event 類型：</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>TokenValidation</code></td>
+<td>驗證 Token 合法性</td>
+</tr>
+<tr>
+<td><code>Greeting</code></td>
+<td>歡迎訊息觸發</td>
+</tr>
+<tr>
+<td><code>FetchData</code></td>
+<td>向後端取資料</td>
+</tr>
+<tr>
+<td><code>FetchDataFromProvider</code></td>
+<td>向 Provider 取資料</td>
+</tr>
+<tr>
+<td><code>HandOffToSF</code></td>
+<td>轉接 Salesforce 客服</td>
+</tr>
+</tbody></table>
+<img src="/2023/11/22/ELKSharing/elk-14.png" class="" title="Chatbot Event Log — Histogram 與事件序列（含 HandOffToSF 趨勢）">
+
+<p>透過 Histogram 可觀察各事件的數量交叉趨勢，例如 <code>FetchDataFromProvider</code> 失敗率上升時，<code>HandOffToSF</code> 通常也會隨之增加。</p>
+<hr>
+<h2 id="Message-Log（RabbitMQ）"><a href="#Message-Log（RabbitMQ）" class="headerlink" title="Message Log（RabbitMQ）"></a>Message Log（RabbitMQ）</h2><p>索引：<code>applications-message-*</code></p>
+<img src="/2023/11/22/ELKSharing/elk-15.png" class="" title="Message Log — Topic List 原始訊息內容">
+
+<p><strong>查詢重點</strong>：</p>
+<ul>
+<li>確認某 Topic 是否有被成功觸發</li>
+<li>確認對應的 Action 是否有被執行</li>
+</ul>
+<blockquote>
+<p><strong>注意</strong>：在 QAT RED 環境下，RabbitMQ Queue 可能是共用的，相同 Topic 的訊息有可能被其他環境的 Event SPI 消費，排查時需特別注意。</p>
+</blockquote>
+<hr>
+<h2 id="系統資源監控（Metricbeat）"><a href="#系統資源監控（Metricbeat）" class="headerlink" title="系統資源監控（Metricbeat）"></a>系統資源監控（Metricbeat）</h2><h3 id="Redis-使用量監控"><a href="#Redis-使用量監控" class="headerlink" title="Redis 使用量監控"></a>Redis 使用量監控</h3><p>索引：<code>metricbeat-*</code></p>
+<img src="/2023/11/22/ELKSharing/elk-16.png" class="" title="Redis Dashboard — 各 Service 的 Memory &#x2F; Connection &#x2F; 命中率指標">
+
+<table>
+<thead>
+<tr>
+<th>監控維度</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Max Memory</td>
+<td>Redis 最大可用記憶體設定</td>
+</tr>
+<tr>
+<td>RSS Used</td>
+<td>實際佔用的 OS 記憶體</td>
+</tr>
+<tr>
+<td>Max Used</td>
+<td>歷史峰值</td>
+</tr>
+<tr>
+<td>Connections</td>
+<td>目前連線數</td>
+</tr>
+<tr>
+<td>Limited</td>
+<td>是否觸碰上限</td>
+</tr>
+</tbody></table>
+<hr>
+<h3 id="系統資源監控"><a href="#系統資源監控" class="headerlink" title="系統資源監控"></a>系統資源監控</h3><p>索引：<code>metricbeat-*</code></p>
+<img src="/2023/11/22/ELKSharing/elk-17.png" class="" title="System Dashboard — CPU、Memory、Disk、Network 全覽">
+
+<p>可監控指標：</p>
+<ul>
+<li><strong>CPU 使用率</strong> — 各核心與整體平均</li>
+<li><strong>Memory 使用率</strong> — 已用 &#x2F; 可用</li>
+<li><strong>Disk Space</strong> — 各掛載點容量</li>
+<li><strong>Network I&#x2F;O</strong> — Inbound &#x2F; Outbound Traffic</li>
+</ul>
+<hr>
+<h2 id="Proxy-Server-查詢"><a href="#Proxy-Server-查詢" class="headerlink" title="Proxy Server 查詢"></a>Proxy Server 查詢</h2><p>索引：<code>sys-proxysg*</code></p>
+<p><strong>使用情境</strong>：確認系統透過 Proxy Server 對外連線某 Domain 是否成功。</p>
+<table>
+<thead>
+<tr>
+<th>欄位</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>cs_host</code></td>
+<td>對外連線的 Domain</td>
+</tr>
+<tr>
+<td><code>c_ip</code></td>
+<td>發出請求的 Server IP</td>
+</tr>
+</tbody></table>
+<img src="/2023/11/22/ELKSharing/elk-18.png" class="" title="sys-proxysg — 查詢指定 Domain 的 Proxy 連線記錄">
+
+<hr>
+<h2 id="進階查詢技巧"><a href="#進階查詢技巧" class="headerlink" title="進階查詢技巧"></a>進階查詢技巧</h2><h3 id="Match-Phrase-搜尋-Message-欄位中的特定值"><a href="#Match-Phrase-搜尋-Message-欄位中的特定值" class="headerlink" title="Match Phrase 搜尋 Message 欄位中的特定值"></a>Match Phrase 搜尋 Message 欄位中的特定值</h3><p>當需要在 <code>messages</code> 欄位中搜尋含有特殊字元的字串時（例如 JSON 中的 key），使用 <code>match_phrase</code> 並正確 Escape：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;query&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;match_phrase&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;messages&quot;</span><span class="punctuation">:</span> <span class="string">&quot;\&quot;devicetimezone\&quot;:\&quot;&quot;</span></span><br><span class="line">    <span class="punctuation">&#125;</span></span><br><span class="line">  <span class="punctuation">&#125;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<hr>
+<h3 id="Case-Study：iOvation-Script-返回-404"><a href="#Case-Study：iOvation-Script-返回-404" class="headerlink" title="Case Study：iOvation Script 返回 404"></a>Case Study：iOvation Script 返回 404</h3><blockquote>
+<p><strong>PIM-26559</strong>：iOvation JS Script 返回 404，影響設備驗證功能</p>
+</blockquote>
+<p>索引：<code>servers-weblog-*</code></p>
+<p><strong>排查思路</strong>：由於 Reverse Proxy 所有對外回應都會先經過 WebServer，即使是 JS 靜態資源也不例外，因此可透過 WebLog 鎖定：</p>
+<ol>
+<li>404 錯誤<strong>第一次發生的時間點</strong></li>
+<li>對應的 URL 路徑</li>
+<li>受影響的請求量</li>
+</ol>
+<img src="/2023/11/22/ELKSharing/elk-19.png" class="" title="servers-weblog — iOvation Script 404 錯誤的時間點與請求量">
+
+<hr>
+<h2 id="TimeLion-進階：跨-Index-效能比對"><a href="#TimeLion-進階：跨-Index-效能比對" class="headerlink" title="TimeLion 進階：跨 Index 效能比對"></a>TimeLion 進階：跨 Index 效能比對</h2><p>TimeLion 是 Kibana 中的時序分析工具，支援在同一張圖中疊加多個 Index 的指標：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">.es(</span><br><span class="line">  index=&quot;applications-performance*&quot;,</span><br><span class="line">  q=&quot;module.keyword:web.star4 AND method:getmessageinfounreadcount&quot;,</span><br><span class="line">  metric=&#x27;avg:performancetime&#x27;</span><br><span class="line">).label(&quot;Application Performance&quot;),</span><br><span class="line"></span><br><span class="line">.es(</span><br><span class="line">  index=&quot;servers-weblog*&quot;,</span><br><span class="line">  q=&quot;module.keyword:web.star4 AND method:getmessageinfounreadcount&quot;,</span><br><span class="line">  metric=&#x27;avg:responsetime&#x27;</span><br><span class="line">).label(&quot;IIS Performance&quot;)</span><br></pre></td></tr></table></figure>
+
+<img src="/2023/11/22/ELKSharing/elk-20.png" class="" title="TimeLion — Application 內部時間 vs IIS 回應時間對比折線圖">
+
+<p><strong>解讀方式</strong>：</p>
+<ul>
+<li>若兩條線<strong>幾乎重疊</strong> → Application 本身就慢，與 WebServer 吞吐量無關</li>
+<li>若 IIS 線<strong>明顯高於</strong> Application 線 → WebServer 層有排隊或吞吐量瓶頸</li>
+<li>若出現<strong>尖峰只在 IIS</strong> → 可能是連線數爆量、Keep-Alive 問題等</li>
+</ul>
+<hr>
+<h2 id="查詢情境速查表"><a href="#查詢情境速查表" class="headerlink" title="查詢情境速查表"></a>查詢情境速查表</h2><table>
+<thead>
+<tr>
+<th>問題情境</th>
+<th>建議 Index</th>
+<th>關鍵欄位</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>API 整體效能異常</td>
+<td><code>servers-weblog-*</code></td>
+<td><code>module</code>、<code>responsetime</code></td>
+</tr>
+<tr>
+<td>特定 API 慢</td>
+<td><code>applications-performance-*</code></td>
+<td><code>method</code>、<code>performancetime</code></td>
+</tr>
+<tr>
+<td>用戶操作流程追蹤</td>
+<td><code>applications-request-*</code> + <code>applications-event-*</code></td>
+<td><code>memberCode</code>、<code>sessionId</code>、<code>clientIP</code></td>
+</tr>
+<tr>
+<td>iOvation 封鎖查詢</td>
+<td><code>risk-agilecheck-*</code></td>
+<td><code>membercode</code>、<code>result</code>、<code>ioResponse.reason</code></td>
+</tr>
+<tr>
+<td>錯誤根因分析</td>
+<td><code>applications-error-*</code></td>
+<td><code>logger</code>、<code>module</code>、<code>messages</code></td>
+</tr>
+<tr>
+<td>MQ 訊息是否送達</td>
+<td><code>applications-message-*</code></td>
+<td><code>topic</code>、<code>action</code>、<code>queuename</code></td>
+</tr>
+<tr>
+<td>Redis 記憶體用量</td>
+<td><code>metricbeat-*</code></td>
+<td><code>redis.info.memory.used.rss</code></td>
+</tr>
+<tr>
+<td>對外 Proxy 連線</td>
+<td><code>sys-proxysg*</code></td>
+<td><code>cs_host</code>、<code>c_ip</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h2><ul>
+<li><a target="_blank" rel="noopener" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/getting-started.html">Elasticsearch 基本概念 &amp; 搜尋入門</a></li>
+<li><a target="_blank" rel="noopener" href="https://www.elastic.co/blog/strings-are-dead-long-live-strings">Elasticsearch: Text vs. Keyword</a></li>
+</ul>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2023/11/22/ELKSharing/" data-id="cmnzsi4ww0009rx0j30jvbdqo" data-title="ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2025/03/15/ASP.NET-Client-Side-Integration/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          ASP.NET + Rsbuild + Vue 3 整合架構：不用 Nuxt，也能優雅串接前後端
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2023/10/07/JamWebDebugger/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">JamWebDebugger</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Debug/">Debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Troubleshooting/">Troubleshooting</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Chain-of-Responsibility/" rel="tag">Chain of Responsibility</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Decorator-Pattern/" rel="tag">Decorator Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Distributed-Lock/" rel="tag">Distributed Lock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Frontend/" rel="tag">Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GoF/" rel="tag">GoF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Manifest/" rel="tag">Manifest</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monolith/" rel="tag">Monolith</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RedLock/" rel="tag">RedLock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/11/">十一月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/04/06/RedLockCacheLayerManager/">RedLock 分散式鎖在 CacheLayerManager 的實作案例</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/06/WatcherUtilAopPerformance/">WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/01/LazyMemoryCacheRedisTwoTier/">雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/31/DebugManifestDynamicLoading/">Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/30/ChainOfResponsibilityGeneric/">責任鏈模式（Chain of Responsibility）泛型實作 — 遊戲驗證與頁面權限的真實案例</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/27/MfaLoginNewDeviceVerification/">Login MFA — 新裝置驗證架構設計 </a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/16/ContentManagementSystem/">自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/15/VueDialogQueue/">TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/12/VuePartialView/">跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+
+  <script src='https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({startOnLoad: true, theme: 'default'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>

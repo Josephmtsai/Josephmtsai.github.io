@@ -74,6 +74,243 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-ResponsibleGamblingRemap" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2023/10/04/ResponsibleGamblingRemap/" class="article-date">
+  <time class="dt-published" datetime="2023-10-04T16:00:00.000Z" itemprop="datePublished">2023-10-05</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2023/10/04/ResponsibleGamblingRemap/">CC1-2443 Responsible Gambling Remap — 自助解除機制與多層權限守衛設計</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>本文記錄 CC1-2443 票號的 Responsible Gambling（RG）功能重構，核心目的是：</p>
+<blockquote>
+<p><strong>讓用戶可以自助解除 TimeOut 與 SelfExclusion，不再需要透過客服介入。</strong></p>
+</blockquote>
+<p>改版後系統在 RG 狀態到期時，主動在頁面讓用戶決定是否延長或移除限制；同時全面收緊了頁面可見性與帳號功能的權限控管，並在前後端各層都加入了守衛機制。</p>
+        
+          <p class="article-more-link">
+            <a href="/2023/10/04/ResponsibleGamblingRemap/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2023/10/04/ResponsibleGamblingRemap/" data-id="cmnzsi4xe001prx0jccc43gyr" data-title="CC1-2443 Responsible Gambling Remap — 自助解除機制與多層權限守衛設計" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-GitFlow" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2023/04/12/GitFlow/" class="article-date">
+  <time class="dt-published" datetime="2023-04-12T14:52:34.000Z" itemprop="datePublished">2023-04-12</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2023/04/12/GitFlow/">GitFlow</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題，以及他們解決什麼問題</p>
+<p>最主要觀念是</p>
+<ol>
+<li><p>正常功能開發以 main branch 為主體(所有的分支都由這裡出發) ，分別 Merge 到 QAT 避免同步大家開發多個功能，<br>有互相的影響以及將不必要的程式碼帶到正式環境</p>
+</li>
+<li><p>緊急修正的情況可以直接根據 main branch 拉出分支修正 避免其他影響 然後部屬到 Pre-prod 測試</p>
+</li>
+</ol>
+<p>首先我們先定義好 Git Branch 以及對應的環境</p>
+<p><strong>我們這裡以 main 當作我們的主要分支 所有 branch 都是以 main 為主</strong></p>
+<table>
+<thead>
+<tr>
+<th>Branch</th>
+<th>Env</th>
+<th>Branch Remark</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>qat</td>
+<td>QAT</td>
+<td>QA Testing</td>
+</tr>
+<tr>
+<td>main</td>
+<td>Pre-Prod, Prod</td>
+<td>正式環境</td>
+</tr>
+<tr>
+<td>feature&#x2F;xxx</td>
+<td></td>
+<td>開發功能分支</td>
+</tr>
+<tr>
+<td>hotfix&#x2F;xxx</td>
+<td></td>
+<td>緊急功能修正</td>
+</tr>
+<tr>
+<td>fix&#x2F;xxx</td>
+<td></td>
+<td>排程功能部屬</td>
+</tr>
+</tbody></table>
+<p>我們環境實際上重要的有三種環境</p>
+<table>
+<thead>
+<tr>
+<th>Environment</th>
+<th>remark</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>QAT</td>
+<td>給 QA 做測試的環境(所有的 Feature 都會先進到 QAT 給 QA 測試 測試完成的才會 Deploy to Pre-prod)</td>
+</tr>
+<tr>
+<td>Pre-prod</td>
+<td>上線前給 QA 做最後測試的環境</td>
+</tr>
+<tr>
+<td>Prod</td>
+<td>正式環境</td>
+</tr>
+</tbody></table>
+<p>那我們可以依照幾種情境講述會遇到的問題</p>
+<ol>
+<li><p>開發功能 照順序進到 Prod</p>
+</li>
+<li><p>緊急修正問題 直接推到 Prod</p>
+</li>
+<li><p>開發功能 時程需要拖很長(歷時一兩個月)</p>
+</li>
+</ol>
+<p>以下是大致上的 Gitflow 流程圖</p>
+<img src="/2023/04/12/GitFlow/Flow.png" class="" title="Example">
+
+<p>我們會一個一個介紹</p>
+<h1 id="1-開發功能-照順序進到-Prod"><a href="#1-開發功能-照順序進到-Prod" class="headerlink" title="1. 開發功能 照順序進到 Prod"></a>1. 開發功能 照順序進到 Prod</h1><p>首先我們先介紹我們有幾個 branch 以及大概的功能敘述</p>
+<ol>
+<li>feature&#x2F;Profile : 他有會員功能的部分 (新增 UI 以及會修改到 Routing 的檔案)</li>
+<li>feature&#x2F;ForgotAccount: 忘記帳號密碼的流程 (新增 UI 以及會修改到 Routing 的檔案)</li>
+<li>feature&#x2F;Product: 新的產品頁面 (新增 UI 以及會修改到 Routing 的檔案)</li>
+<li>main: 我們的正式環境的 branch</li>
+<li>fix&#x2F;Week1: 因為我們是每一週會上 Code 所以 branch 以 fix prefix 開頭 然後會把完成的功能 merge 進來</li>
+</ol>
+<p>branch 流程順序如下:</p>
+<ol>
+<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount 都從 main 拉 branch 出來</li>
+<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount 各自開發 直到完成</li>
+<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount Merge qat</li>
+</ol>
+<hr>
+<p><strong>如圖片黑框的部分 這樣有可能會發生衝突</strong></p>
+<img src="/2023/04/12/GitFlow/1.1.png" class="" title="Flow">
+
+<h2 id="Issue-1-因為根據剛剛上面的敘述-A-跟-B-在沒有協調的狀況下-它們有檔案衝突了"><a href="#Issue-1-因為根據剛剛上面的敘述-A-跟-B-在沒有協調的狀況下-它們有檔案衝突了" class="headerlink" title="Issue 1. 因為根據剛剛上面的敘述 A 跟 B 在沒有協調的狀況下 它們有檔案衝突了"></a>Issue 1. 因為根據剛剛上面的敘述 A 跟 B 在沒有協調的狀況下 它們有檔案衝突了</h2><p>所以這是第一個衝突點，Routing 檔案衝突</p>
+<h3 id="Solution"><a href="#Solution" class="headerlink" title="Solution:"></a>Solution:</h3><ol>
+<li>找 A 跟 B 一起選擇 confilt 檔案</li>
+<li>並且要討論之後進到正式環境的順序是否是 A 先 B 後 或是 B 後 A 先 ，到時候要討論怎麼 Merge</li>
+</ol>
+<hr>
+<p>接著測試到一個段落 QA 也認為 1 跟 2. 的 branch 差不多可以進 Prod 了,我們會透過剛剛提到的 5.<br>fix&#x2F;Week1 將大家要進的程式碼統一 Merge 到此 branch 然後 merge to main ,部屬到 Pre-Prod 環境給 QA 做最後檢查</p>
+<p>branch 流程順序如下:</p>
+<ol>
+<li>fix&#x2F;Week1 都從 main 拉 branch 出來</li>
+<li>feature&#x2F;Profile ,feature&#x2F;ForgotAccount Merge fix&#x2F;week1</li>
+<li>fix&#x2F;week1 Merge main (需要有人 approve 或是檢查程式碼)</li>
+</ol>
+<p><strong>這樣好處是 Merge prod 只會有一個點 到時候要退版也會好退</strong></p>
+<h2 id="Issue-2-跟-Issue-1-一樣-有可能會有-Routing-檔案衝突或是其他檔案衝突"><a href="#Issue-2-跟-Issue-1-一樣-有可能會有-Routing-檔案衝突或是其他檔案衝突" class="headerlink" title="Issue 2. 跟 Issue 1 一樣 有可能會有 Routing 檔案衝突或是其他檔案衝突"></a>Issue 2. 跟 Issue 1 一樣 有可能會有 Routing 檔案衝突或是其他檔案衝突</h2><p><strong>如圖片黑框的部分 fix&#x2F;week1 是從上方這個 main branch 開的 然後 merge 進去這樣有可能會發生衝突</strong></p>
+<img src="/2023/04/12/GitFlow/1.2.png" class="" title="Flow">
+
+<h3 id="Solution-1"><a href="#Solution-1" class="headerlink" title="Solution:"></a>Solution:</h3><ol>
+<li>定時 Sync main branch 到自己的 branch ex: feature&#x2F;Profile 如果有衝突可以當下就定時解掉 避免上線前的困擾</li>
+<li>找 A 跟 B 一起選擇 confilt 檔案</li>
+<li>部屬時候如果有衝突的部分要再檢查一次功能</li>
+</ol>
+<hr>
+<p>這樣就完成照順序進到 Prod 的功能了</p>
+<h1 id="2-緊急修正問題-直接推到-Prod"><a href="#2-緊急修正問題-直接推到-Prod" class="headerlink" title="2. 緊急修正問題 直接推到 Prod"></a>2. 緊急修正問題 直接推到 Prod</h1><p>想當然 我們在開發的過程中 有可能緊急有發生 Prod 有問題 需要緊急修正的問題</p>
+<p>branch:<br>hotfix&#x2F;RegisterIssue : 註冊問題修正的 branch</p>
+<p>branch 流程順序如下:</p>
+<ol>
+<li>hotfix&#x2F;RegisterIssue 都從 main 拉 branch 出來</li>
+<li>hotfix&#x2F;RegisterIssue Merge main (緊急修正 要直接丟到 Pre-prod 做快速驗證後上線)</li>
+<li>hotfix&#x2F;RegisterIssue Merge qat</li>
+</ol>
+<p>為什麼要做 3 是因為要避免 qat 以及 main branch 有一些落差，理論上 qat 會比較新 但是功能應該要跟 main 相同</p>
+<h3 id="Issue-3-有可能遇到的問題也是類似-，有可能在-Merge-qat-的時候-QAT-有新的功能在開發也修改到相同檔案"><a href="#Issue-3-有可能遇到的問題也是類似-，有可能在-Merge-qat-的時候-QAT-有新的功能在開發也修改到相同檔案" class="headerlink" title="Issue 3. 有可能遇到的問題也是類似 ，有可能在 Merge qat 的時候 ,QAT 有新的功能在開發也修改到相同檔案"></a>Issue 3. 有可能遇到的問題也是類似 ，有可能在 Merge qat 的時候 ,QAT 有新的功能在開發也修改到相同檔案</h3><img src="/2023/04/12/GitFlow/1.3.png" class="" title="Flow">
+
+<h3 id="Solution-2"><a href="#Solution-2" class="headerlink" title="Solution:"></a>Solution:</h3><ol>
+<li>找到衝突的檔案 並且找到功能的作者討論如何修改衝突</li>
+<li>並且請功能的作者 他的 branch 先行 sync main 到自己的 branch 維持最新的版本 避免之後 Merge main 又會有衝突</li>
+</ol>
+<hr>
+<h1 id="3-開發功能-時程需要拖很長-歷時一兩個月"><a href="#3-開發功能-時程需要拖很長-歷時一兩個月" class="headerlink" title="3. 開發功能 時程需要拖很長(歷時一兩個月)"></a>3. 開發功能 時程需要拖很長(歷時一兩個月)</h1><p>因為要先知道 如果一個 feature branch 存活的週期大於一個月以上一定要定時做一件事情</p>
+<p>**定時 sync main to feature branch **</p>
+<p>其餘流程要照著正常 feature 推動 這樣才不會有到時候要 Merge main 一堆衝突的困擾</p>
+<h1 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h1><p>不管使用什麼 gitflow 都是要避免衝突，盡量要跟衝突的檔案的作者溝通 看上線時程，以及 sync main branch.<br>如果真有遇到 Merge 到錯誤的 branch (最好是先 force reset 到錯誤的地方開始解決 千萬不要再修改檔案避免造成更多錯誤)</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2023/04/12/GitFlow/" data-id="cmnzsi4wz000grx0jchnp72ie" data-title="GitFlow" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-PreventElasticScroll" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2023/03/28/PreventElasticScroll/" class="article-date">
@@ -130,7 +367,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/28/PreventElasticScroll/" data-id="cmno3iolg001du5zf12ky41zg" data-title="iOS Safari Handle Elastic Scroll" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/28/PreventElasticScroll/" data-id="cmnzsi4xa001grx0jgsvsb9as" data-title="iOS Safari Handle Elastic Scroll" class="article-share-link">Share</a>
       
       
       
@@ -251,7 +488,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="cmno3iolf0019u5zfcjk8ajrv" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/03/24/Prerender/" data-id="cmnzsi4x90019rx0j37260jvq" data-title="SEO Prerender Introduce &amp; Asp.net 實作" class="article-share-link">Share</a>
       
       
       
@@ -378,7 +615,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="cmno3iold0011u5zf57fwd8qc" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/25/PiniaWritingHint/" data-id="cmnzsi4x70012rx0ja89ghfld" data-title="Pinia Writing Hint in Composition Api" class="article-share-link">Share</a>
       
       
       
@@ -463,7 +700,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="cmno3iolj001mu5zfgc871f0s" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/12/24/TypeScriptEnumObject/" data-id="cmnzsi4xf001trx0jfy9y6l2k" data-title="TypeScript Object Using Enum as Key" class="article-share-link">Share</a>
       
       
       
@@ -580,7 +817,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="cmno3iole0015u5zf10omfqxm" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="cmnzsi4x80015rx0j9fc33p5a" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
       
       
       
@@ -666,7 +903,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="cmno3ioln0025u5zf8rkkhszj" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="cmnzsi4xl002arx0j29hbcl71" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
       
       
       
@@ -732,7 +969,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="cmno3iolk001su5zf9zp34d6u" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="cmnzsi4xh0020rx0jeb6ubebm" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
       
       
       
@@ -782,161 +1019,11 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="cmno3iomn008tu5zf9z9k9hah" data-title="Vue 前端錯誤處理架構 — 從基礎 ErrorHandler 到生產級 Exception Handler" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="cmnzsi4xm002drx0j8i08998e" data-title="Vue 前端錯誤處理架構 — 從基礎 ErrorHandler 到生產級 Exception Handler" class="article-share-link">Share</a>
       
       
       
   <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-VueMounted" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2022/05/28/VueMounted/" class="article-date">
-  <time class="dt-published" datetime="2022-05-28T12:52:42.000Z" itemprop="datePublished">2022-05-28</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2022/05/28/VueMounted/">Vue Created Mounted example</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <p>最近遇到一個 Issue，我們本來有跟 Partner 整合一個功能，做法是類似先 Inject 對方的 js，<br>接著去指定一個 element 讓他生成到對應的頁面位置，因為當初開發的時候大家都是新手 邊做邊學，<br>一開始把 init script 的方法放到 created function，會造成一個問題是 element 都還沒有被掛到 html 上面就先呼叫 init script<br>有可能會無法生成畫面，但是神奇的是 當初寫沒有發現問題，等到有一天可能 Partner 突然有改 JS 的流程，造成我們整個頁面壞掉。<br>所以又再回頭去 review code 才發現應該要放到 mounted</p>
-<img src="/2022/05/28/VueMounted/01.png" class="" title="Sample">
-
-<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">&lt;script</span><br><span class="line">  <span class="keyword">async</span></span><br><span class="line">  id=<span class="string">&#x27;__ada&#x27;</span></span><br><span class="line">  data-handle=<span class="string">&#x27;&lt;YOUR-BOT-HANDLE&gt;&#x27;</span></span><br><span class="line">  src=<span class="string">&#x27;https://xxx.xxx.com/embed2.js&#x27;</span></span><br><span class="line">&gt;&lt;/script&gt;</span><br></pre></td></tr></table></figure>
-
-<p>正確就是要放到 mounted 上面</p>
-<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">default</span> &#123;</span><br><span class="line">  <span class="title function_">created</span>(<span class="params"></span>) &#123;</span><br><span class="line">    <span class="comment">//element not create</span></span><br><span class="line">  &#125;,</span><br><span class="line">  <span class="title function_">mounted</span>(<span class="params"></span>) &#123;</span><br><span class="line">    <span class="comment">//element created</span></span><br><span class="line">  &#125;,</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-
-<p>這裡附上 Kuro Hsu 的 Vue2 vs Vue 3 Life cycle 參考</p>
-<img src="/2022/05/28/VueMounted/02.png" class="" title="Compare">
-<p><a target="_blank" rel="noopener" href="https://book.vue.tw/CH1/1-7-lifecycle.html">Reference</a></p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="cmno3iomo008uu5zfcs5famo2" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-UCBrowserSupport" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2022/05/07/UCBrowserSupport/" class="article-date">
-  <time class="dt-published" datetime="2022-05-07T15:38:50.000Z" itemprop="datePublished">2022-05-07</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/Troubleshooting/">Troubleshooting</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2022/05/07/UCBrowserSupport/">UC Browser Support</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <p>在開發 Global 的網頁的時候，通常會去評估各種網頁的支援度，如果沒有通常會請放 Upgrade your Browser.</p>
-<p>因為 UC Browser 在中國大陸其實還是有一些比較舊的手機在使用，剛好在開發 Vue 的時候遇到一些問題順便記錄下來</p>
-<p>使用的 Framework and config</p>
-<ul>
-<li>Vue 3 with Vite</li>
-<li>Tailwind CSS 3 (Dark Mode)</li>
-</ul>
-<p>想要支援舊版的 UC Browsr</p>
-<h1 id="瀏覽器支援度"><a href="#瀏覽器支援度" class="headerlink" title="瀏覽器支援度"></a>瀏覽器支援度</h1><p>一開始以為是 ES module 導致 Build 出來有問題<br><a target="_blank" rel="noopener" href="https://caniuse.com/es6-module">ES Module</a></p>
-<p><a target="_blank" rel="noopener" href="https://caniuse.com/es6-module-dynamic-import">Dynamic Import</a></p>
-<p>所以針對這點我們有安裝了<a target="_blank" rel="noopener" href="https://www.npmjs.com/package/@vitejs/plugin-legacy">plugin-legacy plugin</a></p>
-<p>但是還是遇到問題，基本上 UC 瀏覽器 13 以上 legacy plugin 才有用，但是當下發現 CSS 有跑版.. 然後回頭去看發現有這行敘述</p>
-<blockquote>
-<p>Now instead of dark:{class} classes being applied based on prefers-color-scheme,<br>they will be applied whenever dark class is present earlier in the HTML tree.</p>
-</blockquote>
-<p>再回頭去查詢發現 其實到最新版本的 UC 瀏覽器才有支援這個設定….<br><a target="_blank" rel="noopener" href="https://caniuse.com/?search=prefers-color-scheme">prefers-color-scheme</a></p>
-<table>
-<thead>
-<tr>
-<th>UC Browser Version</th>
-<th>Vite</th>
-<th>Vite with Legacy Code</th>
-<th>CSS OK?</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>11.2.0</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-</tr>
-<tr>
-<td>11.3.8</td>
-<td>X</td>
-<td>X</td>
-<td>X</td>
-</tr>
-<tr>
-<td>13.0.5</td>
-<td>X</td>
-<td>O</td>
-<td>X(Display Wrong)</td>
-</tr>
-<tr>
-<td>13.4.0</td>
-<td>O</td>
-<td>O</td>
-<td>O</td>
-</tr>
-</tbody></table>
-<h2 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h2><p>Caniuse 的資訊不是最新的 實際支援的瀏覽器還是需要實測才知道… 如果用比較新的 framework 之類還是要考慮舊版的瀏覽器支援度<br>不然這個畫面都會是白色的.</p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="cmno3iolk001pu5zf5lk707n0" data-title="UC Browser Support" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
 
     </footer>
   </div>
@@ -971,7 +1058,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">標籤</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Chain-of-Responsibility/" rel="tag">Chain of Responsibility</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Decorator-Pattern/" rel="tag">Decorator Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Distributed-Lock/" rel="tag">Distributed Lock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Frontend/" rel="tag">Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GoF/" rel="tag">GoF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Manifest/" rel="tag">Manifest</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monolith/" rel="tag">Monolith</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RedLock/" rel="tag">RedLock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Chain-of-Responsibility/" rel="tag">Chain of Responsibility</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Decorator-Pattern/" rel="tag">Decorator Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Distributed-Lock/" rel="tag">Distributed Lock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Frontend/" rel="tag">Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GoF/" rel="tag">GoF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Manifest/" rel="tag">Manifest</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monolith/" rel="tag">Monolith</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RedLock/" rel="tag">RedLock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
     </div>
   </div>
 
@@ -981,7 +1068,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">彙整</h3>
     <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/11/">十一月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
     </div>
   </div>
 
