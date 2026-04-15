@@ -1,6 +1,6 @@
 ---
 title: ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study
-date: 2023-11-23
+date: 2026-04-15
 tags:
   - ELK
   - Elasticsearch
