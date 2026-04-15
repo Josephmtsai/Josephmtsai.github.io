@@ -74,6 +74,57 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-VuePartialView" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/12/VuePartialView/" class="article-date">
+  <time class="dt-published" datetime="2026-03-12T16:00:00.000Z" itemprop="datePublished">2026-03-13</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/03/12/VuePartialView/">跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在多產品平台中，每個產品（體育、娛樂城、棋牌等）可能由不同的合作夥伴（Provider）開發，使用的技術棧也各不相同——React、Angular、甚至純 JS。但平台需要在所有產品頁面上維持一致的品牌形象、導航列、會員狀態和法律聲明。</p>
+<p>要求每個 Provider 自行實作這些 UI 元件既不現實也難以維護。因此我們設計了 <strong>star4partialview</strong> — 一個獨立打包的 Vue 3 應用，輸出單一 <code>partialView.js</code>，Provider 只需引入一個 <code>&lt;script&gt;</code> 標籤就能獲得完整的 Header + Footer。</p>
+<p>兩個獨立的 JS Runtime 透過 <code>window.postMessage</code> 通訊，實現了一種輕量級的 <strong>Micro Frontend</strong> 模式。</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/03/12/VuePartialView/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VuePartialView/" data-id="cmnzsial2002jue0jf8zgbk49" data-title="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-ELKWatcher" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2026/03/11/ELKWatcher/" class="article-date">
@@ -118,7 +169,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmnzsi4wx000arx0j4ag103cq" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — 多層事件失敗率與 Error Log 監控實戰" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmnzsiakd000aue0jctcaejt3" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — 多層事件失敗率與 Error Log 監控實戰" class="article-share-link">Share</a>
       
       
       
@@ -168,7 +219,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmnzsi4x1000krx0j8ibv5r20" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmnzsiakk000que0jh466axs2" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
       
       
       
@@ -283,7 +334,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/ErrorContentDecoding/" data-id="cmnzsi4wy000erx0jbg2d2zsn" data-title="ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/10/ErrorContentDecoding/" data-id="cmnzsiake000eue0jhok4ac7m" data-title="ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄" class="article-share-link">Share</a>
       
       
       
@@ -473,7 +524,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmnzsi4x6000yrx0jf3s4c3b5" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmnzsiakn0015ue0j81pldmdw" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
       
       
       
@@ -523,7 +574,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/08/RateLimitInplementation/" data-id="cmnzsi4x9001drx0j1i8g85lx" data-title="使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/08/RateLimitInplementation/" data-id="cmnzsiakq001jue0jejnobrhu" data-title="使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制" class="article-share-link">Share</a>
       
       
       
@@ -573,7 +624,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/07/LazyCacheIssue/" data-id="cmnzsi4x4000rrx0jcc8obl25" data-title="LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/07/LazyCacheIssue/" data-id="cmnzsiakk000rue0j07q27zvv" data-title="LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期" class="article-share-link">Share</a>
       
       
       
@@ -628,7 +679,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/02/03/ApiFeatureVersionControl/" data-id="cmnzsi4wo0001rx0j7uyhbb8s" data-title="Feature Version Control — APP 版本功能控管架構" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/02/03/ApiFeatureVersionControl/" data-id="cmnzsiak40001ue0ja3u48d6r" data-title="Feature Version Control — APP 版本功能控管架構" class="article-share-link">Share</a>
       
       
       
@@ -679,66 +730,11 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2025/03/15/ASP.NET-Client-Side-Integration/" data-id="cmnzsi4wi0000rx0jadl1hxq1" data-title="ASP.NET + Rsbuild + Vue 3 整合架構：不用 Nuxt，也能優雅串接前後端" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2025/03/15/ASP.NET-Client-Side-Integration/" data-id="cmnzsiajz0000ue0jc5xn6371" data-title="ASP.NET + Rsbuild + Vue 3 整合架構：不用 Nuxt，也能優雅串接前後端" class="article-share-link">Share</a>
       
       
       
   <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-ELKSharing" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2023/11/22/ELKSharing/" class="article-date">
-  <time class="dt-published" datetime="2023-11-22T16:00:00.000Z" itemprop="datePublished">2023-11-23</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2023/11/22/ELKSharing/">ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>本文是團隊內部 ELK（Elasticsearch + Logstash + Kibana）使用分享，涵蓋四大主題：</p>
-<ol>
-<li><strong>Index 架構介紹</strong> — 各索引的用途與對應情境</li>
-<li><strong>Field 介紹</strong> — Elasticsearch Field Type 與 Common Field 說明</li>
-<li><strong>Log Pattern 格式</strong> — 各類型 Log 的解析格式</li>
-<li><strong>Case Study</strong> — 實際問題排查流程示範</li>
-</ol>
-        
-          <p class="article-more-link">
-            <a href="/2023/11/22/ELKSharing/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/11/22/ELKSharing/" data-id="cmnzsi4ww0009rx0j30jvbdqo" data-title="ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li></ul>
 
     </footer>
   </div>
@@ -789,7 +785,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2023/10/07/JamWebDebugger/" data-id="cmnzsi4x4000qrx0j90ml1iti" data-title="JamWebDebugger" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2023/10/07/JamWebDebugger/" data-id="cmnzsiakh000kue0jble77n2n" data-title="JamWebDebugger" class="article-share-link">Share</a>
       
       
       
@@ -838,7 +834,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
   <div class="widget-wrap">
     <h3 class="widget-title">彙整</h3>
     <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/11/">十一月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
     </div>
   </div>
 
@@ -849,6 +845,10 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
     <h3 class="widget-title">最新文章</h3>
     <div class="widget">
       <ul>
+        
+          <li>
+            <a href="/2026/04/14/ELKSharing/">ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study</a>
+          </li>
         
           <li>
             <a href="/2026/04/06/RedLockCacheLayerManager/">RedLock 分散式鎖在 CacheLayerManager 的實作案例</a>
@@ -884,10 +884,6 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
         
           <li>
             <a href="/2026/03/12/VueBroadCastImplement/">Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</a>
-          </li>
-        
-          <li>
-            <a href="/2026/03/12/VuePartialView/">跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer</a>
           </li>
         
       </ul>
