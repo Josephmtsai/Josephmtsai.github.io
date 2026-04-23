@@ -74,6 +74,695 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-HashBasedJobStaggering" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/04/21/HashBasedJobStaggering/" class="article-date">
+  <time class="dt-published" datetime="2026-04-21T16:00:00.000Z" itemprop="datePublished">2026-04-22</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/04/21/HashBasedJobStaggering/">用 Job Name Hash 防止 Thundering Herd：30 支排程 Job 的自動錯開機制</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="問題：Thundering-Herd（驚群效應）"><a href="#問題：Thundering-Herd（驚群效應）" class="headerlink" title="問題：Thundering Herd（驚群效應）"></a>問題：Thundering Herd（驚群效應）</h2><p>系統有 30 支以上的 Hangfire 排程 Job，每支 Job 都會對外部 SPI API 發出多個 HTTP 請求。</p>
+<p>當所有 Job 都設定在「整點」或「每 10 分鐘的 :00 秒」執行時，每次觸發瞬間：</p>
+<ul>
+<li>30 支 Job 同時啟動</li>
+<li>每支 Job 平均 3 個並行 HTTP 請求</li>
+<li>瞬間湧入 90+ 個 API 請求</li>
+</ul>
+<p>結果：API 被打爆 → timeout → Job 失敗 → Hangfire 自動重試 → 更多請求 → 更多 timeout，雪崩成立。</p>
+<hr>
+<h2 id="人工錯開的問題"><a href="#人工錯開的問題" class="headerlink" title="人工錯開的問題"></a>人工錯開的問題</h2><p>最直覺的解法是人工設定每支 Job 的秒數偏移：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span> <span class="attr">&quot;Name&quot;</span><span class="punctuation">:</span> <span class="string">&quot;SportsCache&quot;</span><span class="punctuation">,</span>  <span class="attr">&quot;Cron&quot;</span><span class="punctuation">:</span> <span class="string">&quot;0 */10 * * * *&quot;</span>  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line"><span class="punctuation">&#123;</span> <span class="attr">&quot;Name&quot;</span><span class="punctuation">:</span> <span class="string">&quot;CasinoCache&quot;</span><span class="punctuation">,</span>  <span class="attr">&quot;Cron&quot;</span><span class="punctuation">:</span> <span class="string">&quot;15 */10 * * * *&quot;</span> <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line"><span class="punctuation">&#123;</span> <span class="attr">&quot;Name&quot;</span><span class="punctuation">:</span> <span class="string">&quot;LiveCache&quot;</span><span class="punctuation">,</span>    <span class="attr">&quot;Cron&quot;</span><span class="punctuation">:</span> <span class="string">&quot;30 */10 * * * *&quot;</span> <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line"><span class="punctuation">&#123;</span> <span class="attr">&quot;Name&quot;</span><span class="punctuation">:</span> <span class="string">&quot;LottoCache&quot;</span><span class="punctuation">,</span>   <span class="attr">&quot;Cron&quot;</span><span class="punctuation">:</span> <span class="string">&quot;45 */10 * * * *&quot;</span> <span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>但這有幾個問題：</p>
+<ol>
+<li><strong>人工維護成本高</strong>：每新增 Job 都要手動分配秒數，確保不衝突</li>
+<li><strong>容易出錯</strong>：兩支 Job 設了同一個秒數，管理員不一定發現</li>
+<li><strong>無法規模化</strong>：60 支 Job 要人工分配 60 個不同秒數</li>
+</ol>
+<hr>
+<h2 id="解法：以-Job-名稱的-Hash-決定偏移秒數"><a href="#解法：以-Job-名稱的-Hash-決定偏移秒數" class="headerlink" title="解法：以 Job 名稱的 Hash 決定偏移秒數"></a>解法：以 Job 名稱的 Hash 決定偏移秒數</h2><p>核心想法：讓每支 Job <strong>自己計算</strong>自己的偏移秒數，不需要人工指定。</p>
+<p>條件：</p>
+<ul>
+<li><strong>決定論式</strong>（Deterministic）：相同 Job 名稱永遠算出相同偏移，App 重啟後行為不變</li>
+<li><strong>分散性</strong>：不同 Job 名稱算出的偏移值盡量均勻分散在 0-59 之間</li>
+<li><strong>穩定性</strong>：無需持久化，純計算</li>
+</ul>
+<p><code>GetHashCode()</code> 剛好滿足這三點：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="built_in">string</span> CronExpression =&gt; GetAdjustedCronExpression();</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">private</span> <span class="built_in">string</span> <span class="title">GetAdjustedCronExpression</span>()</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">// 取得基礎 Cron，例如 &quot;*/10 * * * *&quot;（每 10 分鐘）</span></span><br><span class="line">    <span class="keyword">var</span> baseCron = CacheTime.GetDescription();</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (ExecutionDelaySecondsForInitializing &lt;= <span class="number">0</span>)</span><br><span class="line">        <span class="keyword">return</span> baseCron;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 用 Job 名稱 Hash 算出 0-59 的固定偏移</span></span><br><span class="line">    <span class="keyword">var</span> jobHash = Name.ToString().GetHashCode();</span><br><span class="line">    <span class="keyword">var</span> offsetSeconds = Math.Abs(jobHash % <span class="number">60</span>);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Hangfire 支援 6-part cron（含秒）：&quot;&#123;second&#125; &#123;minute&#125; &#123;hour&#125; &#123;day&#125; &#123;month&#125; &#123;weekday&#125;&quot;</span></span><br><span class="line">    <span class="keyword">return</span> <span class="string">$&quot;<span class="subst">&#123;offsetSeconds&#125;</span> <span class="subst">&#123;baseCron&#125;</span>&quot;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="實際效果驗證"><a href="#實際效果驗證" class="headerlink" title="實際效果驗證"></a>實際效果驗證</h2><p>以設定檔中幾個 Job 為例（<code>Name.GetHashCode() % 60</code> 的結果）：</p>
+<table>
+<thead>
+<tr>
+<th>Job 名稱</th>
+<th>Hash（示意）</th>
+<th>offsetSeconds</th>
+<th>最終 Cron</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>SportsCache</code></td>
+<td>…</td>
+<td>17</td>
+<td><code>17 */10 * * * *</code></td>
+</tr>
+<tr>
+<td><code>CasinoCache</code></td>
+<td>…</td>
+<td>43</td>
+<td><code>43 */10 * * * *</code></td>
+</tr>
+<tr>
+<td><code>LiveCache</code></td>
+<td>…</td>
+<td>5</td>
+<td><code>5 */10 * * * *</code></td>
+</tr>
+<tr>
+<td><code>LottoCache</code></td>
+<td>…</td>
+<td>29</td>
+<td><code>29 */10 * * * *</code></td>
+</tr>
+<tr>
+<td><code>Maintenance</code></td>
+<td>…</td>
+<td>52</td>
+<td><code>52 */3 * * * *</code></td>
+</tr>
+<tr>
+<td><code>FaqContent</code></td>
+<td>…</td>
+<td>11</td>
+<td><code>11 */15 * * * *</code></td>
+</tr>
+</tbody></table>
+<p>各 Job 自動分散在不同秒數，無需任何人工介入。</p>
+<hr>
+<h2 id="Hangfire-的-6-Part-Cron"><a href="#Hangfire-的-6-Part-Cron" class="headerlink" title="Hangfire 的 6-Part Cron"></a>Hangfire 的 6-Part Cron</h2><p>標準 Cron 表達式只有 5 個欄位（分 時 日 月 週），Hangfire 擴充支援第 6 個欄位（秒）放在最前面：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">標準 Cron（5 欄位）：  &#123;分&#125; &#123;時&#125; &#123;日&#125; &#123;月&#125; &#123;週&#125;</span><br><span class="line">Hangfire Cron（6 欄位）：&#123;秒&#125; &#123;分&#125; &#123;時&#125; &#123;日&#125; &#123;月&#125; &#123;週&#125;</span><br></pre></td></tr></table></figure>
+
+<p>範例：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">*/10 * * * *         → 每 10 分鐘整，於 :00 秒執行</span><br><span class="line">17 */10 * * * *      → 每 10 分鐘，於 :17 秒執行</span><br><span class="line">43 */10 * * * *      → 每 10 分鐘，於 :43 秒執行</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="設計細節：Math-Abs-的必要性"><a href="#設計細節：Math-Abs-的必要性" class="headerlink" title="設計細節：Math.Abs 的必要性"></a>設計細節：<code>Math.Abs</code> 的必要性</h2><p><code>GetHashCode()</code> 可能回傳負數（例如 <code>-1234567890</code>）。直接對負數取模：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">-1234567890</span> % <span class="number">60</span> = <span class="number">-30</span>  <span class="comment">// 負數！不能作為秒數偏移</span></span><br></pre></td></tr></table></figure>
+
+<p>必須先取絕對值：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> offsetSeconds = Math.Abs(jobHash % <span class="number">60</span>);  <span class="comment">// 保證 0-59</span></span><br></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="為何不用-Random？"><a href="#為何不用-Random？" class="headerlink" title="為何不用 Random？"></a>為何不用 Random？</h2><figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// ❌ 不能這樣寫</span></span><br><span class="line"><span class="keyword">var</span> offsetSeconds = <span class="keyword">new</span> Random().Next(<span class="number">0</span>, <span class="number">60</span>);</span><br></pre></td></tr></table></figure>
+
+<p><code>Random</code> 產生的是隨機值，每次 App 重啟時偏移都不同。這帶來兩個問題：</p>
+<ol>
+<li><strong>排程時間漂移</strong>：Hangfire Dashboard 顯示的「下次執行時間」每次重啟後都變，難以觀察和除錯</li>
+<li><strong>重啟後偏移衝突</strong>：前一次分散得很好，重啟後可能有多支 Job 剛好算到同一秒</li>
+</ol>
+<p><code>GetHashCode()</code> 的決定論特性確保「相同名稱 → 相同偏移 → 相同排程時間」，跨重啟穩定一致。</p>
+<hr>
+<h2 id="設定檔整合"><a href="#設定檔整合" class="headerlink" title="設定檔整合"></a>設定檔整合</h2><p><code>ExecutionDelaySecondsForInitializing</code> 控制是否啟用 Hash 偏移機制：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;Name&quot;</span><span class="punctuation">:</span> <span class="string">&quot;CasinoCache&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;CacheTime&quot;</span><span class="punctuation">:</span> <span class="string">&quot;10&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;QueueName&quot;</span><span class="punctuation">:</span> <span class="string">&quot;game-cache-queue&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;ExecutionDelaySecondsForInitializing&quot;</span><span class="punctuation">:</span> <span class="number">1</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<ul>
+<li><code>&gt; 0</code>（預設值 1）：啟用 Hash 偏移，自動計算秒數</li>
+<li><code>&lt;= 0</code>：關閉偏移，回傳原始 Cron 表達式</li>
+</ul>
+<p>這讓少數需要精確整點執行的 Job 可以個別關閉此機制。</p>
+<hr>
+<h2 id="完整資料流"><a href="#完整資料流" class="headerlink" title="完整資料流"></a>完整資料流</h2><pre class="mermaid">flowchart TD
+    A["appCacheSetting.json<br/>Name: CasinoCache, CacheTime: 10"]
+    B["CacheTimeSetting.CronExpression<br/>jobHash = GetHashCode()<br/>offsetSeconds = Math.Abs(jobHash % 60) → 43<br/>baseCron = */10 * * * *<br/>result = 43 */10 * * * *"]
+    C["JobInitializeService.RegisterRecurringJob()<br/>RecurringJob.AddOrUpdate(CasinoCache, game-cache-queue,<br/>43 */10 * * * *)"]
+    D["Hangfire Scheduler<br/>每 10 分鐘的 :43 秒執行 CasinoCacheJob.DoJob()"]
+    A --> B
+    B --> C
+    C --> D</pre>
+
+<hr>
+<h2 id="效益總結"><a href="#效益總結" class="headerlink" title="效益總結"></a>效益總結</h2><table>
+<thead>
+<tr>
+<th></th>
+<th>人工設定偏移</th>
+<th>Hash 自動偏移</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>新增 Job 時需設秒數</td>
+<td>是，且要確保不重複</td>
+<td>否，自動計算</td>
+</tr>
+<tr>
+<td>重啟後排程時間</td>
+<td>固定（人工設定）</td>
+<td>固定（Hash 決定論）</td>
+</tr>
+<tr>
+<td>大量 Job 的維護成本</td>
+<td>隨 Job 數線性增加</td>
+<td>恆定</td>
+</tr>
+<tr>
+<td>偏移衝突風險</td>
+<td>存在，需人工檢查</td>
+<td>極低（Hash 分散性）</td>
+</tr>
+<tr>
+<td>需要修改程式碼的情境</td>
+<td>每次新增 Job</td>
+<td>永不需要</td>
+</tr>
+</tbody></table>
+<p>這個機制的精妙之處在於，它用一行數學運算（<code>Math.Abs(hashCode % 60)</code>）解決了一個需要持續人工維護的協調問題，而且完全透明——工程師不需要知道這個機制存在，它就自動生效。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/04/21/HashBasedJobStaggering/" data-id="cmoavj4jq000mto3ff3fh4704" data-title="用 Job Name Hash 防止 Thundering Herd：30 支排程 Job 的自動錯開機制" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/CSharp/" rel="tag">CSharp</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Cron/" rel="tag">Cron</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/DistributedSystem/" rel="tag">DistributedSystem</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/DotNet/" rel="tag">DotNet</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Hangfire/" rel="tag">Hangfire</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-MultiQueueResourceIsolation" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/04/21/MultiQueueResourceIsolation/" class="article-date">
+  <time class="dt-published" datetime="2026-04-21T16:00:00.000Z" itemprop="datePublished">2026-04-22</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/04/21/MultiQueueResourceIsolation/">Hangfire Multi-Queue 資源隔離：讓重量級 Job 不拖垮整個排程系統</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="問題：重量級-Job-拖垮輕量-Job"><a href="#問題：重量級-Job-拖垮輕量-Job" class="headerlink" title="問題：重量級 Job 拖垮輕量 Job"></a>問題：重量級 Job 拖垮輕量 Job</h2><p>所有 Hangfire Job 都跑在同一個 Worker Pool 時，有一個隱藏的資源競爭問題。</p>
+<p>以本系統的 Job 分類為例：</p>
+<p><strong>輕量 Job</strong>（毫秒~秒級）：</p>
+<ul>
+<li><code>Maintenance</code>：查一個 API，存一個 key</li>
+<li><code>FaqContent</code>：幾篇 FAQ 文章</li>
+<li><code>OTPValidationSetting</code>：幾筆設定值</li>
+</ul>
+<p><strong>重量 Job</strong>（秒~十幾秒）：</p>
+<ul>
+<li><code>CasinoCache</code>：拉全部 Casino 遊戲清單（數千筆）+ Jackpot feed + 多語言轉換</li>
+<li><code>LiveCache</code>：拉全部 Live Casino 遊戲 + 即時賠率 feed</li>
+<li><code>EsportsCache</code>：拉 Esports 遊戲清單 + 賽事 feed</li>
+</ul>
+<p>如果 8 個 Worker 同時執行 <code>CasinoCache</code>、<code>LiveCache</code>、<code>EsportsCache</code>⋯⋯</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">問題 1：SPI API Timeout</span><br><span class="line">  重量 Job 並行呼叫同一個 API，超過 API Rate Limit → Timeout</span><br><span class="line">  Hangfire 自動 Retry → 更多並行請求 → 更多 Timeout → 雪崩</span><br><span class="line"></span><br><span class="line">問題 2：輕量 Job 被餓死</span><br><span class="line">  8 個 Worker 全被重量 Job 佔用</span><br><span class="line">  Maintenance（3 分鐘更新一次）無法執行 → 快取過期</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="解法：多-Queue-獨立-Worker-Pool"><a href="#解法：多-Queue-獨立-Worker-Pool" class="headerlink" title="解法：多 Queue + 獨立 Worker Pool"></a>解法：多 Queue + 獨立 Worker Pool</h2><p>Hangfire 支援 <strong>Multi-Server + Multi-Queue</strong> 架構：每個 <code>BackgroundJobServer</code> 實例可以只監聽特定 Queue，並有自己獨立的 Worker 數量。</p>
+<pre class="mermaid">flowchart TD
+    subgraph DS["Default Queue Server"]
+        D["Worker Count: ProcessorCount（e.g., 8）<br/>監聽 Queue: default<br/>處理：Maintenance / FaqContent / OTP / Country / ..."]
+    end
+    subgraph GS["Game Cache Queue Server"]
+        G["Worker Count: 1（序列執行）<br/>監聽 Queue: game-cache-queue<br/>處理：CasinoCache / LiveCache / EsportsCache / LottoCache"]
+    end</pre>
+
+<p>重量 Job 被隔離到 <code>game-cache-queue</code>，獨立 1 個 Worker 序列執行，對外 API 的壓力從「N 個並行請求」降為「1 個串行請求」。輕量 Job 的 8 個 Worker 完全不受影響。</p>
+<hr>
+<h2 id="設定驅動的-Multi-Queue（hangfire-json）"><a href="#設定驅動的-Multi-Queue（hangfire-json）" class="headerlink" title="設定驅動的 Multi-Queue（hangfire.json）"></a>設定驅動的 Multi-Queue（hangfire.json）</h2><p>Queue 設定完全由設定檔控制，不需要修改程式碼：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;HangfireSetting&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;SpecialQueues&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">      <span class="punctuation">&#123;</span></span><br><span class="line">        <span class="attr">&quot;QueueName&quot;</span><span class="punctuation">:</span> <span class="string">&quot;game-cache-queue&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;WorkerCount&quot;</span><span class="punctuation">:</span> <span class="number">1</span></span><br><span class="line">      <span class="punctuation">&#125;</span></span><br><span class="line">    <span class="punctuation">]</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;DefaultSpecialQueueWorkerCount&quot;</span><span class="punctuation">:</span> <span class="number">1</span></span><br><span class="line">  <span class="punctuation">&#125;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>未來新增一個 <code>payment-queue</code> 只需加一筆 JSON，完全不碰 C#。</p>
+<hr>
+<h2 id="核心實作"><a href="#核心實作" class="headerlink" title="核心實作"></a>核心實作</h2><h3 id="Worker-Count-決策邏輯（HangfireSetting）"><a href="#Worker-Count-決策邏輯（HangfireSetting）" class="headerlink" title="Worker Count 決策邏輯（HangfireSetting）"></a>Worker Count 決策邏輯（HangfireSetting）</h3><figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="built_in">int</span> <span class="title">GetWorkerCountForQueue</span>(<span class="params"><span class="built_in">string</span> queueName</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">// 優先查明確設定的特殊 Queue</span></span><br><span class="line">    <span class="keyword">var</span> specialQueue = GetQueueByPattern(queueName);</span><br><span class="line">    <span class="keyword">if</span> (specialQueue != <span class="literal">null</span>)</span><br><span class="line">        <span class="keyword">return</span> specialQueue.WorkerCount;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 名稱符合 -queue 後綴但沒有明確設定，使用預設值（通常為 1）</span></span><br><span class="line">    <span class="keyword">if</span> (IsSpecialQueue(queueName))</span><br><span class="line">        <span class="keyword">return</span> DefaultSpecialQueueWorkerCount;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// Default Queue：使用 CPU 核心數，充分利用硬體並行能力</span></span><br><span class="line">    <span class="keyword">return</span> Environment.ProcessorCount;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> <span class="built_in">bool</span> <span class="title">IsSpecialQueue</span>(<span class="params"><span class="built_in">string</span> queueName</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> queueName.EndsWith(<span class="string">&quot;-queue&quot;</span>, StringComparison.OrdinalIgnoreCase);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>命名慣例：Queue 名稱以 <code>-queue</code> 結尾即為「特殊 Queue」，自動套用 Worker 限制。</p>
+<h3 id="動態建立多個-BackgroundJobServer（ServiceCollectionExtension）"><a href="#動態建立多個-BackgroundJobServer（ServiceCollectionExtension）" class="headerlink" title="動態建立多個 BackgroundJobServer（ServiceCollectionExtension）"></a>動態建立多個 BackgroundJobServer（ServiceCollectionExtension）</h3><figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">static</span> IServiceCollection <span class="title">AddHangfireServices</span>(<span class="params"><span class="keyword">this</span> IServiceCollection services</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">// 設定 Hangfire 使用 Redis 作為 Job Storage</span></span><br><span class="line">    services.AddHangfire((serviceProvider, config) =&gt;</span><br><span class="line">    &#123;</span><br><span class="line">        config.UseRedisStorage(</span><br><span class="line">            HangfireSetting.RedisConnectionString,</span><br><span class="line">            <span class="keyword">new</span> RedisStorageOptions &#123; Prefix = HangfireSetting.PrefixKey &#125;</span><br><span class="line">        ).WithJobExpirationTimeout(TimeSpan.FromDays(<span class="number">1</span>));</span><br><span class="line">    &#125;);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 預設 Server（處理 default queue，Worker 數 = CPU 核心數）</span></span><br><span class="line">    services.AddHangfireServer();</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 為每個特殊 Queue 建立獨立 Server</span></span><br><span class="line">    <span class="keyword">var</span> specialQueues = HangfireSetting.GetAllSpecialQueueNames();</span><br><span class="line">    <span class="keyword">foreach</span> (<span class="keyword">var</span> queueName <span class="keyword">in</span> specialQueues)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">var</span> workerCount = HangfireSetting.GetWorkerCountForQueue(queueName);</span><br><span class="line"></span><br><span class="line">        services.AddHangfireServer(options =&gt;</span><br><span class="line">        &#123;</span><br><span class="line">            options.Queues = <span class="keyword">new</span>[] &#123; queueName &#125;;</span><br><span class="line">            options.WorkerCount = workerCount;</span><br><span class="line">            <span class="comment">// Server 命名便於在 Hangfire Dashboard 辨識</span></span><br><span class="line">            options.ServerName = <span class="string">$&quot;<span class="subst">&#123;queueName.Replace(<span class="string">&quot;-&quot;</span>, <span class="string">&quot;&quot;</span>).ToUpper()&#125;</span>Server-<span class="subst">&#123;Environment.MachineName&#125;</span>&quot;</span>;</span><br><span class="line">        &#125;);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> services;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>ServerName</code> 格式 <code>GAMECACHEQUEUE Server-MYSERVER01</code> 讓 Dashboard 一眼看出每個 Server 負責哪個 Queue。</p>
+<h3 id="Job-指派到-Queue（appCacheSetting-json）"><a href="#Job-指派到-Queue（appCacheSetting-json）" class="headerlink" title="Job 指派到 Queue（appCacheSetting.json）"></a>Job 指派到 Queue（appCacheSetting.json）</h3><figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;Name&quot;</span><span class="punctuation">:</span> <span class="string">&quot;CasinoCache&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;CacheTime&quot;</span><span class="punctuation">:</span> <span class="string">&quot;10&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;QueueName&quot;</span><span class="punctuation">:</span> <span class="string">&quot;game-cache-queue&quot;</span>   ← 明確路由到特殊 Queue</span><br><span class="line"><span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;Name&quot;</span><span class="punctuation">:</span> <span class="string">&quot;Maintenance&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;CacheTime&quot;</span><span class="punctuation">:</span> <span class="string">&quot;3&quot;</span></span><br><span class="line">  <span class="comment">// QueueName 未設定，預設為 &quot;default&quot;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p><code>CacheTimeSetting</code> 的 <code>QueueName</code> 預設值為 <code>&quot;default&quot;</code>：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">public</span> <span class="keyword">class</span> <span class="title">CacheTimeSetting</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">public</span> AppDataCacheNameEnum Name &#123; <span class="keyword">get</span>; <span class="keyword">set</span>; &#125;</span><br><span class="line">    <span class="keyword">public</span> HangFireJobTimeEnum CacheTime &#123; <span class="keyword">get</span>; <span class="keyword">set</span>; &#125;</span><br><span class="line">    <span class="keyword">public</span> <span class="built_in">string</span> QueueName &#123; <span class="keyword">get</span>; <span class="keyword">set</span>; &#125; = <span class="string">&quot;default&quot;</span>;  <span class="comment">// 預設 default queue</span></span><br><span class="line">    <span class="comment">// ...</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="設定驗證（Fail-Fast）"><a href="#設定驗證（Fail-Fast）" class="headerlink" title="設定驗證（Fail Fast）"></a>設定驗證（Fail Fast）</h2><p>Hangfire Server 建立時若 <code>WorkerCount &lt;= 0</code> 會在運行期才爆，很難 debug。把驗證移到啟動期：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">Validate</span>()</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span> (DefaultSpecialQueueWorkerCount &lt;= <span class="number">0</span>)</span><br><span class="line">        <span class="keyword">throw</span> <span class="keyword">new</span> ArgumentException(<span class="string">&quot;DefaultSpecialQueueWorkerCount must be &gt; 0&quot;</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">foreach</span> (<span class="keyword">var</span> queue <span class="keyword">in</span> SpecialQueues ?? Enumerable.Empty&lt;SpecialQueueConfig&gt;())</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">if</span> (<span class="built_in">string</span>.IsNullOrEmpty(queue.QueueName))</span><br><span class="line">            <span class="keyword">throw</span> <span class="keyword">new</span> ArgumentException(<span class="string">&quot;SpecialQueue QueueName cannot be empty&quot;</span>);</span><br><span class="line">        <span class="keyword">if</span> (queue.WorkerCount &lt;= <span class="number">0</span>)</span><br><span class="line">            <span class="keyword">throw</span> <span class="keyword">new</span> ArgumentException(<span class="string">$&quot;Queue &#x27;<span class="subst">&#123;queue.QueueName&#125;</span>&#x27; WorkerCount must be &gt; 0&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>設定錯誤 → 啟動失敗 → 明確錯誤訊息，不會等到 Job 執行時才無聲失敗。</p>
+<hr>
+<h2 id="實戰：如何新增一支-Job-並指定-Queue"><a href="#實戰：如何新增一支-Job-並指定-Queue" class="headerlink" title="實戰：如何新增一支 Job 並指定 Queue"></a>實戰：如何新增一支 Job 並指定 Queue</h2><p>以下用新增一支 <code>SmsNotification</code> Job 為例，完整走一次四個步驟。</p>
+<hr>
+<h3 id="情境一：加入已有的-Queue（例如-game-cache-queue）"><a href="#情境一：加入已有的-Queue（例如-game-cache-queue）" class="headerlink" title="情境一：加入已有的 Queue（例如 game-cache-queue）"></a>情境一：加入已有的 Queue（例如 <code>game-cache-queue</code>）</h3><p>只需改動 <strong>三個地方</strong>。</p>
+<hr>
+<h4 id="Step-1-—-定義介面"><a href="#Step-1-—-定義介面" class="headerlink" title="Step 1 — 定義介面"></a>Step 1 — 定義介面</h4><p>路徑：<code>Application/Interfaces/ISmsNotificationJob.cs</code></p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">namespace</span> <span class="title">Application.Interfaces</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">interface</span> <span class="title">ISmsNotificationJob</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="function">Task <span class="title">DoJob</span>()</span>;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>命名規則固定為 <code>I&#123;JobName&#125;Job</code>，<code>JobInitializeService</code> 會用 Reflection 自動用這個名稱找到你的介面，名稱不符合就找不到。</p>
+</blockquote>
+<hr>
+<h4 id="Step-2-—-實作-Job-類別"><a href="#Step-2-—-實作-Job-類別" class="headerlink" title="Step 2 — 實作 Job 類別"></a>Step 2 — 實作 Job 類別</h4><p>路徑：<code>Application/Jobs/SmsNotificationJob.cs</code></p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">namespace</span> <span class="title">Application.Jobs</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">public</span> <span class="keyword">class</span> <span class="title">SmsNotificationJob</span> : <span class="title">ISmsNotificationJob</span></span><br><span class="line">    &#123;</span><br><span class="line">        <span class="function"><span class="keyword">public</span> <span class="keyword">async</span> Task <span class="title">DoJob</span>()</span></span><br><span class="line">        &#123;</span><br><span class="line">            <span class="comment">// 實際業務邏輯</span></span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h4 id="Step-3-—-在-DI-容器註冊"><a href="#Step-3-—-在-DI-容器註冊" class="headerlink" title="Step 3 — 在 DI 容器註冊"></a>Step 3 — 在 DI 容器註冊</h4><p>路徑：<code>Application/DependencyInjection/ServiceCollectionExtension.cs</code></p>
+<p>在 <code>AddApplicationServices()</code> 裡加一行：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 找到其他 Job 的註冊行，在附近加入</span></span><br><span class="line">services.AddTransient&lt;ISmsNotificationJob, SmsNotificationJob&gt;();</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>沒有這行的話，<code>JobInitializeService</code> 在 <code>ValidateServiceRegistration()</code> 階段就會拋錯，App 無法啟動。</p>
+</blockquote>
+<hr>
+<h4 id="Step-4-—-在設定檔新增排程設定"><a href="#Step-4-—-在設定檔新增排程設定" class="headerlink" title="Step 4 — 在設定檔新增排程設定"></a>Step 4 — 在設定檔新增排程設定</h4><p>路徑：<code>Presentation/webspi.frontend.cache/Configs/appCacheSetting.json</code></p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;AppCacheSetting&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;CacheTimeSettings&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">      <span class="comment">// ... 其他 Job ...</span></span><br><span class="line">      <span class="punctuation">&#123;</span></span><br><span class="line">        <span class="attr">&quot;Name&quot;</span><span class="punctuation">:</span> <span class="string">&quot;SmsNotification&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;CacheTime&quot;</span><span class="punctuation">:</span> <span class="string">&quot;5&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;QueueName&quot;</span><span class="punctuation">:</span> <span class="string">&quot;game-cache-queue&quot;</span></span><br><span class="line">      <span class="punctuation">&#125;</span></span><br><span class="line">    <span class="punctuation">]</span></span><br><span class="line">  <span class="punctuation">&#125;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<table>
+<thead>
+<tr>
+<th>欄位</th>
+<th>說明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Name</code></td>
+<td>必須和介面名稱 <code>I&#123;Name&#125;Job</code> 對應，大小寫一致</td>
+</tr>
+<tr>
+<td><code>CacheTime</code></td>
+<td>執行頻率（分鐘），對應 <code>HangFireJobTimeEnum</code> 的數值</td>
+</tr>
+<tr>
+<td><code>QueueName</code></td>
+<td>要路由到哪個 Queue；不填預設為 <code>&quot;default&quot;</code></td>
+</tr>
+</tbody></table>
+<p>完成。重啟 App 後 <code>JobInitializeService</code> 會自動在 Hangfire 掛上這支排程。</p>
+<hr>
+<h3 id="情境二：新增一個全新的-Queue"><a href="#情境二：新增一個全新的-Queue" class="headerlink" title="情境二：新增一個全新的 Queue"></a>情境二：新增一個全新的 Queue</h3><p>如果 <code>game-cache-queue</code> 的 Worker&#x3D;1 不適合你的需求（例如你需要 2 個 Worker），或你想把某類 Job 完全獨立出來，就需要建立新 Queue。</p>
+<p>在情境一的四個步驟之外，多加一個步驟：</p>
+<h4 id="Step-0（額外）—-在-hangfire-json-宣告新-Queue"><a href="#Step-0（額外）—-在-hangfire-json-宣告新-Queue" class="headerlink" title="Step 0（額外）— 在 hangfire.json 宣告新 Queue"></a>Step 0（額外）— 在 hangfire.json 宣告新 Queue</h4><p>路徑：<code>Presentation/webspi.frontend.cache/Configs/hangfire.json</code></p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;HangfireSetting&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;SpecialQueues&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">      <span class="punctuation">&#123;</span></span><br><span class="line">        <span class="attr">&quot;QueueName&quot;</span><span class="punctuation">:</span> <span class="string">&quot;game-cache-queue&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;WorkerCount&quot;</span><span class="punctuation">:</span> <span class="number">1</span></span><br><span class="line">      <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">      <span class="punctuation">&#123;</span></span><br><span class="line">        <span class="attr">&quot;QueueName&quot;</span><span class="punctuation">:</span> <span class="string">&quot;sms-queue&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="attr">&quot;WorkerCount&quot;</span><span class="punctuation">:</span> <span class="number">2</span></span><br><span class="line">      <span class="punctuation">&#125;</span></span><br><span class="line">    <span class="punctuation">]</span></span><br><span class="line">  <span class="punctuation">&#125;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>加入後，<code>ServiceCollectionExtension.AddHangfireServices()</code> 會在啟動時自動為 <code>sms-queue</code> 建立一個獨立的 <code>BackgroundJobServer</code>，配置 2 個 Worker。</p>
+<p>然後 Step 4 的 <code>appCacheSetting.json</code> 把 <code>QueueName</code> 設為 <code>&quot;sms-queue&quot;</code> 即可：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;Name&quot;</span><span class="punctuation">:</span> <span class="string">&quot;SmsNotification&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;CacheTime&quot;</span><span class="punctuation">:</span> <span class="string">&quot;5&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;QueueName&quot;</span><span class="punctuation">:</span> <span class="string">&quot;sms-queue&quot;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p><strong>命名慣例</strong>：Queue 名稱結尾要加 <code>-queue</code>（例如 <code>sms-queue</code>、<code>payment-queue</code>），<code>HangfireSetting.IsSpecialQueue()</code> 靠這個後綴來識別特殊 Queue。不符合慣例的 Queue 名稱會被視為 default queue，不會建立獨立 Server。</p>
+</blockquote>
+<hr>
+<h3 id="新增-Job-的完整檔案清單"><a href="#新增-Job-的完整檔案清單" class="headerlink" title="新增 Job 的完整檔案清單"></a>新增 Job 的完整檔案清單</h3><table>
+<thead>
+<tr>
+<th>情境</th>
+<th>需要改動的檔案</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>加入已有 Queue</strong></td>
+<td>① 新增 <code>Interfaces/I&#123;Name&#125;Job.cs</code> ② 新增 <code>Jobs/&#123;Name&#125;Job.cs</code> ③ <code>DependencyInjection/ServiceCollectionExtension.cs</code> ④ <code>Configs/appCacheSetting.json</code></td>
+</tr>
+<tr>
+<td><strong>新增全新 Queue</strong></td>
+<td>同上，再加 ⑤ <code>Configs/hangfire.json</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="實際-Queue-分配一覽"><a href="#實際-Queue-分配一覽" class="headerlink" title="實際 Queue 分配一覽"></a>實際 Queue 分配一覽</h2><p>依據 <code>appCacheSetting.json</code> 的設定：</p>
+<table>
+<thead>
+<tr>
+<th>Queue</th>
+<th>Job</th>
+<th>Worker 數</th>
+<th>執行模式</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>default</code></td>
+<td>Maintenance, BankMaintenance, OTPValidation, FaqContent, PmsSetting, Affiliate, …</td>
+<td>ProcessorCount</td>
+<td>並行</td>
+</tr>
+<tr>
+<td><code>game-cache-queue</code></td>
+<td>EsportsCache, CasinoCache, LiveCache, LottoCache, PromoCache, VirtualCache, ChessCache</td>
+<td>1</td>
+<td>序列</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="多實例部署的擴展方式"><a href="#多實例部署的擴展方式" class="headerlink" title="多實例部署的擴展方式"></a>多實例部署的擴展方式</h2><p>當單台 Server 的 <code>game-cache-queue</code> 處理不過來（Job 積壓），不需要修改程式碼，只需部署第二台 Server 並讓它只監聽 <code>game-cache-queue</code>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Server A：default queue（8 workers）+ game-cache-queue（1 worker）</span><br><span class="line">Server B：game-cache-queue only（1 worker）</span><br></pre></td></tr></table></figure>
+
+<p>兩台 Server 共享同一個 Redis Job Storage，Hangfire 自動做 Job 分配，<code>game-cache-queue</code> 的吞吐量翻倍。</p>
+<hr>
+<h2 id="效益對比"><a href="#效益對比" class="headerlink" title="效益對比"></a>效益對比</h2><table>
+<thead>
+<tr>
+<th>場景</th>
+<th>單一 Queue</th>
+<th>Multi-Queue</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>重量 Job 執行中</td>
+<td>輕量 Job 被排隊等待</td>
+<td>輕量 Job 不受影響</td>
+</tr>
+<tr>
+<td>SPI API 並行壓力</td>
+<td>N 個 Worker 同時打 API</td>
+<td>Game Queue 序列，一次一個</td>
+</tr>
+<tr>
+<td>Job 積壓時的擴展</td>
+<td>加 Worker → 更多 API 壓力</td>
+<td>加 Game Server → 獨立擴展</td>
+</tr>
+<tr>
+<td>Queue 設定變更</td>
+<td>改程式碼 + 部署</td>
+<td>改 JSON + 重啟</td>
+</tr>
+<tr>
+<td>Dashboard 可見度</td>
+<td>所有 Job 混在一起</td>
+<td>各 Queue 分開監控</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="小結"><a href="#小結" class="headerlink" title="小結"></a>小結</h2><p>Multi-Queue 架構的核心價值是<strong>資源隔離</strong>：不讓一類工作的資源消耗影響到另一類工作的 SLA。</p>
+<p>設計要點：</p>
+<ol>
+<li><strong>以 <code>-queue</code> 後綴作為特殊 Queue 的命名慣例</strong>，便於自動識別</li>
+<li><strong>每個特殊 Queue 對應獨立的 <code>BackgroundJobServer</code></strong>，Worker 數可獨立設定</li>
+<li><strong>設定驅動</strong>：新增 Queue 只需改 JSON，程式碼本身是通用的</li>
+<li><strong>啟動期驗證</strong>：錯誤設定立即爆出，不等到執行期</li>
+</ol>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/04/21/MultiQueueResourceIsolation/" data-id="cmoavj4jv0016to3fc3ma3v4w" data-title="Hangfire Multi-Queue 資源隔離：讓重量級 Job 不拖垮整個排程系統" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/CSharp/" rel="tag">CSharp</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/DotNet/" rel="tag">DotNet</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Hangfire/" rel="tag">Hangfire</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Queue/" rel="tag">Queue</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-VueMfaVerificationFlow" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/04/21/VueMfaVerificationFlow/" class="article-date">
+  <time class="dt-published" datetime="2026-04-21T16:00:00.000Z" itemprop="datePublished">2026-04-22</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/04/21/VueMfaVerificationFlow/">Vue 3 新裝置 MFA 驗證架構：從登入攔截到 WebView 完成驗證的完整設計</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="背景：為什麼需要新裝置驗證"><a href="#背景：為什麼需要新裝置驗證" class="headerlink" title="背景：為什麼需要新裝置驗證"></a>背景：為什麼需要新裝置驗證</h2><p>App 的登入安全升級需求：當使用者從「未曾登入過的新裝置」登入時，需要完成 MFA 驗證，才能取得完整的登入 token 和 session。</p>
+<p>這個場景有幾個特殊的工程挑戰：</p>
+<ol>
+<li><strong>MFA 流程在 WebView 中完成</strong>：App 收到「需要驗證」的訊號後開啟 WebView，驗證 UI 完全由 Web 端負責</li>
+<li><strong>三種驗證方式共用一套 UI 邏輯</strong>：Email OTP、TOTP、Push Notification，切換時不能有狀態殘留</li>
+<li><strong>Push Notification 需要前端輪詢</strong>：使用者在另一台設備點「允許」，前端要主動查詢結果</li>
+<li><strong>驗證成功後產生短效 grantId</strong>：App 用 grantId 換取正式 token，WebView 本身不持有最終憑證</li>
+</ol>
+<hr>
+<h2 id="整體登入流程（App-WebView-協作）"><a href="#整體登入流程（App-WebView-協作）" class="headerlink" title="整體登入流程（App + WebView 協作）"></a>整體登入流程（App + WebView 協作）</h2><pre class="mermaid">flowchart TD
+    A["[App] POST /api/member/login"] --> B{"設備狀態"}
+    B -->|"已知設備"| C["正常返回 LoginResponse（含 token）"]
+    B -->|"新設備"| D["HTTP 200 ErrorCode = LOGN0020<br/>MfaChallenge: VerificationId / AccountId / AvailableMethods"]
+    D --> E["[App] 開啟 WebView<br/>傳入 VerificationId + AccountId + AvailableMethods"]
+    E --> F["[WebView] 渲染 MFA UI<br/>useVerificationFlow 管理狀態"]
+    F --> G["使用者完成驗證（任一方式）"]
+    G --> H["[WebView] 呼叫 Web MFA verify API<br/>成功 → 後端寫入 Redis MFA:LoginGrant:{grantId}<br/>TTL 60~180s"]
+    H --> I["[WebView] 通知 App（帶回 grantId）"]
+    I --> J["[App] POST /api/member/exchange-login-grant<br/>Body: { GrantId: 'xxx' }"]
+    J --> K["後端從 Redis 讀 MFA:LoginGrant:{grantId}<br/>刪除 Grant Key（single-use）<br/>呼叫 InitSessionAndProfile"]
+    K --> L["回傳完整 LoginResponse（含 token/session/profile）<br/>[App] 登入完成"]</pre>
+
+<p><strong>關鍵設計：grantId 的一次性機制</strong></p>
+<p><code>grantId</code> 是短效（60~180 秒）一次性憑證。這樣設計的原因：</p>
+<ul>
+<li>WebView 完成驗證後立即簽發，App 用完即失效</li>
+<li>就算 grantId 在傳遞過程中被攔截，時間窗口極短</li>
+<li>重放攻擊（replay attack）無效：用過一次就從 Redis 刪除</li>
+</ul>
+<hr>
+<h2 id="後端：MFA-方式的決定邏輯"><a href="#後端：MFA-方式的決定邏輯" class="headerlink" title="後端：MFA 方式的決定邏輯"></a>後端：MFA 方式的決定邏輯</h2><p>哪些 MFA 方式可用，由「API 回應」和「Config 設定」共同決定，兩者都 <code>true</code> 才啟用：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">可用 MFA 方式 = API 回應 ∩ Config 開關</span><br></pre></td></tr></table></figure>
+
+<table>
+<thead>
+<tr>
+<th>方式</th>
+<th>API 條件</th>
+<th>Config 開關</th>
+<th>啟用條件</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Push Notification</td>
+<td><code>pushNotificationEnable = true</code></td>
+<td><code>NewDeviceMfaEnablePushNotification = true</code></td>
+<td>兩者皆 true</td>
+</tr>
+<tr>
+<td>Email OTP</td>
+<td>無條件（預設可用）</td>
+<td><code>NewDeviceMfaEnableEmailOtp = true</code></td>
+<td>Config 為 true 即可</td>
+</tr>
+<tr>
+<td>TOTP</td>
+<td><code>totpEnable = true</code></td>
+<td><code>NewDeviceMfaEnableTotp = true</code></td>
+<td>兩者皆 true</td>
+</tr>
+</tbody></table>
+<p>這個設計讓「會員沒有設定 TOTP」時 TOTP 不出現在列表，「Push Notification 功能全域關閉」時即使會員有綁定也不顯示。</p>
+<hr>
+<h2 id="功能開關與版本控制"><a href="#功能開關與版本控制" class="headerlink" title="功能開關與版本控制"></a>功能開關與版本控制</h2><p>新設備驗證功能透過 App 版本控制分階段上線：</p>
+<figure class="highlight xml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">&lt;!-- FeatureVersionControl.config --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">FeatureVersion</span> <span class="attr">Name</span>=<span class="string">&quot;AllowNewDeviceCheck&quot;</span></span></span><br><span class="line"><span class="tag">                <span class="attr">AndroidMinVersion</span>=<span class="string">&quot;1.2.0&quot;</span>  <span class="attr">AndroidMaxVersion</span>=<span class="string">&quot;*.*.*&quot;</span></span></span><br><span class="line"><span class="tag">                <span class="attr">iOSMinVersion</span>=<span class="string">&quot;1.2.0&quot;</span>      <span class="attr">iOSMaxVersion</span>=<span class="string">&quot;*.*.*&quot;</span> /&gt;</span></span><br></pre></td></tr></table></figure>
+
+<table>
+<thead>
+<tr>
+<th>App 版本</th>
+<th><code>AllowNewDeviceCheck</code></th>
+<th>行為</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>&lt; 1.2.0</td>
+<td><code>false</code></td>
+<td>完全不觸發新設備檢查，走原有登入流程</td>
+</tr>
+<tr>
+<td>≥ 1.2.0</td>
+<td><code>true</code></td>
+<td>新設備觸發 MFA，回傳 LOGN0020</td>
+</tr>
+</tbody></table>
+<p>分階段上線策略：初期將版本門檻設為 <code>1.9.0</code>（只有最新版測試），確認穩定後降至 <code>1.2.0</code>。緊急關閉只需將版本門檻調高至 <code>99.0.0</code>。</p>
+<hr>
+<h2 id="前端：useVerificationFlow-Composable-設計"><a href="#前端：useVerificationFlow-Composable-設計" class="headerlink" title="前端：useVerificationFlow Composable 設計"></a>前端：useVerificationFlow Composable 設計</h2><p>WebView 裡的 MFA UI 完全由 <code>useVerificationFlow</code> 管理。設計目標：</p>
+<ol>
+<li>三種方式共用一套狀態，切換時自動清理</li>
+<li>Push Notification 的輪詢邏輯完全封裝在 Composable 內</li>
+<li><strong>Callback 注入</strong>：Composable 不直接呼叫 API，由呼叫方提供實作</li>
+<li><code>onUnmounted</code> 自動清理 Polling</li>
+</ol>
+<h3 id="型別設計"><a href="#型別設計" class="headerlink" title="型別設計"></a>型別設計</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">enum</span> <span class="title class_">LoginVerificationType</span> &#123;</span><br><span class="line">  <span class="title class_">Email</span> = <span class="number">1</span>,</span><br><span class="line">  <span class="title class_">PushNotification</span> = <span class="number">2</span>,  <span class="comment">// 注意：後端 enum 和前端順序不同</span></span><br><span class="line">  <span class="variable constant_">TOTP</span> = <span class="number">3</span>,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">export</span> <span class="keyword">enum</span> <span class="title class_">VerificationErrorCode</span> &#123;</span><br><span class="line">  <span class="title class_">InvalidCode</span> = <span class="number">1001</span>,</span><br><span class="line">  <span class="title class_">MaxAttemptsReached</span> = <span class="number">1002</span>,</span><br><span class="line">  <span class="title class_">PushPending</span> = <span class="number">2001</span>,   <span class="comment">// 輪詢回應：還在等待，不是錯誤</span></span><br><span class="line">  <span class="title class_">Exception</span> = <span class="number">9999</span>,</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">export</span> <span class="keyword">interface</span> <span class="title class_">UseVerificationFlowOptions</span> &#123;</span><br><span class="line">  <span class="attr">onTrigger</span>?: <span class="function">(<span class="params"><span class="attr">method</span>: <span class="title class_">LoginVerificationType</span></span>) =&gt;</span> <span class="title class_">Promise</span>&lt;<span class="title class_">TriggerResult</span>&gt;;</span><br><span class="line">  <span class="attr">onVerify</span>?: <span class="function">(<span class="params"><span class="attr">code</span>: <span class="built_in">string</span>, <span class="attr">securityCodeId</span>: <span class="built_in">string</span>, <span class="attr">method</span>: <span class="title class_">LoginVerificationType</span></span>) =&gt;</span> <span class="title class_">Promise</span>&lt;<span class="title class_">VerifyResult</span>&gt;;</span><br><span class="line">  <span class="attr">onCheckPushStatus</span>?: <span class="function">(<span class="params"><span class="attr">verificationId</span>: <span class="built_in">string</span>, <span class="attr">accountId</span>: <span class="built_in">number</span>, <span class="attr">securityCodeId</span>: <span class="built_in">string</span></span>) =&gt;</span> <span class="title class_">Promise</span>&lt;<span class="title class_">PushStatusResult</span>&gt;;</span><br><span class="line">  <span class="attr">onPushApproved</span>?: <span class="function">(<span class="params"><span class="attr">data</span>: &#123; passport: <span class="built_in">string</span>; recDomain: <span class="built_in">Array</span>&lt;&#123; domain: <span class="built_in">string</span> &#125;&gt; &#125;</span>) =&gt;</span> <span class="built_in">void</span>;</span><br><span class="line">  <span class="attr">onTimeout</span>?: <span class="function">() =&gt;</span> <span class="built_in">void</span>;</span><br><span class="line">  <span class="attr">onError</span>?: <span class="function">(<span class="params"><span class="attr">errorCode</span>: <span class="built_in">number</span></span>) =&gt;</span> <span class="built_in">void</span>;</span><br><span class="line">  <span class="attr">onMaxAttemptsReached</span>?: <span class="function">() =&gt;</span> <span class="built_in">void</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><strong>Callback 模式的工程理由</strong>：</p>
+<ul>
+<li>同一個 <code>useVerificationFlow</code> 可以在「登入驗證」和「裝置驗證」兩個不同頁面使用，注入不同的 API 函式</li>
+<li>Composable 本身可以被獨立單元測試，無需 mock HTTP client</li>
+<li>驗證成功後的導頁邏輯（<code>onPushApproved</code>）由呼叫方決定，Composable 不需要知道 router</li>
+</ul>
+<hr>
+<h3 id="狀態設計：為什麼用-timestamp-而非-countdown"><a href="#狀態設計：為什麼用-timestamp-而非-countdown" class="headerlink" title="狀態設計：為什麼用 timestamp 而非 countdown"></a>狀態設計：為什麼用 timestamp 而非 countdown</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// ❌ 常見但有問題的設計</span></span><br><span class="line"><span class="keyword">const</span> resendCooldown = <span class="title function_">ref</span>(<span class="number">60</span>); <span class="comment">// 秒數遞減</span></span><br><span class="line"><span class="built_in">setInterval</span>(<span class="function">() =&gt;</span> &#123; resendCooldown.<span class="property">value</span>--; &#125;, <span class="number">1000</span>); <span class="comment">// 需要管理 interval 清理</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// ✅ 本實作：timestamp 比對</span></span><br><span class="line"><span class="keyword">const</span> resendCooldownEndTime = <span class="title function_">ref</span>(<span class="number">0</span>); <span class="comment">// 到期時間點（ms）</span></span><br><span class="line"><span class="keyword">const</span> canResend = <span class="title function_">computed</span>(<span class="function">() =&gt;</span> resendCooldownEndTime.<span class="property">value</span> &lt;= <span class="title class_">Date</span>.<span class="title function_">now</span>());</span><br><span class="line"></span><br><span class="line"><span class="comment">// 設定：</span></span><br><span class="line">resendCooldownEndTime.<span class="property">value</span> = <span class="title class_">Date</span>.<span class="title function_">now</span>() + <span class="number">60</span> * <span class="number">1000</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">// UI 顯示剩餘秒數（由 UI 層自行計算，不需要 Composable 管理 interval）：</span></span><br><span class="line"><span class="keyword">const</span> secondsLeft = <span class="title function_">computed</span>(<span class="function">() =&gt;</span></span><br><span class="line">  <span class="title class_">Math</span>.<span class="title function_">max</span>(<span class="number">0</span>, <span class="title class_">Math</span>.<span class="title function_">ceil</span>((resendCooldownEndTime.<span class="property">value</span> - <span class="title class_">Date</span>.<span class="title function_">now</span>()) / <span class="number">1000</span>))</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
+
+<p>這個設計的優點：</p>
+<ul>
+<li>Composable 不需要持有任何 <code>setInterval</code>（倒數的驅動責任移交給 UI 層）</li>
+<li>頁面重整後恢復：只要把 <code>endTime</code> 存到 localStorage 就能重建狀態</li>
+<li>多個計時器（resend cooldown + verification expiry）各自獨立，不互相干擾</li>
+</ul>
+<hr>
+<h3 id="Push-Notification-Polling-的完整狀態機"><a href="#Push-Notification-Polling-的完整狀態機" class="headerlink" title="Push Notification Polling 的完整狀態機"></a>Push Notification Polling 的完整狀態機</h3><p>Push Notification 是三種方式中最複雜的，因為它是<strong>非同步等待使用者在另一台設備操作</strong>：</p>
+<figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> <span class="variable constant_">PUSH_POLLING_INTERVAL</span> = <span class="number">3000</span>; <span class="comment">// 每 3 秒輪詢一次</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">function</span> <span class="title function_">startPolling</span>(<span class="params"><span class="attr">verificationId</span>: <span class="built_in">string</span>, <span class="attr">accountId</span>: <span class="built_in">number</span></span>): <span class="built_in">void</span> &#123;</span><br><span class="line">  <span class="keyword">if</span> (!onCheckPushStatus || isPolling.<span class="property">value</span>) <span class="keyword">return</span>; <span class="comment">// 冪等：重複呼叫無副作用</span></span><br><span class="line"></span><br><span class="line">  verificationIdForPolling.<span class="property">value</span> = verificationId;</span><br><span class="line">  accountIdForPolling.<span class="property">value</span> = accountId;</span><br><span class="line">  isPolling.<span class="property">value</span> = <span class="literal">true</span>;</span><br><span class="line"></span><br><span class="line">  <span class="comment">// 立即執行一次，不等第一個 3 秒 interval</span></span><br><span class="line">  <span class="comment">// （使用者可能已在另一台設備預先點了允許）</span></span><br><span class="line">  <span class="title function_">checkPushStatus</span>();</span><br><span class="line"></span><br><span class="line">  pollingIntervalId.<span class="property">value</span> = <span class="variable language_">window</span>.<span class="built_in">setInterval</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">    <span class="comment">// 每個 tick 都先檢查 session 是否已過期</span></span><br><span class="line">    <span class="comment">// 不依賴 setInterval 的 timing 精度（可能因 tab 背景化而延遲）</span></span><br><span class="line">    <span class="keyword">if</span> (verificationExpiryEndTime.<span class="property">value</span> &gt; <span class="number">0</span> &amp;&amp; <span class="title class_">Date</span>.<span class="title function_">now</span>() &gt;= verificationExpiryEndTime.<span class="property">value</span>) &#123;</span><br><span class="line">      <span class="title function_">stopPolling</span>();</span><br><span class="line">      onTimeout?.();</span><br><span class="line">      <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="title function_">checkPushStatus</span>();</span><br><span class="line">  &#125;, <span class="variable constant_">PUSH_POLLING_INTERVAL</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">async</span> <span class="keyword">function</span> <span class="title function_">checkPushStatus</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="keyword">if</span> (!onCheckPushStatus || !verificationIdForPolling.<span class="property">value</span>) <span class="keyword">return</span> &#123; <span class="attr">success</span>: <span class="literal">false</span> &#125;;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="keyword">const</span> result = <span class="keyword">await</span> <span class="title function_">onCheckPushStatus</span>(</span><br><span class="line">      verificationIdForPolling.<span class="property">value</span>,</span><br><span class="line">      accountIdForPolling.<span class="property">value</span>,</span><br><span class="line">      securityCodeId.<span class="property">value</span>,</span><br><span class="line">    );</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (result.<span class="property">success</span>) &#123;</span><br><span class="line">      <span class="title function_">stopPolling</span>();</span><br><span class="line">      <span class="keyword">if</span> (onPushApproved &amp;&amp; result.<span class="property">data</span>) &#123;</span><br><span class="line">        <span class="title function_">onPushApproved</span>(result.<span class="property">data</span> <span class="keyword">as</span> &#123; <span class="attr">passport</span>: <span class="built_in">string</span>; <span class="attr">recDomain</span>: <span class="title class_">Array</span>&lt;&#123; <span class="attr">domain</span>: <span class="built_in">string</span> &#125;&gt; &#125;);</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">return</span> &#123; <span class="attr">success</span>: <span class="literal">true</span> &#125;;</span><br><span class="line"></span><br><span class="line">    &#125; <span class="keyword">else</span> <span class="keyword">if</span> (result.<span class="property">errorCode</span> === <span class="title class_">VerificationErrorCode</span>.<span class="property">PushPending</span>) &#123;</span><br><span class="line">      <span class="comment">// 還在等待：什麼都不做，繼續下一個 tick</span></span><br><span class="line">      <span class="keyword">return</span> &#123; <span class="attr">success</span>: <span class="literal">false</span> &#125;;</span><br><span class="line"></span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="comment">// 真正的錯誤（過期、使用者拒絕等）</span></span><br><span class="line">      <span class="title function_">stopPolling</span>();</span><br><span class="line">      onError?.(result.<span class="property">errorCode</span>!);</span><br><span class="line">      <span class="keyword">return</span> &#123; <span class="attr">success</span>: <span class="literal">false</span>, <span class="attr">errorCode</span>: result.<span class="property">errorCode</span> &#125;;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; <span class="keyword">catch</span> &#123;</span><br><span class="line">    <span class="comment">// 網路錯誤：不停止 Polling，下一個 3 秒 tick 自動重試</span></span><br><span class="line">    <span class="keyword">return</span> &#123; <span class="attr">success</span>: <span class="literal">false</span> &#125;;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><strong>三種 Push 狀態的不同處理</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>API 回應</th>
+<th><code>isPolling</code></th>
+<th>UI 行為</th>
+<th>呼叫 Callback</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>success: true</code></td>
+<td>停止</td>
+<td>成功畫面</td>
+<td><code>onPushApproved(data)</code></td>
+</tr>
+<tr>
+<td><code>errorCode: PushPending</code></td>
+<td>繼續</td>
+<td>等待動畫</td>
+<td>無</td>
+</tr>
+<tr>
+<td>其他 errorCode</td>
+<td>停止</td>
+<td>錯誤 Dialog</td>
+<td><code>onError(code)</code></td>
+</tr>
+<tr>
+<td>Network error (catch)</td>
+<td>繼續</td>
+<td>等待動畫</td>
+<td>無</td>
+</tr>
+</tbody></table>
+<p><strong>網路錯誤不停 Polling 的設計理由</strong>：</p>
+<p>Push Notification 的場景中，使用者已在等待介面。網路短暫抖動不應該強制使用者重新操作。3 秒後自動重試，對 UX 更友好。只有真正的業務邏輯錯誤（session 過期、Push 被拒絕）才停止。</p>
+<hr>
+<h3 id="精確的過期偵測：為什麼-setInterval-的-3-秒間隔不夠"><a href="#精確的過期偵測：為什麼-setInterval-的-3-秒間隔不夠" class="headerlink" title="精確的過期偵測：為什麼 setInterval 的 3 秒間隔不夠"></a>精確的過期偵測：為什麼 setInterval 的 3 秒間隔不夠</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// 問題：setInterval 在 Tab 背景化時可能被 throttle 到 1 分鐘執行一次</span></span><br><span class="line"><span class="comment">// 就算正常執行，3 秒的間隔意味著最多 3 秒的過期判斷誤差</span></span><br><span class="line"></span><br><span class="line"><span class="comment">// 解法：額外加一個 1 秒精確檢查的 watcher</span></span><br><span class="line"><span class="title function_">watch</span>(</span><br><span class="line">  <span class="function">() =&gt;</span> verificationExpiryEndTime.<span class="property">value</span>,</span><br><span class="line">  <span class="function">(<span class="params">newEndTime</span>) =&gt;</span> &#123;</span><br><span class="line">    <span class="keyword">if</span> (newEndTime &gt; <span class="number">0</span> &amp;&amp; isPolling.<span class="property">value</span>) &#123;</span><br><span class="line">      <span class="keyword">const</span> expiryCheckInterval = <span class="built_in">setInterval</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">        <span class="keyword">if</span> (<span class="title class_">Date</span>.<span class="title function_">now</span>() &gt;= newEndTime || !isPolling.<span class="property">value</span>) &#123;</span><br><span class="line">          <span class="built_in">clearInterval</span>(expiryCheckInterval);</span><br><span class="line">          <span class="keyword">if</span> (<span class="title class_">Date</span>.<span class="title function_">now</span>() &gt;= newEndTime) &#123;</span><br><span class="line">            <span class="title function_">stopPolling</span>();</span><br><span class="line">            onTimeout?.();</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;</span><br><span class="line">      &#125;, <span class="number">1000</span>); <span class="comment">// 1 秒精度</span></span><br><span class="line">    &#125;</span><br><span class="line">  &#125;,</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
+
+<p>這個 <code>watch</code> 在 <code>verificationExpiryEndTime</code> 被設定時（<code>trigger</code> 成功後）才啟動，避免在 Push 尚未開始時就跑多餘的 interval。</p>
+<hr>
+<h3 id="setMethod：切換方式時的狀態清理"><a href="#setMethod：切換方式時的狀態清理" class="headerlink" title="setMethod：切換方式時的狀態清理"></a>setMethod：切換方式時的狀態清理</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">setMethod</span>(<span class="params"><span class="attr">method</span>: <span class="title class_">LoginVerificationType</span></span>) &#123;</span><br><span class="line">  <span class="comment">// 從 Push 切換走：必須先停止 Polling</span></span><br><span class="line">  <span class="comment">// 不停的話 Polling 會在背景繼續，成功後呼叫 onPushApproved，但 UI 已換成 Email 畫面</span></span><br><span class="line">  <span class="keyword">if</span> (currentMethod.<span class="property">value</span> === <span class="title class_">LoginVerificationType</span>.<span class="property">PushNotification</span> &amp;&amp; isPolling.<span class="property">value</span>) &#123;</span><br><span class="line">    <span class="title function_">stopPolling</span>();</span><br><span class="line">  &#125;</span><br><span class="line">  currentMethod.<span class="property">value</span> = method;</span><br><span class="line">  <span class="comment">// 清除輸入狀態，但保留 verificationExpiryEndTime</span></span><br><span class="line">  <span class="comment">// 原因：session 還沒過期，切換方式不應重置過期時間</span></span><br><span class="line">  verificationCode.<span class="property">value</span> = <span class="string">&#x27;&#x27;</span>;</span><br><span class="line">  errorMessage.<span class="property">value</span> = <span class="string">&#x27;&#x27;</span>;</span><br><span class="line">  securityCodeId.<span class="property">value</span> = <span class="string">&#x27;&#x27;</span>; <span class="comment">// 需要重新 trigger 才能取得新的 securityCodeId</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h3 id="錯誤訊息的責任邊界"><a href="#錯誤訊息的責任邊界" class="headerlink" title="錯誤訊息的責任邊界"></a>錯誤訊息的責任邊界</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">getErrorMessage</span>(<span class="params"><span class="attr">errorCode</span>?: <span class="built_in">number</span>, <span class="attr">failCountValue</span>?: <span class="built_in">number</span></span>): <span class="built_in">string</span> &#123;</span><br><span class="line">  <span class="keyword">switch</span> (errorCode) &#123;</span><br><span class="line">    <span class="keyword">case</span> <span class="title class_">VerificationErrorCode</span>.<span class="property">InvalidCode</span>:</span><br><span class="line">      <span class="comment">// 只有「驗證碼錯誤」顯示在 input 下方（inline error）</span></span><br><span class="line">      <span class="keyword">if</span> (failCountValue !== <span class="literal">undefined</span> &amp;&amp; maxFailCount.<span class="property">value</span> &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">const</span> attemptsLeft = maxFailCount.<span class="property">value</span> - failCountValue;</span><br><span class="line">        <span class="keyword">if</span> (attemptsLeft &gt; <span class="number">0</span>) &#123;</span><br><span class="line">          <span class="comment">// 語言複數處理：1 次用單數文案，多次用複數文案</span></span><br><span class="line">          <span class="keyword">const</span> key = attemptsLeft &gt; <span class="number">1</span></span><br><span class="line">            ? <span class="string">&#x27;txtAccountInvalidCodeErrors&#x27;</span></span><br><span class="line">            : <span class="string">&#x27;txtAccountInvalidCodeError&#x27;</span>;</span><br><span class="line">          <span class="keyword">return</span> <span class="title function_">t</span>(key, &#123; attemptsLeft &#125;);</span><br><span class="line">        &#125;</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">return</span> <span class="string">&#x27;&#x27;</span>; <span class="comment">// attemptsLeft = 0 時，MaxAttemptsReached 由 Dialog 處理</span></span><br><span class="line">    <span class="attr">default</span>:</span><br><span class="line">      <span class="comment">// 所有其他錯誤（session 過期、網路錯誤、後端錯誤）</span></span><br><span class="line">      <span class="comment">// 由 UI 層的 Dialog 或 Toast 處理，Composable 不知道 Dialog 的存在</span></span><br><span class="line">      <span class="keyword">return</span> <span class="string">&#x27;&#x27;</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><strong>這個邊界的工程意義</strong>：</p>
+<ul>
+<li><code>getErrorMessage</code> 只返回「應該顯示在 input 旁的 inline 訊息」</li>
+<li>其他所有錯誤的呈現方式（Dialog、Toast、頁面跳轉）由 Composable 的 callback（<code>onError</code>、<code>onTimeout</code>、<code>onMaxAttemptsReached</code>）通知 UI 層</li>
+<li>這讓 Composable 不依賴任何 UI 框架，可以在不同的設計系統下複用</li>
+</ul>
+<hr>
+<h3 id="verify：失敗計數與自動觸發-onMaxAttemptsReached"><a href="#verify：失敗計數與自動觸發-onMaxAttemptsReached" class="headerlink" title="verify：失敗計數與自動觸發 onMaxAttemptsReached"></a>verify：失敗計數與自動觸發 onMaxAttemptsReached</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">async</span> <span class="keyword">function</span> <span class="title function_">verify</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="keyword">if</span> (!isCodeValid.<span class="property">value</span>) <span class="keyword">return</span> &#123; <span class="attr">success</span>: <span class="literal">false</span> &#125;;</span><br><span class="line">  errorMessage.<span class="property">value</span> = <span class="string">&#x27;&#x27;</span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="keyword">const</span> result = <span class="keyword">await</span> onVerify!(</span><br><span class="line">      verificationCode.<span class="property">value</span>,</span><br><span class="line">      securityCodeId.<span class="property">value</span>,</span><br><span class="line">      currentMethod.<span class="property">value</span>,</span><br><span class="line">    );</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (result.<span class="property">success</span>) &#123;</span><br><span class="line">      <span class="keyword">return</span> &#123; <span class="attr">success</span>: <span class="literal">true</span>, <span class="attr">data</span>: result.<span class="property">data</span> &#125;;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (result.<span class="property">failCount</span> !== <span class="literal">undefined</span>) &#123;</span><br><span class="line">      failCount.<span class="property">value</span> = result.<span class="property">failCount</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 達到上限：通知 UI 層（通常是鎖定 Dialog），不顯示 inline error</span></span><br><span class="line">    <span class="keyword">if</span> (result.<span class="property">failCount</span> !== <span class="literal">undefined</span> &amp;&amp; maxFailCount.<span class="property">value</span> &gt; <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="keyword">const</span> attemptsLeft = maxFailCount.<span class="property">value</span> - result.<span class="property">failCount</span>;</span><br><span class="line">      <span class="keyword">if</span> (attemptsLeft &lt;= <span class="number">0</span>) &#123;</span><br><span class="line">        onMaxAttemptsReached?.();</span><br><span class="line">        <span class="keyword">return</span> &#123; <span class="attr">success</span>: <span class="literal">false</span>, <span class="attr">errorCode</span>: result.<span class="property">errorCode</span>, <span class="attr">failCount</span>: result.<span class="property">failCount</span> &#125;;</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 未達上限：顯示 inline error（還剩 N 次）</span></span><br><span class="line">    errorMessage.<span class="property">value</span> = <span class="title function_">getErrorMessage</span>(result.<span class="property">errorCode</span>, result.<span class="property">failCount</span>);</span><br><span class="line">    verificationCode.<span class="property">value</span> = <span class="string">&#x27;&#x27;</span>; <span class="comment">// 清空輸入，讓使用者重新輸入</span></span><br><span class="line">    <span class="keyword">return</span> &#123; <span class="attr">success</span>: <span class="literal">false</span>, <span class="attr">errorCode</span>: result.<span class="property">errorCode</span>, <span class="attr">failCount</span>: result.<span class="property">failCount</span> &#125;;</span><br><span class="line"></span><br><span class="line">  &#125; <span class="keyword">catch</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> &#123; <span class="attr">success</span>: <span class="literal">false</span>, <span class="attr">errorCode</span>: <span class="title class_">VerificationErrorCode</span>.<span class="property">Exception</span> &#125;;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>maxFailCount</code> 從 <code>trigger</code> 的 API 回應取得，而非硬編碼。這讓後端可以根據風險等級動態調整（例如風險較高的帳號縮短至 3 次）。</p>
+<hr>
+<h3 id="reset-與-onUnmounted"><a href="#reset-與-onUnmounted" class="headerlink" title="reset 與 onUnmounted"></a>reset 與 onUnmounted</h3><figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">reset</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="title function_">stopPolling</span>();</span><br><span class="line">  <span class="title function_">clearVerificationExpiryTimer</span>();</span><br><span class="line">  <span class="title function_">clearResendCooldown</span>();</span><br><span class="line">  verificationCode.<span class="property">value</span> = <span class="string">&#x27;&#x27;</span>;</span><br><span class="line">  errorMessage.<span class="property">value</span> = <span class="string">&#x27;&#x27;</span>;</span><br><span class="line">  securityCodeId.<span class="property">value</span> = <span class="string">&#x27;&#x27;</span>;</span><br><span class="line">  maskedEmail.<span class="property">value</span> = <span class="string">&#x27;&#x27;</span>;</span><br><span class="line">  failCount.<span class="property">value</span> = <span class="number">0</span>;</span><br><span class="line">  <span class="comment">// 注意：不重置 maxFailCount，它是由 API 決定的業務規則</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// 組件 unmount 時自動清理 Polling</span></span><br><span class="line"><span class="comment">// 防止：使用者導頁後 setInterval 仍在背景執行，觸發 onPushApproved 並試圖操作已銷毀的 vue instance</span></span><br><span class="line"><span class="title function_">onUnmounted</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">  <span class="title function_">stopPolling</span>();</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="WebView-的使用方式（完整範例）"><a href="#WebView-的使用方式（完整範例）" class="headerlink" title="WebView 的使用方式（完整範例）"></a>WebView 的使用方式（完整範例）</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br></pre></td><td class="code"><pre><span class="line">&lt;script setup lang=&quot;ts&quot;&gt;</span><br><span class="line">import &#123; useRoute &#125; from &#x27;vue-router&#x27;;</span><br><span class="line"></span><br><span class="line">const route = useRoute();</span><br><span class="line">// WebView URL 從 App 傳入：?verificationId=xxx&amp;accountId=12345&amp;methods=1,2,3</span><br><span class="line">const verificationId = route.query.verificationId as string;</span><br><span class="line">const accountId = Number(route.query.accountId);</span><br><span class="line">const availableMethods = (route.query.methods as string)</span><br><span class="line">  .split(&#x27;,&#x27;)</span><br><span class="line">  .map(Number) as LoginVerificationType[];</span><br><span class="line"></span><br><span class="line">const &#123;</span><br><span class="line">  currentMethod,</span><br><span class="line">  verificationCode,</span><br><span class="line">  errorMessage,</span><br><span class="line">  canResend,</span><br><span class="line">  isPolling,</span><br><span class="line">  verificationExpiryEndTime,</span><br><span class="line">  setMethod,</span><br><span class="line">  trigger,</span><br><span class="line">  verify,</span><br><span class="line">  resend,</span><br><span class="line">  startPolling,</span><br><span class="line">  handleTimeout,</span><br><span class="line">  reset,</span><br><span class="line">&#125; = useVerificationFlow(&#123;</span><br><span class="line">  onTrigger: async (method) =&gt; &#123;</span><br><span class="line">    return await mfaApi.trigger(&#123; verificationId, accountId, method &#125;);</span><br><span class="line">  &#125;,</span><br><span class="line">  onVerify: async (code, securityCodeId, method) =&gt; &#123;</span><br><span class="line">    return await mfaApi.verify(&#123; verificationId, accountId, code, securityCodeId, method &#125;);</span><br><span class="line">  &#125;,</span><br><span class="line">  onCheckPushStatus: async (verificationId, accountId, securityCodeId) =&gt; &#123;</span><br><span class="line">    return await mfaApi.checkPushStatus(&#123; verificationId, accountId, securityCodeId &#125;);</span><br><span class="line">  &#125;,</span><br><span class="line">  onPushApproved: (data) =&gt; &#123;</span><br><span class="line">    // 透過 App Bridge 通知 App，帶回 grantId</span><br><span class="line">    nativeBridge.notifyVerificationComplete(&#123; grantId: data.passport &#125;);</span><br><span class="line">  &#125;,</span><br><span class="line">  onTimeout: () =&gt; &#123;</span><br><span class="line">    showTimeoutDialog.value = true;</span><br><span class="line">  &#125;,</span><br><span class="line">  onError: (errorCode) =&gt; &#123;</span><br><span class="line">    showErrorDialog(errorCode);</span><br><span class="line">  &#125;,</span><br><span class="line">  onMaxAttemptsReached: () =&gt; &#123;</span><br><span class="line">    showLockedDialog.value = true;</span><br><span class="line">  &#125;,</span><br><span class="line">&#125;);</span><br><span class="line"></span><br><span class="line">// 初始化：根據 availableMethods 設定預設方式，並觸發第一次驗證碼發送</span><br><span class="line">onMounted(async () =&gt; &#123;</span><br><span class="line">  // Push 優先（使用者體驗最佳），其次 Email，最後 TOTP</span><br><span class="line">  const preferredOrder = [</span><br><span class="line">    LoginVerificationType.PushNotification,</span><br><span class="line">    LoginVerificationType.Email,</span><br><span class="line">    LoginVerificationType.TOTP,</span><br><span class="line">  ];</span><br><span class="line">  const defaultMethod = preferredOrder.find(m =&gt; availableMethods.includes(m))</span><br><span class="line">    ?? LoginVerificationType.Email;</span><br><span class="line"></span><br><span class="line">  setMethod(defaultMethod);</span><br><span class="line">  const result = await trigger();</span><br><span class="line"></span><br><span class="line">  if (defaultMethod === LoginVerificationType.PushNotification &amp;&amp; result.success) &#123;</span><br><span class="line">    startPolling(verificationId, accountId);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;);</span><br><span class="line">&lt;/script&gt;</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="Redis-儲存結構（前後端對應）"><a href="#Redis-儲存結構（前後端對應）" class="headerlink" title="Redis 儲存結構（前後端對應）"></a>Redis 儲存結構（前後端對應）</h2><p>前端完成 MFA 驗證後，後端在 Redis 寫入兩種 key：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">MFA:ActiveSession:&#123;AccountId&#125;   TTL 30 分鐘</span><br><span class="line">  └─ MfaContext (JSON)</span><br><span class="line">       ├─ VerificationId, AccountId, LoginId, MemberCode</span><br><span class="line">       ├─ ClientIP, UserAgent, CountryCode, City</span><br><span class="line">       ├─ FingerPrintId, ScreenResolution, DeviceLanguage</span><br><span class="line">       ├─ DeviceType, BlackBox, DeviceId, DeviceModel</span><br><span class="line">       └─ LightSpeedToken, BundleId, WebAuthnCredentialId</span><br><span class="line"></span><br><span class="line">MFA:LoginGrant:&#123;GrantId&#125;        TTL 60~180 秒（一次性）</span><br><span class="line">  └─ MfaContext 全量 snapshot（同上）</span><br></pre></td></tr></table></figure>
+
+<p><code>MFA:ActiveSession</code> 在同一 AccountId 重複登入時<strong>覆蓋舊記錄</strong>（踢單機制）。<code>MFA:LoginGrant</code> 兌換成功後<strong>立即刪除</strong>，防止重放攻擊。</p>
+<hr>
+<h2 id="架構全景"><a href="#架構全景" class="headerlink" title="架構全景"></a>架構全景</h2><pre class="mermaid">flowchart LR
+    subgraph BE["後端"]
+        LM["LoginMfaManager<br/>HandleLoginMfaFlow<br/>GetAvailableMfaMethods<br/>CreateMfaSession"]
+        AS["MFA:ActiveSession:{AccountId}"]
+        ELG["AccountService.ExchangeLoginGrant<br/>讀取 + 刪除 MFA:LoginGrant<br/>InitSessionAndProfile<br/>回傳 LoginResponse"]
+        LG["MFA:LoginGrant:{GrantId}<br/>TTL 60~180s，一次性"]
+    end
+    subgraph FE["前端 WebView"]
+        VF["useVerificationFlow<br/>currentMethod / code / timers / polling<br/>trigger / verify / startPolling"]
+        CB["Callbacks<br/>onTrigger / onVerify<br/>onCheckPushStatus / onPushApproved"]
+    end
+    LM --> AS
+    LM --> LG
+    LG --> ELG
+    VF --> CB
+    CB -->|"成功 → grantId"| ELG</pre>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/04/21/VueMfaVerificationFlow/" data-id="cmoavj4ka002kto3f84c6b2s1" data-title="Vue 3 新裝置 MFA 驗證架構：從登入攔截到 WebView 完成驗證的完整設計" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" rel="tag">前端架構</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" rel="tag">身份驗證</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-ELKSharing" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2026/04/14/ELKSharing/" class="article-date">
@@ -115,7 +804,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/04/14/ELKSharing/" data-id="cmnzso4sa0009vl0j0nmqf6v6" data-title="ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/04/14/ELKSharing/" data-id="cmoavj4jl0009to3f8eo4bd0d" data-title="ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study" class="article-share-link">Share</a>
       
       
       
@@ -170,7 +859,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/04/10/nuxt3-centralized-fetch-interceptor/" data-id="cmnzso4tx00acvl0ja5568rl1" data-title="Nuxt 3 實戰：用 Composable 封裝集中式請求攔截器" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/04/10/nuxt3-centralized-fetch-interceptor/" data-id="cmoavj4li00bjto3f2udsgn5g" data-title="Nuxt 3 實戰：用 Composable 封裝集中式請求攔截器" class="article-share-link">Share</a>
       
       
       
@@ -227,7 +916,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/04/10/nuxt3-redis-session-management/" data-id="cmnzso4tx00aevl0jfaom8kda" data-title="Nuxt 3 生產級 Session 管理：Redis + Singleton + 多種登入流程" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/04/10/nuxt3-redis-session-management/" data-id="cmoavj4lj00blto3f3ev7cblh" data-title="Nuxt 3 生產級 Session 管理：Redis + Singleton + 多種登入流程" class="article-share-link">Share</a>
       
       
       
@@ -288,7 +977,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/04/06/RedLockCacheLayerManager/" data-id="cmnzso4sq001mvl0jhanbcymd" data-title="RedLock 分散式鎖在 CacheLayerManager 的實作案例" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/04/06/RedLockCacheLayerManager/" data-id="cmoavj4k3001tto3f1mzody09" data-title="RedLock 分散式鎖在 CacheLayerManager 的實作案例" class="article-share-link">Share</a>
       
       
       
@@ -340,7 +1029,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/04/06/WatcherUtilAopPerformance/" data-id="cmnzso4tw00abvl0j60921m41" data-title="WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/04/06/WatcherUtilAopPerformance/" data-id="cmoavj4lh00bito3ffkqdde3r" data-title="WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯" class="article-share-link">Share</a>
       
       
       
@@ -390,7 +1079,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/04/01/LazyMemoryCacheRedisTwoTier/" data-id="cmnzso4sh000uvl0j14idefvu" data-title="雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/04/01/LazyMemoryCacheRedisTwoTier/" data-id="cmoavj4ju000yto3f73qt9rex" data-title="雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede" class="article-share-link">Share</a>
       
       
       
@@ -446,217 +1135,11 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/31/DebugManifestDynamicLoading/" data-id="cmnzso4s80006vl0j2qcw5v4a" data-title="Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/31/DebugManifestDynamicLoading/" data-id="cmoavj4jj0006to3f2zotfesu" data-title="Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制" class="article-share-link">Share</a>
       
       
       
   <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Frontend/" rel="tag">Frontend</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Manifest/" rel="tag">Manifest</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Monolith/" rel="tag">Monolith</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-ChainOfResponsibilityGeneric" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2026/03/30/ChainOfResponsibilityGeneric/" class="article-date">
-  <time class="dt-published" datetime="2026-03-30T16:00:00.000Z" itemprop="datePublished">2026-03-31</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2026/03/30/ChainOfResponsibilityGeneric/">責任鏈模式（Chain of Responsibility）泛型實作 — 遊戲驗證與頁面權限的真實案例</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="什麼是責任鏈模式？"><a href="#什麼是責任鏈模式？" class="headerlink" title="什麼是責任鏈模式？"></a>什麼是責任鏈模式？</h2><p>當一個請求需要經過多個獨立的檢查／處理步驟，且每個步驟都可以決定「繼續往下傳」或「在這裡中止」，就是責任鏈（Chain of Responsibility）的使用場景。</p>
-<h3 id="實務上：一連串檢查，拆開再組合"><a href="#實務上：一連串檢查，拆開再組合" class="headerlink" title="實務上：一連串檢查，拆開再組合"></a>實務上：一連串檢查，拆開再組合</h3><p>在後端我們很常把 <strong>同一條業務路徑</strong> 上的條件拆成 <strong>多個彼此獨立的檢查</strong>，而不是寫成一大段 <code>if/else</code> 攪在一起。例如提款或資金相關流程可能依序要確認：</p>
-<ul>
-<li><strong>帳號狀態</strong>（凍結、風控、KYC 等）</li>
-<li><strong>存款／餘額門檻</strong>（是否達最低可提、餘額是否足夠）</li>
-<li><strong>是否已有進行中的提款設定</strong>（避免重複提交、與進行中單據衝突）</li>
-</ul>
-<p>每一項都是 <strong>不同的業務規則、不同的失敗原因與錯誤訊息</strong>。用責任鏈時，<strong>一個檢查一個 Handler</strong>：職責單一、單元測試好寫、命名也清楚。更重要的是，<strong>同一個 Handler 可以在別的流程再組一條鏈</strong>——例如「帳號狀態檢查」同時出現在提款、轉帳、兌換；<strong>順序與要不要掛某一關，只在組裝鏈的地方決定</strong>，不必複製貼上整段邏輯。</p>
-<p>下列為 <strong>示意</strong>（實際類別名與順序依專案而定），重點是 <strong>每一關可獨立抽換、也可在別的情境重用</strong>：</p>
-<pre class="mermaid">flowchart TD
-    W[資金流程請求示意] --> ACC[帳號狀態檢查]
-    ACC -->|pass| BAL[存款餘額或門檻檢查]
-    BAL -->|pass| PEND[進行中提款設定檢查]
-    PEND -->|pass| DONE[後續業務邏輯]
-    ACC -->|fail| X1[中止並回傳原因]
-    BAL -->|fail| X2[中止並回傳原因]
-    PEND -->|fail| X3[中止並回傳原因]</pre>
-        
-          <p class="article-more-link">
-            <a href="/2026/03/30/ChainOfResponsibilityGeneric/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/30/ChainOfResponsibilityGeneric/" data-id="cmnzso4s60004vl0j4vdic7me" data-title="責任鏈模式（Chain of Responsibility）泛型實作 — 遊戲驗證與頁面權限的真實案例" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Chain-of-Responsibility/" rel="tag">Chain of Responsibility</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GoF/" rel="tag">GoF</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-MfaLoginNewDeviceVerification" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2026/03/27/MfaLoginNewDeviceVerification/" class="article-date">
-  <time class="dt-published" datetime="2026-03-27T16:00:00.000Z" itemprop="datePublished">2026-03-28</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2026/03/27/MfaLoginNewDeviceVerification/">Login MFA — 新裝置驗證架構設計 </a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>傳統登入只驗證帳號 + 密碼，一旦帳密外洩即全面失守。本需求在既有登入流程中加入第二層驗證（MFA）：在使用者完成密碼驗證後、正式取得 Passport 之前，須通過以下其中一種驗證：</p>
-<table>
-<thead>
-<tr>
-<th>方法</th>
-<th>說明</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Push Notification</td>
-<td>向已登入的可信裝置推播，由舊手機批准</td>
-</tr>
-<tr>
-<td>Email OTP</td>
-<td>發送一次性驗證碼到註冊信箱</td>
-</tr>
-<tr>
-<td>TOTP</td>
-<td>使用 Authenticator App（時間型）驗證碼</td>
-</tr>
-</tbody></table>
-<p><strong>驗證優先級</strong>：Push Notification &gt; Email OTP &gt; TOTP（<code>availableMethods[0]</code> 為預設）</p>
-<h2 id="核心設計決策：Passport-在驗證成功後才產生"><a href="#核心設計決策：Passport-在驗證成功後才產生" class="headerlink" title="核心設計決策：Passport 在驗證成功後才產生"></a>核心設計決策：Passport 在驗證成功後才產生</h2><pre class="mermaid">flowchart LR
-    subgraph Legacy["傳統做法 有安全風險"]
-        L1[Login API] --> L2[驗證帳密]
-        L2 --> L3[立即回傳 Passport]
-        L3 --> L4[前端再做 MFA]
-    end
-    subgraph CC["CC1-4638 做法"]
-        C1[Login API] --> C2[驗證帳密]
-        C2 --> C3["returnCode 0018 不含 Passport"]
-        C3 --> C4[MFA 驗證通過]
-        C4 --> C5[產生 Passport]
-        C5 --> C6[PostLogin]
-    end</pre>
-
-<p>這確保未完成 MFA 的使用者無法取得任何有效 Passport。</p>
-        
-          <p class="article-more-link">
-            <a href="/2026/03/27/MfaLoginNewDeviceVerification/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/27/MfaLoginNewDeviceVerification/" data-id="cmnzso4si000xvl0j92bd0qe1" data-title="Login MFA — 新裝置驗證架構設計 " class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-ContentManagementSystem" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2026/03/16/ContentManagementSystem/" class="article-date">
-  <time class="dt-published" datetime="2026-03-16T16:00:00.000Z" itemprop="datePublished">2026-03-17</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2026/03/16/ContentManagementSystem/">自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在多品牌、多區域、多語系的平台中，首頁的 Banner、Widget、行銷活動區塊都需要能夠由運營人員自行管理，而不是每次改內容都要動到程式碼。市面上有很多成熟的 CMS（WordPress、Strapi 等），但我們的需求比較特殊：</p>
-<ul>
-<li>內容需要**依區域（Region）和語系（Language）**動態切換</li>
-<li>版位採用 <strong>CSS Grid（grid-cols-12）</strong> 設計，運營人員可以自行調整 RWD 排版</li>
-<li>支援<strong>定時排程</strong>，廣告可以設定上下架時間、週期性顯示</li>
-<li>最終輸出是 HTML 片段，由前端 Vue.js 應用動態 compile 並渲染</li>
-</ul>
-<p>因此我們自建了一套簡易 CMS 系統（代號 CMS），本文完整介紹這套系統的架構設計。</p>
-        
-          <p class="article-more-link">
-            <a href="/2026/03/16/ContentManagementSystem/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/" data-id="cmnzso4s70005vl0ja6rr738p" data-title="自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li></ul>
 
     </footer>
   </div>
@@ -691,7 +1174,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">標籤</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Chain-of-Responsibility/" rel="tag">Chain of Responsibility</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Decorator-Pattern/" rel="tag">Decorator Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Distributed-Lock/" rel="tag">Distributed Lock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Fetch/" rel="tag">Fetch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Frontend/" rel="tag">Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GoF/" rel="tag">GoF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Interceptor/" rel="tag">Interceptor</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Manifest/" rel="tag">Manifest</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monolith/" rel="tag">Monolith</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RedLock/" rel="tag">RedLock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Session/" rel="tag">Session</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Api/" rel="tag">Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Backend/" rel="tag">Backend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/BroadcastChannel/" rel="tag">BroadcastChannel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CSharp/" rel="tag">CSharp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Chain-of-Responsibility/" rel="tag">Chain of Responsibility</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Client-Side-Error/" rel="tag">Client Side Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Compatible/" rel="tag">Compatible</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cron/" rel="tag">Cron</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cross-Tab-Communication/" rel="tag">Cross-Tab Communication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Custom-Rules/" rel="tag">Custom Rules</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debbuger/" rel="tag">Debbuger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Decorator-Pattern/" rel="tag">Decorator Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DevOps/" rel="tag">DevOps</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Distributed-Lock/" rel="tag">Distributed Lock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DistributedSystem/" rel="tag">DistributedSystem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DotNet/" rel="tag">DotNet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ERR-CONTENT-DECODING-FAILED/" rel="tag">ERR_CONTENT_DECODING_FAILED</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elastic-Scrolling/" rel="tag">Elastic Scrolling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error/" rel="tag">Error</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Fetch/" rel="tag">Fetch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/File-Check/" rel="tag">File Check</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Frontend/" rel="tag">Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GoF/" rel="tag">GoF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hangfire/" rel="tag">Hangfire</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IIS/" rel="tag">IIS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Intecept-Request/" rel="tag">Intecept Request</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Integration/" rel="tag">Integration</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Interceptor/" rel="tag">Interceptor</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JavaScript/" rel="tag">JavaScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Log/" rel="tag">Log</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Manifest/" rel="tag">Manifest</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MemoryCache/" rel="tag">MemoryCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monolith/" rel="tag">Monolith</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Object/" rel="tag">Object</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Production-Issue/" rel="tag">Production Issue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Proxy/" rel="tag">Proxy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Quality-Control/" rel="tag">Quality Control</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Queue/" rel="tag">Queue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Reactive/" rel="tag">Reactive</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RedLock/" rel="tag">RedLock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Refs/" rel="tag">Refs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rsbuild/" rel="tag">Rsbuild</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SPA/" rel="tag">SPA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Server-Side-Render/" rel="tag">Server Side Render</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Session/" rel="tag">Session</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Source-Map/" rel="tag">Source Map</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/StoreToRefs/" rel="tag">StoreToRefs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/System-Design/" rel="tag">System Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS-Dark-Mode/" rel="tag">Tailwind CSS Dark Mode</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Typescript/" rel="tag">Typescript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UC-Browser/" rel="tag">UC Browser</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/VueUse/" rel="tag">VueUse</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Watcher/" rel="tag">Watcher</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/postMessage/" rel="tag">postMessage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-runtime-template/" rel="tag">v-runtime-template</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-sanitize/" rel="tag">v-sanitize</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" rel="tag">前端架構</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" rel="tag">身份驗證</a></li></ul>
     </div>
   </div>
 
@@ -712,6 +1195,18 @@
     <h3 class="widget-title">最新文章</h3>
     <div class="widget">
       <ul>
+        
+          <li>
+            <a href="/2026/04/21/HashBasedJobStaggering/">用 Job Name Hash 防止 Thundering Herd：30 支排程 Job 的自動錯開機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/MultiQueueResourceIsolation/">Hangfire Multi-Queue 資源隔離：讓重量級 Job 不拖垮整個排程系統</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/VueMfaVerificationFlow/">Vue 3 新裝置 MFA 驗證架構：從登入攔截到 WebView 完成驗證的完整設計</a>
+          </li>
         
           <li>
             <a href="/2026/04/14/ELKSharing/">ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study</a>
@@ -739,18 +1234,6 @@
         
           <li>
             <a href="/2026/03/31/DebugManifestDynamicLoading/">Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制</a>
-          </li>
-        
-          <li>
-            <a href="/2026/03/30/ChainOfResponsibilityGeneric/">責任鏈模式（Chain of Responsibility）泛型實作 — 遊戲驗證與頁面權限的真實案例</a>
-          </li>
-        
-          <li>
-            <a href="/2026/03/27/MfaLoginNewDeviceVerification/">Login MFA — 新裝置驗證架構設計 </a>
-          </li>
-        
-          <li>
-            <a href="/2026/03/16/ContentManagementSystem/">自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理</a>
           </li>
         
       </ul>
