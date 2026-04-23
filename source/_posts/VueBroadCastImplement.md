@@ -3,6 +3,7 @@ title: "Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event B
 date: 2026-03-13
 tags:
   - Vue.js
+  - Vue3
   - BroadcastChannel
   - TypeScript
   - Architecture
@@ -15,9 +16,48 @@ categories:
 
 在多分頁的 Web 應用中，跨 Tab 同步狀態是常見需求——例如閒置登出同步、Session 過期通知、T&C 接受後其他 Tab 強制刷新等。瀏覽器原生的 `BroadcastChannel` API 是最直覺的方案，搭配 VueUse 的 `useBroadcastChannel` 封裝更是方便。
 
-但在實際開發中，我們踩了一個非常隱晦的坑——**同一個 Tab 內建立多個 BroadcastChannel 實例，會互相收到訊息**。本文記錄我們從「能用」到「好用」的架構演進過程。
+但在實際開發中，我們踩了一個非常隱晦的坑——**同一個 Tab 內建立多個 BroadcastChannel 實例，會互相收到訊息**。本文記錄我們從「能用」到「好用」的架構演進過程，並以閒置登出同步為完整業務範例。
 
 <!-- more -->
+
+## 問題場景
+
+想像這樣的狀況：使用者在 Tab A 操作，Tab B、Tab C 是同一個應用的其他頁面。Tab A 觸發了閒置登出，Dialog 彈出，使用者確認登出。但 Tab B 和 Tab C 完全不知道，畫面停在登入後狀態。
+
+更麻煩的是反向情境：**Tab B 剛剛有過操作（5 秒前才點了一個按鈕），但 Tab A 的閒置計時器並不知道，仍然觸發了登出。**
+
+這兩個問題分別是「狀態廣播」和「活動同步」，本文的解法用原生 `BroadcastChannel` API 配合 `localStorage` 一起解決。
+
+---
+
+## 為什麼不用 localStorage + storage event
+
+最常見的跨 Tab 通訊方案是監聽 `storage` event：
+
+```js
+window.addEventListener('storage', (event) => {
+  if (event.key === 'logout') doLogout();
+});
+localStorage.setItem('logout', Date.now().toString());
+```
+
+這個方案有幾個問題：
+
+1. **訊息語意不清**：`storage` event 是「某個 key 被改了」，而不是「某件事發生了」。
+2. **無法傳物件**：只能存字串，`JSON.stringify/parse` 是必要開銷。
+3. **狀態殘留**：localStorage 是持久化的，用完還要清理，忘了清理會影響下一次頁面開啟。
+
+`BroadcastChannel` 解決了上述問題：語意上就是「廣播一個事件給其他 Tab」，支援傳遞物件，發送方不會收到自己的訊息，用完 close 即可。
+
+| 特性 | BroadcastChannel | localStorage + storage event |
+|------|-----------------|------------------------------|
+| 訊息格式 | 任意物件（結構化複製演算法）| 僅字串 |
+| 發送方是否收到 | 否 | 否（只有其他 Tab 收到）|
+| 狀態持久化 | 否（揮發性訊息）| 是（持久存在）|
+| 關閉後行為 | close() 後停止接收 | 持續存在 |
+| 瀏覽器支援 | Chrome 54+, Firefox 38+, Safari 15.4+ | 全部 |
+
+---
 
 ## BroadcastChannel API 基礎
 
@@ -369,7 +409,7 @@ export function useIdleLogoutBroadcast() {
 }
 ```
 
-### App.vue — 大幅簡化
+### Step 4：App.vue — 大幅簡化
 
 ```vue
 <script setup lang="ts">
@@ -380,7 +420,7 @@ useIdleLogoutBroadcast();
 
 原本 App.vue 裡 20 行的 watch + switch/case，現在只需要一行。新增功能？建一個新的 composable，在需要的地方呼叫，完全不用改 App.vue。
 
-### Step 4：新增功能示範
+### Step 5：新增功能示範
 
 假設要新增「用戶在某個 Tab 接受了 T&C，其他 Tab 自動刷新」：
 
@@ -417,6 +457,163 @@ on(BroadcastAction.TncAccepted, (event) => {
 ```
 
 不需要改 App.vue，不需要改 useBroadcastBus，不需要改任何現有程式碼。
+
+---
+
+## 閒置登出：完整業務邏輯實作
+
+### useIdleLogoutAction
+
+閒置偵測的核心設計：**不直接以「本 Tab 的計時器」為準**，而是用 localStorage 的 `lastActiveTimeStamp`（由最近活動的 Tab 更新）做真實判斷。這讓「任何一個 Tab 有活動就重置所有 Tab 的閒置計時」成為可能。
+
+```typescript
+// composables/useIdleLogoutAction.ts
+import { watch } from 'vue';
+import { useIdle } from '@vueuse/core';
+import { useIdleLogoutBroadcast } from './useIdleLogoutBroadcast';
+
+export const IdleLogoutSetting = {
+  idleTime: window.gv.idleTimeMilliseconds || 7200000, // 2 小時
+  kickOutTime: 2 * 60 * 1000,                          // 給使用者確認的 2 分鐘
+};
+
+export function useIdleLogoutAction() {
+  const rootStore = useRootStore();
+
+  const checkMemberActivity = () => {
+    if (!rootStore.isLogin) return;
+
+    const systemDialogQueue = useSystemDialogQueueStore();
+    const { broadcastLastActive, broadcastIdleDialog } = useIdleLogoutBroadcast();
+
+    // 初始化時：若 localStorage 裡已有登出 flag（可能由其他 Tab 設置）
+    // 直接加入 Dialog 隊列，不等閒置計時器
+    if (rootStore.isLogin && rootStore.showIdleLogoutDialog) {
+      if (!systemDialogQueue.isInQueue(QueueName.IdleLogout)) {
+        systemDialogQueue.pushToFirst(QueueName.IdleLogout);
+      }
+    }
+
+    const { idle, lastActive, reset } = useIdle(IdleLogoutSetting.idleTime);
+
+    watch(idle, (idleValue) => {
+      if (idleValue && !rootStore.showIdleLogoutDialog) {
+        // 用 localStorage 的 lastActiveTimeStamp 做真實判斷
+        // 即使本 Tab 的 useIdle 判斷 idle，但如果其他 Tab 最近有活動就不登出
+        const realIdleTime = new Date().getTime() - rootStore.lastActiveTimeStamp;
+        const shouldLogout = realIdleTime >= IdleLogoutSetting.idleTime;
+
+        if (!shouldLogout) {
+          reset(); // 其他 Tab 有活動，重置本 Tab 的閒置計時器
+        } else {
+          broadcastIdleDialog(true);
+        }
+        setShowIdleLogoutDialog(shouldLogout);
+      }
+    });
+
+    watch(lastActive, (lastActiveValue) => {
+      if (lastActiveValue && !rootStore.showIdleLogoutDialog) {
+        setLastActiveTimeStamp(lastActiveValue);
+        broadcastLastActive(lastActiveValue);
+      }
+    });
+  };
+
+  const setLastActiveTimeStamp = (lastActiveValue: number) => {
+    rootStore.lastActiveTimeStamp = lastActiveValue;
+    // localStorage 供頁面重整後恢復狀態，BroadcastChannel 供即時同步
+    localStorage.setItem('lastActiveTimeStamp', lastActiveValue.toString());
+  };
+
+  const setShowIdleLogoutDialog = (showIdleLogoutDialog: boolean) => {
+    rootStore.showIdleLogoutDialog = showIdleLogoutDialog;
+    localStorage.setItem('showIdleLogoutDialog', showIdleLogoutDialog.toString());
+
+    const systemDialogQueue = useSystemDialogQueueStore();
+    if (rootStore.isLogin && showIdleLogoutDialog) {
+      systemDialogQueue.pushToFirst(QueueName.IdleLogout);
+    } else {
+      systemDialogQueue.close();
+    }
+  };
+
+  const removeIdleLogoutLocalStorage = () => {
+    localStorage.removeItem('lastActiveTimeStamp');
+    localStorage.removeItem('showIdleLogoutDialog');
+  };
+
+  return {
+    checkMemberActivity,
+    setLastActiveTimeStamp,
+    setShowIdleLogoutDialog,
+    removeIdleLogoutLocalStorage,
+  };
+}
+```
+
+### 完整資料流
+
+```mermaid
+sequenceDiagram
+    participant B as Tab B
+    participant BC as BroadcastChannel
+    participant A as Tab A
+
+    B->>B: 使用者操作 (lastActive = T)
+    B->>B: setLastActiveTimeStamp(T)<br/>rootStore + localStorage
+    B->>BC: broadcastLastActive(T)
+    BC->>A: SyncLastActive
+    A->>A: rootStore.lastActiveTimeStamp = T
+
+    Note over A: 2 小時後，useIdle 觸發 idle = true
+    A->>A: realIdleTime = now - lastActiveTimeStamp
+    alt realIdleTime 小於 2 小時
+        A->>A: reset() 重置計時器
+    else realIdleTime 大於等於 2 小時
+        A->>BC: broadcastIdleDialog(true)
+        BC->>B: SyncIdleDialog
+        A->>A: showIdleLogoutDialog = true
+        B->>B: showIdleLogoutDialog = true
+    end
+```
+
+### BroadcastChannel 與 localStorage 的責任分工
+
+這是整個架構最重要的設計決策，兩者各有不可替代的場景：
+
+| | BroadcastChannel | localStorage |
+|---|---|---|
+| 語意 | 事件通知 | 狀態持久化 |
+| 對象 | 即時廣播給已開啟的 Tab | 供頁面重整後讀取；供新開啟的 Tab 讀取初始狀態 |
+| 生命週期 | 頁面關閉後自動失效 | 永久存在直到 removeItem |
+| 清理需求 | 不需要 | 需要在登出時 removeItem |
+
+新開一個 Tab 時，BroadcastChannel 無法得知「過去曾發生什麼」，這時 localStorage 的 `showIdleLogoutDialog` 就是初始狀態的來源。這就是為什麼 `checkMemberActivity` 在初始化時要先讀 `rootStore.showIdleLogoutDialog`（這個值在 App 啟動時從 localStorage 讀取）。
+
+### 邊界情境分析
+
+**情境一：網路斷線重連後**
+
+BroadcastChannel 是 in-browser 機制，不依賴網路，網路斷線不影響跨 Tab 同步。
+
+**情境二：同一個 Tab 重整（F5）**
+
+- `sessionStorage.currentTabId` 保留 → Tab ID 不變
+- `localStorage.lastActiveTimeStamp` 保留 → 閒置基準不變
+- BroadcastChannel 重新建立 → 自動加入頻道
+
+**情境三：Tab 關閉後重開**
+
+- `sessionStorage` 清除 → 新 Tab ID 生成
+- `localStorage` 保留 → 讀取上次的閒置狀態
+- 若 `showIdleLogoutDialog = true` 仍在 localStorage → 新 Tab 開啟後立即彈出登出 Dialog
+
+**情境四：多個 Tab 同時達到閒置**
+
+由於每個 Tab 的 `useIdle` 計時略有誤差，可能多個 Tab 在接近的時間都觸發 `idle`。防止機制：`setShowIdleLogoutDialog` 在設定前先檢查 `rootStore.showIdleLogoutDialog`（如果已是 `true`，說明已有 Tab 處理了）。BroadcastChannel 廣播也只在這個值從 `false` 變成 `true` 時才發出。
+
+---
 
 ## 改進前後對比
 
@@ -485,4 +682,4 @@ BroadcastChannel API 本身設計簡潔，但「多實例同 Tab 互相觸發」
 - **Discriminated Union** — 型別安全，compile time 檢查
 - **Handler 註冊機制** — 開放封閉原則，新功能不改舊程式碼
 
-最終的結果是一個 30 行的 Singleton Event Bus，取代了原本散落在多個檔案、需要 senderTabId workaround 的實作。
+最終的結果是一個 30 行的 Singleton Event Bus，取代了原本散落在多個檔案、需要 senderTabId workaround 的實作。閒置登出的實際業務邏輯也透過 `lastActiveTimeStamp` 的跨 Tab 同步，解決了「其他 Tab 有操作但本 Tab 仍觸發登出」的問題。

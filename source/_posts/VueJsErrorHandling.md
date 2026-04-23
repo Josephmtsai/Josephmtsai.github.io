@@ -3,6 +3,7 @@ title: Vue 前端錯誤處理架構 — 從基礎 ErrorHandler 到生產級 Exce
 date: 2022-06-05 20:20:04
 tags:
   - Vue3
+  - JavaScript
   - Error Handling
   - Pinia
   - Source Map
@@ -122,12 +123,13 @@ source-map resolve validate.9cc0683f.js.map 1 51528
 
 ## Part 2：生產級 — Exception Handler 架構
 
-基礎版在小型專案中夠用，但在高流量的生產環境中，我們遇到了幾個問題：
+基礎版在小型專案中夠用，但在高流量的生產環境中，我們遇到了幾個具體問題：
 
-- 相同的錯誤短時間內被送出上百次，後端 Log 被灌爆
-- Pinia Store Action 中的錯誤沒有被 Vue Error Handler 捕捉到
-- 網路不穩時錯誤 Log 直接丟失
-- 大型 Stack Trace 拖慢了 Log API 回應
+1. **重複轟炸**：一個 `render` 函式裡的錯誤，每次 re-render 都觸發一次，一秒可能送幾百次，打爆 log server 或觸發 WAF 限流。
+2. **網路失敗靜默丟棄**：斷線重連後的第一個錯誤永遠送不到。
+3. **記憶體不受控**：如果用 `Set` 記錄「已送的錯誤 ID」但從不清理，長時間運行的 SPA 會持續累積。
+4. **payload 過大**：某些框架的 stack trace 超過 10 萬字元，HTTP body 過大會被 nginx 或 WAF 拒絕（413 Payload Too Large）。
+5. **handler 本身崩潰**：`window.onerror` 裡面的 `fetch` 如果因為環境問題拋出例外，整個 handler 失效，後續所有錯誤都不上報。
 
 因此我們設計了進階版的 `exceptionHandler`，完整架構如下：
 
@@ -189,6 +191,35 @@ pinia.use(({ store }) => {
 
 透過 Pinia Plugin 的 `$onAction` hook 攔截所有 Store Action 錯誤，`info` 參數會帶入 `Pinia action: ${actionName}` 供後端識別錯誤來源。
 
+### 進入點 3：原生 JS 與 Promise 錯誤
+
+```typescript
+// main.ts
+// 原生 JS 錯誤（Vue 捕捉不到的場景：setTimeout callback、第三方 lib 等）
+window.onerror = (message, source, lineno, colno, error) => {
+  if (error) {
+    exceptionHandler(error);
+  } else {
+    exceptionHandler(new Error(String(message)));
+  }
+};
+
+// Promise rejection（async 函式、.then() 鏈中未捕獲的錯誤）
+window.addEventListener('unhandledrejection', (event) => {
+  exceptionHandler(
+    event.reason instanceof Error ? event.reason : new Error(String(event.reason))
+  );
+});
+```
+
+三個掛載點的覆蓋範圍：
+
+| 掛載點 | 捕捉範圍 |
+|--------|---------|
+| `app.config.errorHandler` | Vue 組件樹內的同步錯誤、生命週期錯誤 |
+| `window.onerror` | 全局同步錯誤、`setTimeout`/`setInterval` callback |
+| `unhandledrejection` | `async/await`、`Promise.then/catch` 中的錯誤 |
+
 ### 錯誤去重機制
 
 高流量下同一個錯誤可能在幾秒內被觸發上百次，不做去重會灌爆 Log API：
@@ -204,16 +235,58 @@ flowchart LR
     G --> H["建立 Payload"]
 ```
 
-errorId 的產生方式：
+#### 為什麼用 SHA256 而不是比對 message 字串
+
+最直覺的去重只比對 `error.message`，但不同的 bug 可能有相同的訊息（例如 `TypeError: Cannot read properties of undefined`），導致第二個錯誤被誤判為重複。這份實作的去重 key 包含四個維度：
 
 ```typescript
 const errorData = {
   message: error?.message || 'unknown',
-  stack: error?.stack?.slice(0, 200) || 'no-stack',
-  pathname: location.pathname,
-  timestamp: Math.floor(Date.now() / 1000),
+  stack: error?.stack?.slice(0, 200) || 'no-stack',  // 只取前 200 字
+  pathname: location.pathname,                         // 頁面路徑
+  timestamp: Math.floor(Date.now() / 1000),           // 秒級時間戳
 };
 const errorId = crypto.SHA256(JSON.stringify(errorData)).toString();
+```
+
+**`stack.slice(0, 200)` 的設計考量**：只取「最核心的調用棧頭部」——哪個函式拋出了錯誤——這部分是穩定的。完整的 stack 作為 payload 上報，但不作為去重 key，因為不同環境下 source map 解析或行號可能有細微差異。
+
+**秒級時間戳的作用**：將同一秒內的相同錯誤歸為一組（不重複上報），但超過 `DEBOUNCE_DELAY`（3 秒）後，同類錯誤可以重新上報，讓間歇性錯誤在下一個時間窗口仍能被記錄。
+
+#### 懶清理（Lazy Cleanup）
+
+相較於 `setInterval` 定時清理，懶清理（每次新錯誤進來時才掃描）不會在頁面空閒時浪費 CPU，也不存在清理間隔過長導致記憶體失控的問題：
+
+```typescript
+const sentErrors = new Map<string, number>(); // errorId → 上報時間 (ms)
+
+function cleanupExpiredErrors(): void {
+  const now = Date.now();
+  const expiredKeys: string[] = [];
+
+  for (const [errorId, timestamp] of sentErrors.entries()) {
+    if (now - timestamp > DEBOUNCE_DELAY) {
+      expiredKeys.push(errorId);
+    }
+  }
+  // 先收集再刪除：不在迭代中 mutate Map，避免依賴實作細節
+  expiredKeys.forEach((key) => sentErrors.delete(key));
+}
+```
+
+`Map` 超過上限時用 FIFO 淘汰最舊的記錄（`Map` 保證 insertion-order iteration，`keys().next().value` 永遠是最早插入的 key）：
+
+```typescript
+function enforceMaxStoredErrors(): void {
+  while (sentErrors.size >= MAX_STORED_ERRORS) {
+    const firstKey = sentErrors.keys().next().value;
+    if (firstKey) {
+      sentErrors.delete(firstKey);
+    } else {
+      break;
+    }
+  }
+}
 ```
 
 | 常數 | 值 | 說明 |
@@ -234,6 +307,33 @@ const errorId = crypto.SHA256(JSON.stringify(errorData)).toString();
 }
 ```
 
+#### getCause：Vue context 的安全讀取
+
+```typescript
+function getCause(vm?: any, info?: string): string {
+  let cause = `Path is ${getLocationPathname()}`;
+
+  try {
+    if (vm && vm.$el) {
+      cause += `, Error in ${info} with element ${vm.$el.nodeName.toLowerCase()}`;
+      if (vm.$el.className) {
+        cause += `.${vm.$el.className}`;
+      }
+    } else if (vm && vm.type) {
+      cause += `, Error in action: ${vm.type}`;
+    } else if (info) {
+      cause += `, Info is ${info}`;
+    }
+  } catch {
+    // vm 的屬性存取可能因為組件已被 unmount 而失敗，靜默處理
+  }
+
+  return cause;
+}
+```
+
+存取 `vm.$el` 可能在組件 unmount 後拋出例外（某些 Vue 版本的 timing 問題），整個 `getCause` 包在 `try/catch` 裡確保不中斷主流程。
+
 `cause` 欄位的組成邏輯：
 
 | 條件 | cause 內容 |
@@ -242,6 +342,19 @@ const errorId = crypto.SHA256(JSON.stringify(errorData)).toString();
 | `vm.type` 存在（Pinia action） | `Path is /xxx, Error in action: {type}` |
 | 僅有 `info` | `Path is /xxx, Info is {info}` |
 | 都無 | `Path is /xxx` |
+
+#### Payload 大小控制
+
+```typescript
+const MAX_ERROR_SIZE = 10000;
+
+const payload = createErrorPayload(error, vm, info);
+if (JSON.stringify(payload).length > MAX_ERROR_SIZE) {
+  payload.stack = payload.stack?.slice(0, 1000); // 只截斷 stack
+}
+```
+
+只截斷 `stack` 而非整個 payload：`message`、`memberCode`、`cause` 是排查問題最關鍵的欄位，即使 stack 很長也要保留完整。stack 的核心資訊在前 1,000 字元，截斷後仍能定位問題。
 
 ### 送出與重試機制
 
@@ -268,10 +381,51 @@ sequenceDiagram
     end
 ```
 
+```typescript
+const MAX_RETRY_COUNT = 3;
+
+function submitErrorLog(url: string, payload: any, retryCount: number): Promise<void> {
+  if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) {
+    return Promise.resolve(); // 離線時靜默跳過，不進入 retry 循環
+  }
+
+  return fetch(url, {
+    body: JSON.stringify(payload),
+    method: 'POST',
+    headers: new Headers({ 'Content-Type': 'application/json' }),
+    signal: AbortSignal.timeout?.(10000), // 10s timeout，舊環境 fallback 為 undefined
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+    })
+    .catch((error) => {
+      if (retryCount < MAX_RETRY_COUNT) {
+        const delay = Math.min(Math.pow(2, retryCount) * 1000, 10000);
+        return new Promise<void>((resolve, reject) => {
+          setTimeout(() => {
+            submitErrorLog(url, payload, retryCount + 1).then(resolve).catch(reject);
+          }, delay);
+        });
+      } else {
+        throw error; // 超過上限：保持 reject，讓外層 .catch(console.error) 記錄
+      }
+    });
+}
+```
+
+| 嘗試次數 | 等待時間 |
+|---------|---------|
+| 首次 | 0ms |
+| Retry 1 | 1s |
+| Retry 2 | 2s |
+| Retry 3 | 4s |
+
 | 設定 | 值 | 說明 |
 |------|---|------|
 | `MAX_RETRY_COUNT` | 3 | 最多重試 3 次（含首次共 4 次） |
-| 退避策略 | `2^retryCount * 1000ms` | 指數退避 |
+| 退避策略 | `2^retryCount * 1000ms` | 指數退避，上限 10s |
 | Timeout | 10000ms | 每次 fetch 的 AbortSignal timeout |
 | 離線檢測 | `navigator.onLine` | 離線時直接跳過 |
 
@@ -290,16 +444,19 @@ Content-Type: application/json
 }
 ```
 
-## 兩個版本的比較
+## 設計決策對比總結
 
-| 面向 | 基礎版 | 生產級 |
-|------|-------|-------|
-| 錯誤來源 | Vue 元件 | Vue 元件 + Pinia Action + 手動呼叫 |
-| 去重機制 | 無 | SHA256 + 3 秒 debounce |
-| 重試機制 | 無 | 指數退避，最多 3 次 |
-| Payload 大小控制 | 無 | 截斷至 10000 字元 |
-| 離線處理 | 直接丟失 | 偵測 `navigator.onLine`，離線跳過 |
-| 適用場景 | 小型專案 / 開發環境 | 高流量生產環境 |
+| 問題 | 常見做法 | 本實作 |
+|------|---------|--------|
+| 錯誤來源 | Vue 元件 | Vue 元件 + Pinia Action + window.onerror + unhandledrejection |
+| 重複上報 | 無處理 | SHA256 去重 + 3s debounce |
+| 去重 key | `error.message` | `message + stack[:200] + pathname + 秒戳` |
+| 記憶體管理 | 無清理或定時清理 | 懶清理 + 15 筆 FIFO 硬上限 |
+| 網路失敗 | 丟棄 | Exponential Backoff，最多 retry 3 次 |
+| Payload 過大 | 完整上報 | 超 10000 字元截斷 stack |
+| 離線場景 | fetch 失敗進 retry | 先 check `navigator.onLine` |
+| Handler 崩潰 | 整個機制失效 | 外層 try/catch 保護 |
+| 超時 | 無限等待 | `AbortSignal.timeout(10s)` |
 
 ## Reference
 
