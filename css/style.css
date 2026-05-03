@@ -502,6 +502,46 @@ body {
 .search-form-submit:focus {
   color: #777;
 }
+#local-search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-radius: 0 0 8px 8px;
+  -webkit-box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 999;
+  list-style: none;
+  margin: 2px 0 0 0;
+  padding: 0;
+  display: none;
+}
+#local-search-results li {
+  border-bottom: 1px solid #f0f0f0;
+}
+#local-search-results li:last-child {
+  border-bottom: none;
+}
+#local-search-results li a {
+  display: block;
+  padding: 8px 15px;
+  color: #555;
+  text-decoration: none;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#local-search-results li a:hover {
+  background: #f5f5f5;
+  color: #555;
+}
+#local-search-results .no-result {
+  padding: 8px 15px;
+  color: #999;
+  font-size: 13px;
+}
 .article {
   margin: 50px 0;
 }
