@@ -3,9 +3,8 @@ title: Vue Dynamic HTML Prevent XSS
 date: 2022-06-26 23:39:36
 tags:
   - Vue
+  - Security
   - v-html
-  - v-sanitize
-  - v-runtime-template
 categories:
   - 前端開發
 ---

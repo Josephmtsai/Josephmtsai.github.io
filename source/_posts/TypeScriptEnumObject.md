@@ -2,9 +2,8 @@
 title: TypeScript Object Using Enum as Key
 date: 2022-12-24 11:59:26
 tags:
-  - Typescript
+  - TypeScript
   - Enum
-  - Object
 categories:
   - 前端開發
 ---

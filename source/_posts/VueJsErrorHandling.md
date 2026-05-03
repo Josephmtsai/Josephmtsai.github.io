@@ -5,9 +5,7 @@ tags:
   - Vue3
   - JavaScript
   - Error Handling
-  - Pinia
-  - Source Map
-  - Log
+  - Architecture
 categories:
   - 前端架構
 ---

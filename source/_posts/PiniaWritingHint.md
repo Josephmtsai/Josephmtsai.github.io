@@ -3,11 +3,8 @@ title: Pinia Writing Hint in Composition Api
 date: 2022-12-26 00:15:55
 tags:
   - Pinia
-  - Reactive
-  - Refs
+  - Vue3
   - Composition Api
-  - Proxy
-  - StoreToRefs
 categories:
   - 前端開發
 ---

@@ -2,11 +2,9 @@
 title: UC Browser Support
 date: 2022-05-07 23:38:50
 tags:
-  - UC Browser
-  - Tailwind CSS
-  - Vite
   - Vue3
-  - Tailwind CSS Dark Mode
+  - Vite
+  - Tailwind CSS
 categories:
   - Troubleshooting
 ---

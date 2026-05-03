@@ -2,11 +2,9 @@
 title: 使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制
 date: 2026-03-09
 tags:
+  - .NET
   - Redis
   - Rate Limiting
-  - System Design
-  - .NET
-  - Security
 categories:
   - 後端架構
 ---

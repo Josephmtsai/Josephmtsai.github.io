@@ -3,11 +3,8 @@ title: "Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event B
 date: 2026-03-13
 tags:
   - Vue.js
-  - Vue3
-  - BroadcastChannel
   - TypeScript
   - Architecture
-  - Cross-Tab Communication
 categories:
   - 前端架構
 ---

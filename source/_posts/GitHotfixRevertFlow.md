@@ -4,7 +4,6 @@ date: 2026-03-11
 tags:
   - Git
   - GitFlow
-  - Workflow
   - Revert
 categories:
   - 工程實踐

@@ -5,7 +5,6 @@ tags:
   - .NET
   - MongoDB
   - CMS
-  - Architecture
 categories:
   - 後端架構
 ---

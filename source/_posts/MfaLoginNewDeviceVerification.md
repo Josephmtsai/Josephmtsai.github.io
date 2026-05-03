@@ -5,9 +5,6 @@ tags:
   - .NET
   - MFA
   - Security
-  - Redis
-  - Vue3
-  - Authentication
 categories:
   - 後端架構
 ---

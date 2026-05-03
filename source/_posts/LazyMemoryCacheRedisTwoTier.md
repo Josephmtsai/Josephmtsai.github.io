@@ -3,10 +3,8 @@ title: "雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede"
 date: 2026-04-02
 tags:
   - .NET
-  - LazyCache
   - Redis
-  - MemoryCache
-  - Performance
+  - Cache
 categories:
   - 後端架構
 ---

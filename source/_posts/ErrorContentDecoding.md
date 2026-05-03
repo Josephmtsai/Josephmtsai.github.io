@@ -2,10 +2,9 @@
 title: ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄
 date: 2026-03-10 11:02:34
 tags:
-  - ERR_CONTENT_DECODING_FAILED
   - Nuxt3
-  - Client Side Error
   - Gzip
+  - Debug
 categories:
   - Troubleshooting
 ---

@@ -5,7 +5,6 @@ tags:
   - .NET
   - Feature Flag
   - API Design
-  - Architecture
 categories:
   - 後端架構
 ---

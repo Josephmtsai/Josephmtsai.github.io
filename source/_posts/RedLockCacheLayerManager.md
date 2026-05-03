@@ -4,10 +4,7 @@ date: 2026-04-07
 tags:
   - .NET
   - Redis
-  - RedLock
   - Cache
-  - Distributed Lock
-  - Performance
 categories:
   - 後端架構
 ---

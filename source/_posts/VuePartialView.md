@@ -4,9 +4,7 @@ date: 2026-03-13
 tags:
   - Vue.js
   - Micro Frontend
-  - postMessage
   - Architecture
-  - TypeScript
 categories:
   - 前端架構
 ---

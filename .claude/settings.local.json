@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"D:\\\\Josephmtsai.github.io\\\\themes\\\\landscape\" -Recurse -Filter \"*.ejs\")",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(npm install *)",
+      "Bash(npx hexo *)",
+      "Bash(Test-Path *)"
+    ]
+  }
+}

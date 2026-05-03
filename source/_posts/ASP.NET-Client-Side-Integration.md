@@ -4,9 +4,7 @@ date: 2025-03-16
 tags:
   - .NET
   - Vue.js
-  - Rsbuild
   - Architecture
-  - SPA
 categories:
   - 後端架構
 ---

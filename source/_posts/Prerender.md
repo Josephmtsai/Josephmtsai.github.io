@@ -4,8 +4,6 @@ date: 2023-03-25 00:28:43
 tags:
   - SEO
   - Prerender
-  - Server Side Render
-  - IIS
   - Asp.net
 categories:
   - 前端架構

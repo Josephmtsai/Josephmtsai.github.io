@@ -2,11 +2,9 @@
 title: 用 Elasticsearch Watcher 打造生產環境即時告警 — 多層事件失敗率與 Error Log 監控實戰
 date: 2026-03-12
 tags:
-  - Elasticsearch
   - ELK
-  - Watcher
+  - Elasticsearch
   - Monitoring
-  - DevOps
 categories:
   - 後端架構
 ---

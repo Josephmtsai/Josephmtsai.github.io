@@ -5,7 +5,6 @@ tags:
   - Vue.js
   - Pinia
   - Architecture
-  - TypeScript
 categories:
   - 前端架構
 ---

@@ -2,11 +2,9 @@
 title: iOS Safari Handle Elastic Scroll
 date: 2023-03-28 23:00:51
 tags:
-  - Safari
-  - VueUse
-  - Elastic Scrolling
-  - Compatible
   - iOS
+  - Safari
+  - Vue
 categories:
   - Troubleshooting
 ---

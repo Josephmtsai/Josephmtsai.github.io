@@ -4,10 +4,7 @@ date: 2026-04-07
 tags:
   - .NET
   - AOP
-  - Performance
   - Design Pattern
-  - Logging
-  - Decorator Pattern
 categories:
   - 後端架構
 ---

@@ -2,12 +2,9 @@
 title: Pre Commit ESLint Local Rules
 date: 2022-07-20 00:01:08
 tags:
-  - Vue
-  - Pre-Commit
-  - Custom Rules
-  - File Check
-  - Quality Control
   - ESLint
+  - Pre-Commit
+  - Vue
 categories:
   - 工程實踐
 ---

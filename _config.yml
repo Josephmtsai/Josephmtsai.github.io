@@ -98,6 +98,12 @@ ignore:
 ## Themes: https://hexo.io/themes/
 theme: landscape
 
+# Local Search
+search:
+  path: search.xml
+  field: post
+  content: true
+
 # Mermaid
 mermaid:
   enable: true

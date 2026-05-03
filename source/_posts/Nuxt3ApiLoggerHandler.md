@@ -5,9 +5,7 @@ tags:
   - Nuxt3
   - TypeScript
   - API Design
-  - Backend
-  - Log
-  
+
 categories:
   - 前端架構
 

@@ -3,12 +3,8 @@ title: "Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版�
 date: 2026-04-01
 tags:
   - .NET Framework
-  - ASP.NET MVC
   - Debug
   - Webpack
-  - Manifest
-  - Frontend
-  - Monolith
 categories:
   - 工程實踐
 ---

@@ -2,7 +2,7 @@
 title: 在手機上如何攔截到 http Request
 date: 2022-05-05 22:21:35
 tags:
-  - Intecept Request
+  - Debug
   - App Debug
   - Web Debug
 categories:

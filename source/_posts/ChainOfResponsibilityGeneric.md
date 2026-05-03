@@ -4,8 +4,6 @@ date: 2026-03-31
 tags:
   - .NET
   - Design Pattern
-  - Chain of Responsibility
-  - GoF
   - Clean Architecture
 categories:
   - 後端架構

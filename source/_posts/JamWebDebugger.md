@@ -2,7 +2,7 @@
 title: JamWebDebugger
 date: 2023-10-07 22:44:38
 tags:
-  - Debbuger
+  - Debugger
   - Recording
   - QA Testing
 categories:
