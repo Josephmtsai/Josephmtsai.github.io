@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-04LWQBG1HE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-04LWQBG1HE');
+</script>
+<!-- End Google Analytics -->
+
+  
+  <title>Mobile App Spi Performance Issue — 歐洲盃前夕的效能危機與 Cache 改善 | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="背景2024 年 5 月 17 日，在歐洲盃（Euro Cup）賽季開始前，針對 Mobile App SPI 的 Performance 問題召開專案會議，出席人員涵蓋 App 團隊、BO 團隊與 PM。 會議的核心動機：歐洲盃期間流量預計達正常的 2~3 倍，現有 API 設計若未調整，將造成 DB 或 API 無法正常服務。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Mobile App Spi Performance Issue — 歐洲盃前夕的效能危機與 Cache 改善">
+<meta property="og:url" content="https://josephmtsai.github.io/2024/05/16/MobileAppSpiPerformanceIssue/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="背景2024 年 5 月 17 日，在歐洲盃（Euro Cup）賽季開始前，針對 Mobile App SPI 的 Performance 問題召開專案會議，出席人員涵蓋 App 團隊、BO 團隊與 PM。 會議的核心動機：歐洲盃期間流量預計達正常的 2~3 倍，現有 API 設計若未調整，將造成 DB 或 API 無法正常服務。">
+<meta property="og:locale" content="zh_TW">
+<meta property="og:image" content="https://josephmtsai.github.io/2024/05/16/MobileAppSpiPerformanceIssue/image01.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2024/05/16/MobileAppSpiPerformanceIssue/image02.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2024/05/16/MobileAppSpiPerformanceIssue/image03.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2024/05/16/MobileAppSpiPerformanceIssue/image04.png">
+<meta property="og:image" content="https://josephmtsai.github.io/2024/05/16/MobileAppSpiPerformanceIssue/image05.png">
+<meta property="article:published_time" content="2024-05-16T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-05-08T09:16:17.625Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Architecture">
+<meta property="article:tag" content="MobileApp">
+<meta property="article:tag" content="Performance">
+<meta property="article:tag" content="Redis">
+<meta property="article:tag" content="Cache">
+<meta property="article:tag" content="MessageHub">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://josephmtsai.github.io/2024/05/16/MobileAppSpiPerformanceIssue/image01.png">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-MobileAppSpiPerformanceIssue" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2024/05/16/MobileAppSpiPerformanceIssue/" class="article-date">
+  <time class="dt-published" datetime="2024-05-16T16:00:00.000Z" itemprop="datePublished">2024-05-17</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E6%95%88%E8%83%BD%E8%AA%BF%E6%A0%A1/">效能調校</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Mobile App Spi Performance Issue — 歐洲盃前夕的效能危機與 Cache 改善
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>2024 年 5 月 17 日，在歐洲盃（Euro Cup）賽季開始前，針對 Mobile App SPI 的 Performance 問題召開專案會議，出席人員涵蓋 App 團隊、BO 團隊與 PM。</p>
+<p>會議的核心動機：<strong>歐洲盃期間流量預計達正常的 2~3 倍</strong>，現有 API 設計若未調整，將造成 DB 或 API 無法正常服務。</p>
+<span id="more"></span>
+
+<h2 id="問題描述"><a href="#問題描述" class="headerlink" title="問題描述"></a>問題描述</h2><h3 id="API-呼叫量異常：是-STAR4-的-8-倍"><a href="#API-呼叫量異常：是-STAR4-的-8-倍" class="headerlink" title="API 呼叫量異常：是 STAR4 的 8 倍"></a>API 呼叫量異常：是 STAR4 的 8 倍</h3><p>透過 ELK REQUEST 日誌對 Account Summary API（收件匣 + 公告未讀數）進行統計：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Mobile App SPI Account Summary 呼叫量</span><br><span class="line">= STAR4 RWD 的 8 倍</span><br></pre></td></tr></table></figure>
+
+<p>以公告（Announcement）API 為例，數據差異極為顯著：</p>
+<table>
+<thead>
+<tr>
+<th>平台</th>
+<th>每日 API 呼叫量</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>STAR4 RWD</td>
+<td>約 230,000 次</td>
+</tr>
+<tr>
+<td>Mobile App SPI</td>
+<td>約 <strong>1,610,000 次</strong></td>
+</tr>
+</tbody></table>
+<p>Mobile App SPI 的呼叫量是 RWD 的 <strong>7 倍以上</strong>，而兩者服務的用戶基數相近，顯示 App 端存在明顯的多餘呼叫問題。</p>
+<p>ELK Performance Log 實際數據對比：</p>
+<img src="/2024/05/16/MobileAppSpiPerformanceIssue/image01.png" class="" title="STAR4 RWD — Performance by Method：msghubapi avg 62ms、count 236K，整體效能正常">
+
+<img src="/2024/05/16/MobileAppSpiPerformanceIssue/image02.png" class="" title="Mobile App SPI — Performance by Method：inbox&#x2F;notification&#x2F;announcement avg 高達 420ms，max 34,321ms，count 達 160 萬次，效能嚴重劣化">
+
+<h3 id="效能劣化：30-請求出現延遲"><a href="#效能劣化：30-請求出現延遲" class="headerlink" title="效能劣化：30% 請求出現延遲"></a>效能劣化：30% 請求出現延遲</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Mobile App SPI：30% 的請求回應時間超過正常門檻</span><br></pre></td></tr></table></figure>
+
+<p>這些 API 直接查詢 DB，在歐洲盃高流量期間若無保護機制，DB 壓力將達到臨界點。</p>
+<pre class="mermaid">flowchart TD
+    A[Mobile App] --> B[App SPI]
+    B --> C["Account Summary API\n（每日 161 萬次）"]
+    B --> D["Announcement List API\n（無 Cache，直打 DB）"]
+    C --> E[DB]
+    D --> E
+    E --> F{Euro Cup 流量\n2~3 倍}
+    F -->|壓力超載| G[DB / API 無法服務]
+    F -->|30% 請求已延遲| H[效能劣化加劇]</pre>
+
+<h2 id="根本原因分析"><a href="#根本原因分析" class="headerlink" title="根本原因分析"></a>根本原因分析</h2><pre class="mermaid">flowchart LR
+    subgraph App端["App 端呼叫邏輯問題"]
+        A1[每個頁面切換\n都觸發 Account Summary]
+        A2[不只 Lobby，\n多個入口重複呼叫]
+    end
+    subgraph API端["API 端缺乏保護"]
+        B1[Announcement List\n每次直接查 DB]
+        B2[Inbox / Notification Count\n無 Cache]
+        B3[MessageHub 與 BO SPI\n共用同一台伺服器]
+    end
+    App端 --> C[呼叫量爆增]
+    API端 --> C
+    C --> D[DB 壓力過高\n30% 請求延遲]</pre>
+
+<p><strong>兩層問題同時存在：</strong></p>
+<ol>
+<li><strong>App 端呼叫頻率過高</strong> — Account Summary 不應在每個頁面都觸發，只需在 Lobby 主選單呼叫</li>
+<li><strong>API 端缺乏 Cache 保護</strong> — 公告列表、未讀數等低變動資料每次都直查 DB</li>
+</ol>
+<p>以下為 App 中涉及高頻呼叫的 UI 元件位置：</p>
+<img src="/2024/05/16/MobileAppSpiPerformanceIssue/image03.png" class="" title="Lobby 頁面頂部 — Account icon 顯示未讀通知 badge，每次切換頁面皆觸發 Account Summary API">
+
+<img src="/2024/05/16/MobileAppSpiPerformanceIssue/image04.png" class="" title="Side Menu — Notifications &#x2F; Messages 未讀數顯示，對應 getunreadcount 系列 API">
+
+<img src="/2024/05/16/MobileAppSpiPerformanceIssue/image05.png" class="" title="All Notifications 頁面 — 列出 Banking &#x2F; My Account &#x2F; My Bets &#x2F; Promotions &#x2F; Announcements 等分類，對應 getimportantnotifications API">
+
+<h2 id="改善方案"><a href="#改善方案" class="headerlink" title="改善方案"></a>改善方案</h2><h3 id="Ticket-IDP-10145：App-端呼叫邏輯調整-Announcement-Cache"><a href="#Ticket-IDP-10145：App-端呼叫邏輯調整-Announcement-Cache" class="headerlink" title="Ticket IDP-10145：App 端呼叫邏輯調整 + Announcement Cache"></a>Ticket IDP-10145：App 端呼叫邏輯調整 + Announcement Cache</h3><pre class="mermaid">flowchart TD
+    subgraph Before["改善前"]
+        A1[任意頁面切換] --> B1[Account Summary API]
+        A2[Announcement 入口] --> B2[Announcement List API\n直接查 DB]
+    end
+    subgraph After["改善後 IDP-10145"]
+        C1[僅 Lobby Menu 觸發] --> D1[Account Summary API]
+        C2[Announcement 入口] --> D2[Announcement List API]
+        D2 --> E2{Redis Cache\n10 分鐘}
+        E2 -->|Cache Hit| F2[直接回傳]
+        E2 -->|Cache Miss| G2[查 DB 並寫入 Cache]
+    end</pre>
+
+<p><strong>改善項目：</strong></p>
+<ul>
+<li><strong>減少 Account Summary 呼叫</strong> — 限制只在 Lobby Menu 觸發，消除其他頁面的多餘呼叫</li>
+<li><strong>Announcement List 加入 10 分鐘 Cache</strong> — 公告內容變動頻率低，10 分鐘 Cache 可大幅降低 DB 壓力</li>
+</ul>
+<h3 id="Ticket-IDP-10136：SPI-端-Cache-保護"><a href="#Ticket-IDP-10136：SPI-端-Cache-保護" class="headerlink" title="Ticket IDP-10136：SPI 端 Cache 保護"></a>Ticket IDP-10136：SPI 端 Cache 保護</h3><pre class="mermaid">flowchart TD
+    subgraph APIs["受保護 API"]
+        A[Get Inbox / Notification /\nAnnouncement Count]
+        B[Get Announcement List]
+    end
+    A --> C{Redis Cache\n5 分鐘}
+    B --> D{Redis Cache\n5 分鐘}
+    C -->|Hit| E[回傳快取結果]
+    C -->|Miss| F[查 DB 寫入 Cache]
+    D -->|Hit| E
+    D -->|Miss| F</pre>
+
+<p><strong>改善項目：</strong></p>
+<ul>
+<li><strong>Inbox &#x2F; Notification &#x2F; Announcement Count</strong> — 加入 5 分鐘 Redis Cache</li>
+<li><strong>Announcement List</strong> — 加入 5 分鐘 Redis Cache</li>
+</ul>
+<h3 id="基礎設施：MessageHub-拆分至獨立伺服器"><a href="#基礎設施：MessageHub-拆分至獨立伺服器" class="headerlink" title="基礎設施：MessageHub 拆分至獨立伺服器"></a>基礎設施：MessageHub 拆分至獨立伺服器</h3><p>原本 BO SPI 與 SPI MessageHub 共用同一台伺服器，MessageHub 的長連線特性會佔用大量連線資源，影響一般 SPI 的請求處理。</p>
+<pre class="mermaid">flowchart LR
+    subgraph Before["改善前（共用）"]
+        S1[Server]
+        S1 --- P1[BO SPI]
+        S1 --- P2[SPI MessageHub]
+        P2 -->|長連線資源競搶| P1
+    end
+    subgraph After["改善後（拆分）"]
+        S2[Server A] --- Q1[BO SPI]
+        S3[Server B] --- Q2[SPI MessageHub]
+    end</pre>
+
+<p>拆分後：</p>
+<ul>
+<li>BO SPI 與 MessageHub 資源互不干擾</li>
+<li>MessageHub 長連線不再影響一般 API 的回應速度</li>
+<li>兩者可以各自獨立擴展（Scale Out）</li>
+</ul>
+<h2 id="改善效益預估"><a href="#改善效益預估" class="headerlink" title="改善效益預估"></a>改善效益預估</h2><table>
+<thead>
+<tr>
+<th>項目</th>
+<th>改善前</th>
+<th>改善後（預估）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Account Summary 日呼叫量</td>
+<td>~1,610,000 次</td>
+<td>大幅減少（僅 Lobby 觸發）</td>
+</tr>
+<tr>
+<td>Announcement DB 查詢</td>
+<td>每次呼叫都查</td>
+<td>Cache Hit 率 &gt; 80%，DB 查詢降至 20%</td>
+</tr>
+<tr>
+<td>Inbox Count DB 查詢</td>
+<td>每次呼叫都查</td>
+<td>5 分鐘內同一用戶只查一次</td>
+</tr>
+<tr>
+<td>API 延遲 &gt; 門檻比例</td>
+<td>30%</td>
+<td>預期降至 &lt; 5%</td>
+</tr>
+<tr>
+<td>MessageHub 對 SPI 影響</td>
+<td>資源競搶</td>
+<td>完全隔離</td>
+</tr>
+</tbody></table>
+<h2 id="小結"><a href="#小結" class="headerlink" title="小結"></a>小結</h2><p>這次效能問題的根源在於 App 端呼叫邏輯與 API 端保護機制都不完善，在正常流量下尚可接受，但一旦遇到歐洲盃這類流量高峰，就會造成 DB 無法服務的風險。</p>
+<p>改善策略分三個層次：</p>
+<ol>
+<li><strong>呼叫頻率控制（App 端）</strong> — 從源頭減少不必要的 API 請求</li>
+<li><strong>Cache 保護（API 端）</strong> — Redis 攔截高頻低變動資料，保護 DB</li>
+<li><strong>基礎設施隔離（部署端）</strong> — MessageHub 獨立，避免資源競搶</li>
+</ol>
+<p>三者缺一不可，才能在歐洲盃高流量期間確保服務穩定。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2024/05/16/MobileAppSpiPerformanceIssue/" data-id="cmowpajg1001dtq3f8prw5vim" data-title="Mobile App Spi Performance Issue — 歐洲盃前夕的效能危機與 Cache 改善" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MessageHub/" rel="tag">MessageHub</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MobileApp/" rel="tag">MobileApp</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2024/08/27/AbnormalApiRequestByMemberPerDay/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          Abnormal Api Request by Member Per Day — ELK 異常 API 請求監控案例
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2024/05/12/MobileAppSpiLoginAttack/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">Mobile App Spi Login Attack — 仿造假 Request 攻擊事件（5/10~5/12）</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤雲</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/NET/" style="font-size: 20px;">.NET</a> <a href="/tags/NET-Framework/" style="font-size: 10px;">.NET Framework</a> <a href="/tags/AOP/" style="font-size: 10px;">AOP</a> <a href="/tags/API-Design/" style="font-size: 11.43px;">API Design</a> <a href="/tags/ActionFilter/" style="font-size: 10px;">ActionFilter</a> <a href="/tags/App-Debug/" style="font-size: 10px;">App Debug</a> <a href="/tags/Architecture/" style="font-size: 18.57px;">Architecture</a> <a href="/tags/Asp-net/" style="font-size: 10px;">Asp.net</a> <a href="/tags/Attack/" style="font-size: 10px;">Attack</a> <a href="/tags/Authentication/" style="font-size: 10px;">Authentication</a> <a href="/tags/Axios/" style="font-size: 10px;">Axios</a> <a href="/tags/CMS/" style="font-size: 10px;">CMS</a> <a href="/tags/CSharp/" style="font-size: 11.43px;">CSharp</a> <a href="/tags/Cache/" style="font-size: 12.86px;">Cache</a> <a href="/tags/Clean-Architecture/" style="font-size: 10px;">Clean Architecture</a> <a href="/tags/Composable/" style="font-size: 11.43px;">Composable</a> <a href="/tags/Composition-Api/" style="font-size: 10px;">Composition Api</a> <a href="/tags/Cron/" style="font-size: 10px;">Cron</a> <a href="/tags/Debug/" style="font-size: 12.86px;">Debug</a> <a href="/tags/Debugger/" style="font-size: 10px;">Debugger</a> <a href="/tags/Design-Pattern/" style="font-size: 11.43px;">Design Pattern</a> <a href="/tags/DistributedSystem/" style="font-size: 10px;">DistributedSystem</a> <a href="/tags/DotNet/" style="font-size: 11.43px;">DotNet</a> <a href="/tags/ELK/" style="font-size: 14.29px;">ELK</a> <a href="/tags/ESLint/" style="font-size: 10px;">ESLint</a> <a href="/tags/Elasticsearch/" style="font-size: 11.43px;">Elasticsearch</a> <a href="/tags/Enum/" style="font-size: 10px;">Enum</a> <a href="/tags/Error-Handling/" style="font-size: 11.43px;">Error Handling</a> <a href="/tags/Feature-Flag/" style="font-size: 10px;">Feature Flag</a> <a href="/tags/Fetch/" style="font-size: 10px;">Fetch</a> <a href="/tags/Git/" style="font-size: 11.43px;">Git</a> <a href="/tags/GitFlow/" style="font-size: 11.43px;">GitFlow</a> <a href="/tags/Gzip/" style="font-size: 10px;">Gzip</a> <a href="/tags/Hangfire/" style="font-size: 11.43px;">Hangfire</a> <a href="/tags/Incident/" style="font-size: 10px;">Incident</a> <a href="/tags/Interceptor/" style="font-size: 10px;">Interceptor</a> <a href="/tags/JavaScript/" style="font-size: 10px;">JavaScript</a> <a href="/tags/Kibana/" style="font-size: 10px;">Kibana</a> <a href="/tags/LazyCache/" style="font-size: 10px;">LazyCache</a> <a href="/tags/Logging/" style="font-size: 10px;">Logging</a> <a href="/tags/MFA/" style="font-size: 11.43px;">MFA</a> <a href="/tags/MessageHub/" style="font-size: 10px;">MessageHub</a> <a href="/tags/Micro-Frontend/" style="font-size: 10px;">Micro Frontend</a> <a href="/tags/MobileApp/" style="font-size: 12.86px;">MobileApp</a> <a href="/tags/MongoDB/" style="font-size: 10px;">MongoDB</a> <a href="/tags/Monitoring/" style="font-size: 12.86px;">Monitoring</a> <a href="/tags/Nuxt3/" style="font-size: 14.29px;">Nuxt3</a> <a href="/tags/Performance/" style="font-size: 14.29px;">Performance</a> <a href="/tags/Pinia/" style="font-size: 11.43px;">Pinia</a> <a href="/tags/Pre-Commit/" style="font-size: 10px;">Pre-Commit</a> <a href="/tags/Prerender/" style="font-size: 10px;">Prerender</a> <a href="/tags/QA-Testing/" style="font-size: 10px;">QA Testing</a> <a href="/tags/Queue/" style="font-size: 10px;">Queue</a> <a href="/tags/Rate-Limiting/" style="font-size: 10px;">Rate Limiting</a> <a href="/tags/RateLimit/" style="font-size: 10px;">RateLimit</a> <a href="/tags/Recording/" style="font-size: 10px;">Recording</a> <a href="/tags/Redis/" style="font-size: 15.71px;">Redis</a> <a href="/tags/Responsible-Gambling/" style="font-size: 10px;">Responsible Gambling</a> <a href="/tags/Revert/" style="font-size: 10px;">Revert</a> <a href="/tags/SEO/" style="font-size: 10px;">SEO</a> <a href="/tags/Safari/" style="font-size: 10px;">Safari</a> <a href="/tags/Security/" style="font-size: 14.29px;">Security</a> <a href="/tags/Session/" style="font-size: 10px;">Session</a> <a href="/tags/Tailwind-CSS/" style="font-size: 10px;">Tailwind CSS</a> <a href="/tags/TypeScript/" style="font-size: 15.71px;">TypeScript</a> <a href="/tags/Vite/" style="font-size: 10px;">Vite</a> <a href="/tags/Vue/" style="font-size: 12.86px;">Vue</a> <a href="/tags/Vue-Life-Cycle/" style="font-size: 10px;">Vue Life Cycle</a> <a href="/tags/Vue-Router/" style="font-size: 10px;">Vue Router</a> <a href="/tags/Vue-js/" style="font-size: 14.29px;">Vue.js</a> <a href="/tags/Vue3/" style="font-size: 17.14px;">Vue3</a> <a href="/tags/Web-Debug/" style="font-size: 10px;">Web Debug</a> <a href="/tags/Webpack/" style="font-size: 10px;">Webpack</a> <a href="/tags/Workflow/" style="font-size: 10px;">Workflow</a> <a href="/tags/iOS/" style="font-size: 10px;">iOS</a> <a href="/tags/v-html/" style="font-size: 10px;">v-html</a> <a href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" style="font-size: 10px;">前端架構</a> <a href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" style="font-size: 10px;">身份驗證</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/08/">八月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">五月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/04/21/HashBasedJobStaggering/">用 Job Name Hash 防止 Thundering Herd：30 支排程 Job 的自動錯開機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/MultiQueueResourceIsolation/">Hangfire Multi-Queue 資源隔離：讓重量級 Job 不拖垮整個排程系統</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/VueMfaVerificationFlow/">Vue 3 新裝置 MFA 驗證架構：從登入攔截到 WebView 完成驗證的完整設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/14/ELKSharing/">ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/10/nuxt3-centralized-fetch-interceptor/">Nuxt 3 實戰：用 Composable 封裝集中式請求攔截器</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/10/nuxt3-redis-session-management/">Nuxt 3 生產級 Session 管理：Redis + Singleton + 多種登入流程</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/06/RedLockCacheLayerManager/">RedLock 分散式鎖在 CacheLayerManager 的實作案例</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/06/WatcherUtilAopPerformance/">WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/01/LazyMemoryCacheRedisTwoTier/">雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/31/DebugManifestDynamicLoading/">Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Debug/">Debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Troubleshooting/">Troubleshooting</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%88%E8%83%BD%E8%AA%BF%E6%A0%A1/">效能調校</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E8%B3%87%E5%AE%89%E4%BA%8B%E4%BB%B6/">資安事件</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Attack/" rel="tag">Attack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CSharp/" rel="tag">CSharp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cron/" rel="tag">Cron</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debugger/" rel="tag">Debugger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DistributedSystem/" rel="tag">DistributedSystem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DotNet/" rel="tag">DotNet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Fetch/" rel="tag">Fetch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hangfire/" rel="tag">Hangfire</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Incident/" rel="tag">Incident</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Interceptor/" rel="tag">Interceptor</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JavaScript/" rel="tag">JavaScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MessageHub/" rel="tag">MessageHub</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MobileApp/" rel="tag">MobileApp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Queue/" rel="tag">Queue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RateLimit/" rel="tag">RateLimit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Session/" rel="tag">Session</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" rel="tag">前端架構</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" rel="tag">身份驗證</a></li></ul>
+    </div>
+  </div>
+
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+  <script src='https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({startOnLoad: true, theme: 'default'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>

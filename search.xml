@@ -204,6 +204,273 @@ PWA 支援：Service Worker 和 PWA manifest 僅在 Release 時註冊，不干�
       </tags>
   </entry>
   <entry>
+    <title>Abnormal Api Request by Member Per Day — ELK 異常 API 請求監控案例</title>
+    <url>/2024/08/27/AbnormalApiRequestByMemberPerDay/</url>
+    <content><![CDATA[背景Mobile App SPI 的某些 API（例如 Live Chat、側邊選單、重要通知 Widget）屬於輕量查詢型介面，正常使用下單日請求量有限。透過 ELK REQUEST 日誌，我們可以統計每位會員每天對這些 API 的呼叫次數，若超過門檻即判定為異常行為。
+異常行為的可能原因包含：
+
+自動化腳本或爬蟲反覆拉取資料
+程式端迴圈呼叫未正確控制頻率
+帳號遭惡意使用，反覆查詢特定資訊
+
+
+
+ELK REQUEST Log 格式Mobile App SPI 的 Request Log 採用以下格式：
+[REQUEST][Method|requestUrl][HTTPMethod][clientIP][sessionId][memberCode][refererURL|MobileAppVersion] Message
+
+
+
+
+欄位
+說明
+
+
+
+requestUrl
+被呼叫的 API 路徑
+
+
+HTTPMethod
+GET &#x2F; POST
+
+
+clientIP
+客戶端 IP
+
+
+sessionId
+會話識別碼
+
+
+memberCode
+會員帳號（用於統計依據）
+
+
+MobileAppVersion
+App 版本號
+
+
+透過 memberCode 欄位做 terms aggregation，可以統計出每位會員在指定時間區間內的 API 呼叫次數。
+監控設計目標 API針對以下三支呼叫頻率理應偏低的 API 進行監控：
+
+
+
+API
+說明
+正常預期
+
+
+
+Live Chat
+客服聊天入口查詢
+偶發性呼叫
+
+
+Side Menu Info
+側邊選單資訊
+頁面載入時觸發
+
+
+Important Notification Widgets
+重要通知元件
+事件驅動，非持續輪詢
+
+
+異常門檻單一會員，單日對上述任一 API 的請求次數 ≥ 1,000 次 → 判定為異常
+
+正常使用者就算頻繁切換頁面，單日也不應超過此閾值。超過代表可能有自動化行為。
+ELK 查詢邏輯index: mobileapp-request-*filter:  - requestUrl: (&quot;livechat&quot; OR &quot;sidemenuinfo&quot; OR &quot;importantnotification&quot;)  - @timestamp: [now-1d TO now]aggregation:  terms:    field: memberCode    size: 10    order: _count desc
+
+flowchart TD
+    A[ELK REQUEST Index\nmobileapp-request-*] --> B[Filter 指定 API\nLive Chat / Side Menu / Notification]
+    B --> C[時間範圍: 過去 24 小時]
+    C --> D[terms agg by memberCode]
+    D --> E[取 Top 10]
+    E --> F{count ≥ 1,000？}
+    F -->|是| G[標記為異常帳號]
+    F -->|否| H[正常，不處理]
+    G --> I[通報相關單位]
+
+案例：2024&#x2F;8&#x2F;27 ~ 8&#x2F;28 調查結果調查期間發現多個 Member Code 的單日 API 呼叫次數遠超正常值，最高者單日竟達 40,106 次，異常程度遠超門檻。
+/api/message/getimportantnotifications（Important Notifications）
+
+
+Date
+Member Code
+Count
+
+
+
+2024&#x2F;8&#x2F;27
+bobjytan
+40,106
+
+
+2024&#x2F;8&#x2F;27
+pazzoiuamy
+36,706
+
+
+2024&#x2F;8&#x2F;27
+xuannhan1981
+20,711
+
+
+2024&#x2F;8&#x2F;27
+chaiwenshuo
+19,053
+
+
+2024&#x2F;8&#x2F;27
+zhangshuaibao66
+11,168
+
+
+2024&#x2F;8&#x2F;27
+radhitkyle58
+10,718
+
+
+2024&#x2F;8&#x2F;28
+bobjytan
+34,813
+
+
+2024&#x2F;8&#x2F;28
+xuannhan1981
+20,696
+
+
+2024&#x2F;8&#x2F;28
+radhitkyle58
+11,000
+
+
+2024&#x2F;8&#x2F;28
+jieyu06040512
+8,219
+
+
+/api/menuinfo/getaccountsummary（Account Summary）
+
+
+Date
+Member Code
+Count
+
+
+
+2024&#x2F;8&#x2F;28
+thuha1985
+2,648
+
+
+2024&#x2F;8&#x2F;28
+naqsa
+758
+
+
+2024&#x2F;8&#x2F;28
+thythy123
+601
+
+
+2024&#x2F;8&#x2F;28
+hzd981219
+599
+
+
+2024&#x2F;8&#x2F;28
+herdisaster182
+572
+
+
+/api/assistance/livechat（Live Chat）
+
+
+Date
+Member Code
+Count
+
+
+
+2024&#x2F;8&#x2F;28
+nut521
+611
+
+
+2024&#x2F;8&#x2F;28
+alfar10
+128
+
+
+
+bobjytan 在兩天內對 Important Notifications API 合計呼叫 74,919 次，顯示為持續運行的自動化腳本行為。
+
+通報與後續處理流程sequenceDiagram
+    participant ELK as ELK Dashboard
+    participant Dev as 開發團隊
+    participant PM as PM / 業務單位
+    participant Risk as 風控 / 安全團隊
+
+    Dev->>ELK: 每日執行 Top 10 異常查詢
+    ELK-->>Dev: 回傳超過門檻的 Member Code 清單
+    Dev->>PM: 發送通報郵件 (附異常帳號清單)
+    PM->>Risk: 轉交風控處理
+    Risk->>Risk: 調查帳號行為\n判斷是否為惡意腳本 / 程式錯誤
+    Risk-->>PM: 處理結果回報
+
+通報內容包含：
+
+異常 Member Code 清單（Top 10）
+各 API 的呼叫次數明細
+時間區間
+建議處置方式
+
+潛在風險與影響
+
+
+風險類型
+說明
+
+
+
+伺服器資源耗用
+高頻呼叫佔用後端運算與 DB 查詢資源
+
+
+資料採集
+反覆拉取通知 &#x2F; 聊天資訊可能用於資料蒐集
+
+
+帳號異常使用
+可能代表帳號遭他人控制或出售給自動化工具
+
+
+影響其他用戶
+頻繁請求可能在尖峰時段衝擊整體 API 回應速度
+
+
+小結透過 ELK REQUEST 日誌的 memberCode 維度聚合，可以有效識別 Mobile App SPI 中的異常高頻使用者。這類監控的核心邏輯簡單但效果顯著：
+
+選定低頻 API 作為監控對象（正常使用者不會高頻呼叫）
+設定合理門檻（1,000 次&#x2F;日）讓誤報率維持在可接受範圍
+定期執行並通報，讓業務單位能及早介入處理
+
+後續可考慮將此查詢自動化，透過 ELK Watcher 排程每日執行並自動發送告警，取代現行的人工查詢方式。
+]]></content>
+      <categories>
+        <category>資安事件</category>
+      </categories>
+      <tags>
+        <tag>ELK</tag>
+        <tag>Security</tag>
+        <tag>MobileApp</tag>
+        <tag>Monitoring</tag>
+        <tag>RateLimit</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Feature Version Control — APP 版本功能控管架構</title>
     <url>/2026/02/03/ApiFeatureVersionControl/</url>
     <content><![CDATA[前言Mobile APP 與 Web 不同，使用者不一定會即時更新到最新版本。當後端上線新功能時，舊版 APP 可能尚未支援該功能的 UI 或邏輯。若後端直接回傳新功能相關的資料，可能導致：
@@ -576,6 +843,162 @@ D
         <tag>.NET</tag>
         <tag>Design Pattern</tag>
         <tag>Clean Architecture</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制</title>
+    <url>/2026/03/31/DebugManifestDynamicLoading/</url>
+    <content><![CDATA[背景正式環境下，前端 JS&#x2F;CSS 經 Webpack 打包後會帶 content hash 檔名；ASP.NET MVC 的 _Layout.cshtml 必須依 manifest.json 注入正確的 &lt;script&gt; &#x2F; &lt;link&gt;。本篇說明在 Debug 時如何 不必重啟後端 也能對齊 Webpack 即時編譯 的輸出。
+專案型態：前後端未分離的 .NET Framework MVC我們的專案 不是「獨立前端站 + 獨立 API 站」那種典型前後端分離：
+
+後端：.NET Framework 上的 ASP.NET MVC。頁面骨架仍由 Razor（例如 _Layout.cshtml）在伺服器端渲染，路由與部分畫面由 MVC 負責。
+前端互動：實際的 SPA／模組化 UI 由 Webpack 打包的 JS、CSS 在瀏覽器端啟動；正式環境這些靜態檔會放到 CDN，透過 hash 檔名 做快取破壞。
+Debug 開發：本機不強制走「部署到 CDN + 重讀 manifest」那條路，而是啟動 Webpack Dev Server（或同等 dev 流程），由它 動態編譯並提供 最新的 vendor.js、index.js 等。_Layout 在 Debug 組態下改把資源 URL 指到 本機 dev server，因此 重新 build &#x2F; HMR 後只要重新整理頁面，即可載入新 bundle，無須為了更新 hash 而去重啟 IIS 或整個 .NET 站台。
+
+簡單講：Release＝後端讀記憶體裡的 manifest.json，對應 CDN 上帶 hash 的檔；Debug＝後端略過 manifest，改連 dev server 上「當下編譯出來」的固定路徑（無 hash 或 dev 產物），讓「改前端 → 立刻看到畫面」。
+
+
+為什麼要區分 Debug 與 Production在 Production，manifest.json 與 bundle 一併部署，啟動時載入一次即可。若在 Debug 仍依賴磁碟／啟動時讀入的 manifest，每次 Webpack rebuild 改 hash，後端若不重啟就會繼續指向 舊檔名。因此在 Debug 改為 硬編本機 dev server URL，刻意 不經 manifest，與「CDN + hash」路徑脫鉤。
+整體架構流程flowchart TD
+    A[HTTP Request] --> B[_Layout.cshtml 渲染]
+    B --> C{Html IsDebug}
+    C -->|DEBUG| D[指向 localhost Webpack Dev Server 固定路徑]
+    C -->|RELEASE| E[ManifestHelper BuildUrl]
+    E --> F[AppConfigManager Manifest 讀 manifest.json]
+    F --> G[SelectToken JPath 取得 hash 路徑]
+    G --> H[CDN Domain 加 hash path]
+    H --> I[輸出 script 與 link]
+    D --> I
+
+_Layout.cshtml 的條件邏輯@if (Html.IsDebug())&#123;    // Debug: 直接指向 Webpack Dev Server，無需 manifest.json    &lt;script defer src=&quot;http://localhost:5100/cdn1121/star4/js/vendor.js&quot;&gt;&lt;/script&gt;    &lt;script defer src=&quot;http://localhost:5100/cdn1121/star4/js/index.js&quot;&gt;&lt;/script&gt;    &lt;link href=&quot;http://localhost:5100/cdn1121/star4/css/vendor.css&quot; rel=&quot;stylesheet&quot;&gt;    &lt;link href=&quot;http://localhost:5100/cdn1121/star4/css/index.css&quot; rel=&quot;stylesheet&quot;&gt;&#125;else&#123;    // Production: 透過 manifest.json 查詢帶 hash 的路徑    @(Html.AddStyleTag(&quot;$[&#x27;entries&#x27;].index.initial.css[0]&quot;))    @(Html.AddScriptTag(&quot;$[&#x27;entries&#x27;].index.initial.js[0]&quot;, new Dictionary&lt;string, string&gt;() &#123; &#123; &quot;type&quot;, &quot;module&quot; &#125; &#125;))    // ...更多 chunk&#125;
+
+IsDebug() 的實作是透過 C# preprocessor directive：
+// ManifestHelper.cspublic static bool IsDebug(this HtmlHelper htmlHelper)&#123;#if DEBUG    return true;#else    return false;#endif&#125;
+
+這表示它在 compile time 就決定，不需要任何 runtime flag。
+Debug 模式：Webpack Dev Server 動態提供flowchart TB
+    subgraph WDS["Webpack Dev Server localhost"]
+        W1[提供 JS CSS 與 HMR]
+        W2[rebuild 後立即可用]
+    end
+    subgraph MVC["ASP.NET MVC _Layout.cshtml"]
+        L[硬編 localhost 路徑 略過 manifest]
+    end
+    BR[Browser]
+    L --> BR
+    BR --> WDS
+
+優點：
+
+前端 rebuild 後，瀏覽器重新整理即可拿到最新版本
+不需重啟 .NET 後端
+支援 Webpack HMR（Hot Module Replacement）
+
+Channel &#x2F; Port 對應表（ManifestHelper.cs）：
+
+
+
+Channel ID
+Port
+說明
+
+
+
+1
+5000
+star4 (RWD)
+
+
+4
+5200
+star4webview
+
+
+
+注意：_Layout.cshtml 中的 port 5100 來自 Webpack／proxy 設定，實際須依 channel 與本機設定調整。
+
+Production 模式：manifest.json 的動態解析sequenceDiagram
+    participant App as App_Startup
+    participant ACM as AppConfigManager
+    participant MH as ManifestHelper
+    participant View as Layout_cshtml
+
+    App->>ACM: Initialize folderPath
+    ACM->>ACM: Manifest 載入 manifest.json
+    Note over ACM: 啟動時一次性讀入記憶體
+
+    View->>MH: Html AddScriptTag JPath
+    MH->>MH: BuildUrl 非 DEBUG 時 GetProductionUrl
+    MH->>ACM: Manifest SelectToken
+    ACM-->>MH: hash 相對路徑
+    MH->>MH: 組合 CDN Domain
+    MH-->>View: 輸出完整 script src
+
+manifest.json 結構範例&#123;  &quot;entries&quot;: &#123;    &quot;index&quot;: &#123;      &quot;initial&quot;: &#123;        &quot;js&quot;: [          &quot;/cdn1121/star4/js/vendor.abc123.js&quot;,          &quot;/cdn1121/star4/js/index.def456.js&quot;        ],        &quot;css&quot;: [          &quot;/cdn1121/star4/css/index.ghi789.css&quot;        ]      &#125;    &#125;  &#125;,  &quot;locales&quot;: &#123;    &quot;en-gb&quot;: &#123;      &quot;path&quot;: &quot;/cdn1121/star4/js/en-gb.jkl012.js&quot;    &#125;  &#125;&#125;
+
+JPath 查詢範例：
+// 查詢 CSS&quot;$[&#x27;entries&#x27;].index.initial.css[0]&quot;// → /cdn1121/star4/css/index.ghi789.css// 查詢 JS chunk&quot;$[&#x27;entries&#x27;].index.initial.js[0]&quot;// → /cdn1121/star4/js/vendor.abc123.js// 查詢語系 chunk&quot;$[&#x27;locales&#x27;][&#x27;en-gb&#x27;].path&quot;// → /cdn1121/star4/js/en-gb.jkl012.js
+
+App 啟動時的 manifest 載入manifest.json 在 Application_Start 時一次性載入至記憶體：
+// AppConfigManager.cspublic static void Initialize(string folderPath)&#123;    // ... 其他設定檔 ...    Manifest = JsonSerializerHelpr.ToObj&lt;JObject&gt;(folderPath, &quot;manifest.json&quot;);&#125;
+
+重要含義：
+
+manifest.json 與前端 bundle 一併部署
+Production 不需 File Watch，啟動後 manifest 即固定
+若只更新 bundle 未重啟站台，可能仍指向舊路徑（需 App Pool Recycle）
+
+語系 JS 動態注入_Layout.cshtml 還根據 URL segment 動態注入對應語系的 JS chunk：
+if (Request.Url.Segments.Length &gt; 1 &amp;&amp;    ManifestHelper.isAvailableLanguage(Request.Url.Segments[1].Replace(&quot;/&quot;, &quot;&quot;)))&#123;    @(Html.AddScriptTag(        &quot;$[&#x27;locales&#x27;][&#x27;&quot; + Request.Url.Segments[1].Replace(&quot;/&quot;, &quot;&quot;) + &quot;&#x27;].path&quot;,        new Dictionary&lt;string, string&gt;() &#123; &#123; &quot;type&quot;, &quot;module&quot; &#125; &#125;    ))&#125;
+
+例如 URL 為 /en-gb/home，則注入 locales[&#39;en-gb&#39;].path 對應的 JS。
+總結對比
+
+
+面向
+Debug 模式
+Production 模式
+
+
+
+JS 來源
+Webpack Dev Server（本機）
+CDN（manifest 內 hash 路徑）
+
+
+版本更新
+Webpack rebuild 後重整即可
+需部署新 bundle，常需 App Pool Recycle
+
+
+manifest.json
+不使用（略過 hash 對照）
+啟動時載入記憶體
+
+
+Hash
+通常固定 dev 路徑
+Content hash 快取破壞
+
+
+HMR
+可支援
+不適用
+
+
+Service Worker
+不啟用
+啟用
+
+
+]]></content>
+      <categories>
+        <category>工程實踐</category>
+      </categories>
+      <tags>
+        <tag>.NET Framework</tag>
+        <tag>Debug</tag>
+        <tag>Webpack</tag>
       </tags>
   </entry>
   <entry>
@@ -1314,162 +1737,6 @@ API 路由規則公開 API：     /api/&#123;controller&#125;/&#123;action&#125;
       </tags>
   </entry>
   <entry>
-    <title>Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制</title>
-    <url>/2026/03/31/DebugManifestDynamicLoading/</url>
-    <content><![CDATA[背景正式環境下，前端 JS&#x2F;CSS 經 Webpack 打包後會帶 content hash 檔名；ASP.NET MVC 的 _Layout.cshtml 必須依 manifest.json 注入正確的 &lt;script&gt; &#x2F; &lt;link&gt;。本篇說明在 Debug 時如何 不必重啟後端 也能對齊 Webpack 即時編譯 的輸出。
-專案型態：前後端未分離的 .NET Framework MVC我們的專案 不是「獨立前端站 + 獨立 API 站」那種典型前後端分離：
-
-後端：.NET Framework 上的 ASP.NET MVC。頁面骨架仍由 Razor（例如 _Layout.cshtml）在伺服器端渲染，路由與部分畫面由 MVC 負責。
-前端互動：實際的 SPA／模組化 UI 由 Webpack 打包的 JS、CSS 在瀏覽器端啟動；正式環境這些靜態檔會放到 CDN，透過 hash 檔名 做快取破壞。
-Debug 開發：本機不強制走「部署到 CDN + 重讀 manifest」那條路，而是啟動 Webpack Dev Server（或同等 dev 流程），由它 動態編譯並提供 最新的 vendor.js、index.js 等。_Layout 在 Debug 組態下改把資源 URL 指到 本機 dev server，因此 重新 build &#x2F; HMR 後只要重新整理頁面，即可載入新 bundle，無須為了更新 hash 而去重啟 IIS 或整個 .NET 站台。
-
-簡單講：Release＝後端讀記憶體裡的 manifest.json，對應 CDN 上帶 hash 的檔；Debug＝後端略過 manifest，改連 dev server 上「當下編譯出來」的固定路徑（無 hash 或 dev 產物），讓「改前端 → 立刻看到畫面」。
-
-
-為什麼要區分 Debug 與 Production在 Production，manifest.json 與 bundle 一併部署，啟動時載入一次即可。若在 Debug 仍依賴磁碟／啟動時讀入的 manifest，每次 Webpack rebuild 改 hash，後端若不重啟就會繼續指向 舊檔名。因此在 Debug 改為 硬編本機 dev server URL，刻意 不經 manifest，與「CDN + hash」路徑脫鉤。
-整體架構流程flowchart TD
-    A[HTTP Request] --> B[_Layout.cshtml 渲染]
-    B --> C{Html IsDebug}
-    C -->|DEBUG| D[指向 localhost Webpack Dev Server 固定路徑]
-    C -->|RELEASE| E[ManifestHelper BuildUrl]
-    E --> F[AppConfigManager Manifest 讀 manifest.json]
-    F --> G[SelectToken JPath 取得 hash 路徑]
-    G --> H[CDN Domain 加 hash path]
-    H --> I[輸出 script 與 link]
-    D --> I
-
-_Layout.cshtml 的條件邏輯@if (Html.IsDebug())&#123;    // Debug: 直接指向 Webpack Dev Server，無需 manifest.json    &lt;script defer src=&quot;http://localhost:5100/cdn1121/star4/js/vendor.js&quot;&gt;&lt;/script&gt;    &lt;script defer src=&quot;http://localhost:5100/cdn1121/star4/js/index.js&quot;&gt;&lt;/script&gt;    &lt;link href=&quot;http://localhost:5100/cdn1121/star4/css/vendor.css&quot; rel=&quot;stylesheet&quot;&gt;    &lt;link href=&quot;http://localhost:5100/cdn1121/star4/css/index.css&quot; rel=&quot;stylesheet&quot;&gt;&#125;else&#123;    // Production: 透過 manifest.json 查詢帶 hash 的路徑    @(Html.AddStyleTag(&quot;$[&#x27;entries&#x27;].index.initial.css[0]&quot;))    @(Html.AddScriptTag(&quot;$[&#x27;entries&#x27;].index.initial.js[0]&quot;, new Dictionary&lt;string, string&gt;() &#123; &#123; &quot;type&quot;, &quot;module&quot; &#125; &#125;))    // ...更多 chunk&#125;
-
-IsDebug() 的實作是透過 C# preprocessor directive：
-// ManifestHelper.cspublic static bool IsDebug(this HtmlHelper htmlHelper)&#123;#if DEBUG    return true;#else    return false;#endif&#125;
-
-這表示它在 compile time 就決定，不需要任何 runtime flag。
-Debug 模式：Webpack Dev Server 動態提供flowchart TB
-    subgraph WDS["Webpack Dev Server localhost"]
-        W1[提供 JS CSS 與 HMR]
-        W2[rebuild 後立即可用]
-    end
-    subgraph MVC["ASP.NET MVC _Layout.cshtml"]
-        L[硬編 localhost 路徑 略過 manifest]
-    end
-    BR[Browser]
-    L --> BR
-    BR --> WDS
-
-優點：
-
-前端 rebuild 後，瀏覽器重新整理即可拿到最新版本
-不需重啟 .NET 後端
-支援 Webpack HMR（Hot Module Replacement）
-
-Channel &#x2F; Port 對應表（ManifestHelper.cs）：
-
-
-
-Channel ID
-Port
-說明
-
-
-
-1
-5000
-star4 (RWD)
-
-
-4
-5200
-star4webview
-
-
-
-注意：_Layout.cshtml 中的 port 5100 來自 Webpack／proxy 設定，實際須依 channel 與本機設定調整。
-
-Production 模式：manifest.json 的動態解析sequenceDiagram
-    participant App as App_Startup
-    participant ACM as AppConfigManager
-    participant MH as ManifestHelper
-    participant View as Layout_cshtml
-
-    App->>ACM: Initialize folderPath
-    ACM->>ACM: Manifest 載入 manifest.json
-    Note over ACM: 啟動時一次性讀入記憶體
-
-    View->>MH: Html AddScriptTag JPath
-    MH->>MH: BuildUrl 非 DEBUG 時 GetProductionUrl
-    MH->>ACM: Manifest SelectToken
-    ACM-->>MH: hash 相對路徑
-    MH->>MH: 組合 CDN Domain
-    MH-->>View: 輸出完整 script src
-
-manifest.json 結構範例&#123;  &quot;entries&quot;: &#123;    &quot;index&quot;: &#123;      &quot;initial&quot;: &#123;        &quot;js&quot;: [          &quot;/cdn1121/star4/js/vendor.abc123.js&quot;,          &quot;/cdn1121/star4/js/index.def456.js&quot;        ],        &quot;css&quot;: [          &quot;/cdn1121/star4/css/index.ghi789.css&quot;        ]      &#125;    &#125;  &#125;,  &quot;locales&quot;: &#123;    &quot;en-gb&quot;: &#123;      &quot;path&quot;: &quot;/cdn1121/star4/js/en-gb.jkl012.js&quot;    &#125;  &#125;&#125;
-
-JPath 查詢範例：
-// 查詢 CSS&quot;$[&#x27;entries&#x27;].index.initial.css[0]&quot;// → /cdn1121/star4/css/index.ghi789.css// 查詢 JS chunk&quot;$[&#x27;entries&#x27;].index.initial.js[0]&quot;// → /cdn1121/star4/js/vendor.abc123.js// 查詢語系 chunk&quot;$[&#x27;locales&#x27;][&#x27;en-gb&#x27;].path&quot;// → /cdn1121/star4/js/en-gb.jkl012.js
-
-App 啟動時的 manifest 載入manifest.json 在 Application_Start 時一次性載入至記憶體：
-// AppConfigManager.cspublic static void Initialize(string folderPath)&#123;    // ... 其他設定檔 ...    Manifest = JsonSerializerHelpr.ToObj&lt;JObject&gt;(folderPath, &quot;manifest.json&quot;);&#125;
-
-重要含義：
-
-manifest.json 與前端 bundle 一併部署
-Production 不需 File Watch，啟動後 manifest 即固定
-若只更新 bundle 未重啟站台，可能仍指向舊路徑（需 App Pool Recycle）
-
-語系 JS 動態注入_Layout.cshtml 還根據 URL segment 動態注入對應語系的 JS chunk：
-if (Request.Url.Segments.Length &gt; 1 &amp;&amp;    ManifestHelper.isAvailableLanguage(Request.Url.Segments[1].Replace(&quot;/&quot;, &quot;&quot;)))&#123;    @(Html.AddScriptTag(        &quot;$[&#x27;locales&#x27;][&#x27;&quot; + Request.Url.Segments[1].Replace(&quot;/&quot;, &quot;&quot;) + &quot;&#x27;].path&quot;,        new Dictionary&lt;string, string&gt;() &#123; &#123; &quot;type&quot;, &quot;module&quot; &#125; &#125;    ))&#125;
-
-例如 URL 為 /en-gb/home，則注入 locales[&#39;en-gb&#39;].path 對應的 JS。
-總結對比
-
-
-面向
-Debug 模式
-Production 模式
-
-
-
-JS 來源
-Webpack Dev Server（本機）
-CDN（manifest 內 hash 路徑）
-
-
-版本更新
-Webpack rebuild 後重整即可
-需部署新 bundle，常需 App Pool Recycle
-
-
-manifest.json
-不使用（略過 hash 對照）
-啟動時載入記憶體
-
-
-Hash
-通常固定 dev 路徑
-Content hash 快取破壞
-
-
-HMR
-可支援
-不適用
-
-
-Service Worker
-不啟用
-啟用
-
-
-]]></content>
-      <categories>
-        <category>工程實踐</category>
-      </categories>
-      <tags>
-        <tag>.NET Framework</tag>
-        <tag>Debug</tag>
-        <tag>Webpack</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study</title>
     <url>/2026/04/14/ELKSharing/</url>
     <content><![CDATA[前言本文是團隊內部 ELK（Elasticsearch + Logstash + Kibana）使用分享，涵蓋四大主題：
@@ -2103,9 +2370,9 @@ Elasticsearch: Text vs. Keyword
       </categories>
       <tags>
         <tag>ELK</tag>
+        <tag>Monitoring</tag>
         <tag>Elasticsearch</tag>
         <tag>Kibana</tag>
-        <tag>Monitoring</tag>
         <tag>Logging</tag>
       </tags>
   </entry>
@@ -3028,8 +3295,8 @@ flowchart LR
       </categories>
       <tags>
         <tag>ELK</tag>
-        <tag>Elasticsearch</tag>
         <tag>Monitoring</tag>
+        <tag>Elasticsearch</tag>
       </tags>
   </entry>
   <entry>
@@ -4113,8 +4380,415 @@ CompleteLoginProcess — 登入收尾// LoginMfaManager.CompleteLoginProcess()pu
       </categories>
       <tags>
         <tag>.NET</tag>
-        <tag>MFA</tag>
         <tag>Security</tag>
+        <tag>MFA</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Mobile App Spi Login Attack — 仿造假 Request 攻擊事件（5/10~5/12）</title>
+    <url>/2024/05/12/MobileAppSpiLoginAttack/</url>
+    <content><![CDATA[背景2024 年 5 月 10 日，ELK Watcher 於監控期間觸發多次告警，對象為 webspi.mobileapp 模組的 LogIn 事件。
+ELK Watcher 告警觸發條件
+計算前 15~30 分鐘的失敗率（依 Module &#x2F; Method），若與前 15 分鐘相比異常，且最近 15 分鐘內事件超過 10 次，即觸發告警。
+
+
+
+
+欄位
+數值
+
+
+
+Module
+webspi.mobileapp
+
+
+Event
+LogIn
+
+
+Previous Failure Rate
+1.34% (89 &#x2F; 6,622)
+
+
+Current Failure Rate
+42.02% (5,053 &#x2F; 12,024)
+
+
+失敗率從正常的 1.34% 瞬間飆升至 42.02%，觸發告警後開始調查，發現攻擊者使用仿造假 Request Header + Fake Token 對 Mobile App 登入 API 進行大量暴力破解。
+
+
+
+
+攻擊手法分析正常 Mobile App 請求：Client ──► API Gateway ──► webspi.mobileapp/LogIn           [合法 Header + Token]攻擊者請求：Attacker ──► API Gateway ──► webspi.mobileapp/LogIn             [偽造 App Header]             [偽造 BlackBox Token]             [偽造 IP Header（X-Forwarded-For）]
+
+攻擊者的三個特徵
+偽造 App Header：模仿合法 Mobile App 的 User-Agent 與請求格式，使請求看起來來自正常 App 用戶端
+偽造 BlackBox Token：使用假造的風控識別 Token 繞過前端行為分析
+偽造 IP 位址：透過偽造 X-Forwarded-For 等 Header 來規避 IP 封鎖
+
+
+
+攻擊時間軸gantt
+    title Mobile App Login Attack Timeline (5/10~5/12)
+    dateFormat MM-DD HH:mm
+    axisFormat %m/%d %H:%M
+
+    section 5/10 第一波
+    7,500 次攻擊     :a1, 05-10 17:11, 9m
+
+    section 5/10 第二波
+    210,000 次攻擊   :a2, 05-10 19:47, 151m
+
+    section 5/11 第三波
+    180,000 次攻擊   :a3, 05-11 17:12, 261m
+
+    section 5/12 第四波
+    10,000 次攻擊    :a4, 05-12 06:50, 17m
+
+
+
+
+波次
+時間區間
+估計攻擊次數
+
+
+
+第一波
+5&#x2F;10 17:11 ~ 17:20
+~7,500 次
+
+
+第二波
+5&#x2F;10 19:47 ~ 22:18
+~210,000 次
+
+
+第三波
+5&#x2F;11 17:12 ~ 21:33
+~180,000 次
+
+
+第四波
+5&#x2F;12 06:50 ~ 07:07
+~10,000 次
+
+
+合計
+
+~407,500 次
+
+
+第一波：5&#x2F;10 17:11 ~ 17:20（約 7,500 次）
+
+
+
+第二波：5&#x2F;10 19:47 ~ 22:18（約 210,000 次）
+
+
+
+第三波：5&#x2F;11 17:12 ~ 21:33（約 180,000 次）
+
+
+
+第四波：5&#x2F;12 06:50 ~ 07:07（約 10,000 次）
+
+
+
+事件調查流程sequenceDiagram
+    participant ELK as ELK Watcher
+    participant Team as 開發團隊
+    participant Log as ELK Log
+    participant BO as BO 後台
+
+    ELK->>Team: 告警觸發 LogIn 失敗率 42.02%
+    Team->>Log: 查詢 webspi.mobileapp LogIn 異常紀錄
+    Log-->>Team: 發現大量短時間失敗請求
+    Team->>Log: 分析 Request Header
+    Log-->>Team: 確認 Fake Header + Fake BlackBox Token
+    Team->>Log: 篩選攻擊期間成功登入紀錄
+    Log-->>Team: 匯出 462 筆風險帳號清單
+    Team->>BO: 通報安全團隊標記風險帳號
+
+成功登入風險帳號在 407,500 次攻擊中，雖然大多數為失敗嘗試，但仍有部分帳號在攻擊期間成功登入，代表這些帳號的帳密可能已外洩。
+從 ELK 篩選出攻擊期間 webspi.mobileapp / LogIn / SUCCESS 的紀錄：
+@timestamp            | module            | event | identity    | status  | AccountId05-12 07:06:59.875    | webspi.mobileapp  | LogIn | ca65711     | SUCCESS | 1896785705-12 07:06:52.897    | webspi.mobileapp  | LogIn | shzh123456  | SUCCESS | 4182067705-12 07:06:40.037    | webspi.mobileapp  | LogIn | yy360360    | SUCCESS | 2496232305-11 19:30:55.443    | webspi.mobileapp  | LogIn | z812250426  | SUCCESS | 10437625...（共 462 筆）
+
+時間範圍：2024-05-11 19:30 ~ 2024-05-12 07:07
+這 462 個帳號被列為高風險帳號，需通報安全團隊進行後續處置（帳號凍結、強制改密、通知用戶）。
+根本原因flowchart TD
+    A[攻擊者取得外洩帳密清單] --> B[仿造合法 Mobile App 請求]
+    B --> C[偽造 App Header / BlackBox Token]
+    C --> D[偽造 X-Forwarded-For IP Header]
+    D --> E[繞過 IP 封鎖機制]
+    E --> F[對 webspi.mobileapp/LogIn 大量嘗試]
+    F --> G{驗證結果}
+    G -->|帳密正確| H[SUCCESS 風險帳號]
+    G -->|帳密錯誤| I[FAIL 累積失敗率]
+    I --> J[ELK Watcher 觸發告警]
+
+核心問題：API 端對 Mobile App Header 缺乏嚴格驗證，攻擊者得以透過偽造 Header 模仿合法 App 請求，同時偽造 IP 規避封鎖。
+後續對策建立 Ticket [IDP-10126] 進行下列改善：
+
+
+
+對策
+說明
+
+
+
+App Header 驗證強化
+加入 Action Filter 驗證 user-agent 與 version Header（暫時修正）
+
+
+BlackBox Token 驗證
+後端需驗證 BlackBox Token 的合法性，拒絕明顯偽造的值
+
+
+IP Header 信任來源限制
+只信任已知的 Load Balancer &#x2F; CDN 來源的 IP Header
+
+
+登入頻率限制強化
+針對同一帳號短時間大量失敗的情況加強 Rate Limit
+
+
+風險帳號處置
+強制 462 個風險帳號重設密碼並記錄異常登入紀錄
+
+
+暫時修正：HeaderCheckerActionFilter針對攻擊者偽造 App Header 的問題，第一時間在 Login API 加上 HeaderCheckerActionFilter，驗證請求是否包含合法的 user-agent 與 version Header，不符合者直接回傳 LOGN0001 錯誤，阻擋偽造請求進入後端邏輯。
+flowchart LR
+    REQ[HTTP Request] --> F[HeaderCheckerActionFilter]
+    F --> C1{包含必要 Header？}
+    C1 -->|缺少| REJECT[回傳 LOGN0001]
+    C1 -->|存在| C2{version 格式正確？\nx.x.x}
+    C2 -->|格式錯誤| REJECT
+    C2 -->|正確| C3{user-agent 包含\nAndroid-BigMac\n或 iOS-188Asia？}
+    C3 -->|不符合| REJECT
+    C3 -->|符合| PASS[進入 Action 邏輯]
+
+public class HeaderCheckerActionFilter : ActionFilterAttribute&#123;    private readonly string[] _headerNames;    public HeaderCheckerActionFilter(params string[] headerNames)    &#123;        _headerNames = headerNames;    &#125;    public override void OnActionExecuting(HttpActionContext actionContext)    &#123;        var headers = HttpHeaderHandler.GetHeadersInfo(actionContext.Request.Headers);        var fakeMsg = new ResponseMessage&lt;HttpError&gt;        &#123;            Id = Guid.NewGuid().ToString(),            Code = Constants.ErrorCode.LOGN0001.ToString(),            Msg = Constants.ErrorCode.LOGN0001.DescriptionAttr(),        &#125;;        foreach (var headerName in _headerNames)        &#123;            // Header 不存在直接拒絕            if (!headers.ContainsKey(headerName))            &#123;                actionContext.Response = actionContext.Request.CreateResponse(fakeMsg);                return;            &#125;            // version 必須符合 x.x 或 x.x.x 格式            if (headerName == &quot;version&quot; &amp;&amp; !Regex.IsMatch(headers[headerName], @&quot;^\d+\.\d+(\.\d+)+&quot;))            &#123;                actionContext.Response = actionContext.Request.CreateResponse(fakeMsg);                return;            &#125;            // user-agent 必須包含合法 App 識別字串            if (headerName == &quot;user-agent&quot; &amp;&amp;                !StringExtension.ContainsIgnoreCase(headers[headerName], &quot;Android-BigMac&quot;) &amp;&amp;                !StringExtension.ContainsIgnoreCase(headers[headerName], &quot;iOS-188Asia&quot;))            &#123;                actionContext.Response = actionContext.Request.CreateResponse(fakeMsg);                return;            &#125;        &#125;    &#125;&#125;
+
+驗證規則說明：
+
+
+
+Header
+驗證規則
+合法範例
+
+
+
+version
+正則 ^\d+\.\d+(\.\d+)+
+3.2.1、10.0.5
+
+
+user-agent
+包含 Android-BigMac 或 iOS-188Asia（不分大小寫）
+Android-BigMac/3.2.1
+
+
+使用方式（套用到 Login Controller）：
+[HeaderCheckerActionFilter(&quot;user-agent&quot;, &quot;version&quot;)]public IHttpActionResult Login(LoginRequest request)&#123;    // ...&#125;
+
+
+注意：此為暫時修正，僅靠 User-Agent 字串比對屬於較弱的防禦，攻擊者取得合法 User-Agent 後仍可繞過。長期需配合 App 簽章或動態 Token 機制做更強的驗證。
+
+小結這次事件的發現完全依賴 ELK Watcher 的自動化告警機制，在失敗率異常飆升後數分鐘內通知團隊，大幅縮短了事件反應時間。攻擊者使用偽造 Header 手法規避了部分防禦，顯示 API 端對 Mobile App 請求的驗證需要進一步強化，才能有效防堵此類 Credential Stuffing 攻擊。
+]]></content>
+      <categories>
+        <category>資安事件</category>
+      </categories>
+      <tags>
+        <tag>ELK</tag>
+        <tag>Security</tag>
+        <tag>MobileApp</tag>
+        <tag>Attack</tag>
+        <tag>Incident</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Mobile App Spi Performance Issue — 歐洲盃前夕的效能危機與 Cache 改善</title>
+    <url>/2024/05/16/MobileAppSpiPerformanceIssue/</url>
+    <content><![CDATA[背景2024 年 5 月 17 日，在歐洲盃（Euro Cup）賽季開始前，針對 Mobile App SPI 的 Performance 問題召開專案會議，出席人員涵蓋 App 團隊、BO 團隊與 PM。
+會議的核心動機：歐洲盃期間流量預計達正常的 2~3 倍，現有 API 設計若未調整，將造成 DB 或 API 無法正常服務。
+
+
+問題描述API 呼叫量異常：是 STAR4 的 8 倍透過 ELK REQUEST 日誌對 Account Summary API（收件匣 + 公告未讀數）進行統計：
+Mobile App SPI Account Summary 呼叫量= STAR4 RWD 的 8 倍
+
+以公告（Announcement）API 為例，數據差異極為顯著：
+
+
+
+平台
+每日 API 呼叫量
+
+
+
+STAR4 RWD
+約 230,000 次
+
+
+Mobile App SPI
+約 1,610,000 次
+
+
+Mobile App SPI 的呼叫量是 RWD 的 7 倍以上，而兩者服務的用戶基數相近，顯示 App 端存在明顯的多餘呼叫問題。
+ELK Performance Log 實際數據對比：
+
+
+
+
+效能劣化：30% 請求出現延遲Mobile App SPI：30% 的請求回應時間超過正常門檻
+
+這些 API 直接查詢 DB，在歐洲盃高流量期間若無保護機制，DB 壓力將達到臨界點。
+flowchart TD
+    A[Mobile App] --> B[App SPI]
+    B --> C["Account Summary API\n（每日 161 萬次）"]
+    B --> D["Announcement List API\n（無 Cache，直打 DB）"]
+    C --> E[DB]
+    D --> E
+    E --> F{Euro Cup 流量\n2~3 倍}
+    F -->|壓力超載| G[DB / API 無法服務]
+    F -->|30% 請求已延遲| H[效能劣化加劇]
+
+根本原因分析flowchart LR
+    subgraph App端["App 端呼叫邏輯問題"]
+        A1[每個頁面切換\n都觸發 Account Summary]
+        A2[不只 Lobby，\n多個入口重複呼叫]
+    end
+    subgraph API端["API 端缺乏保護"]
+        B1[Announcement List\n每次直接查 DB]
+        B2[Inbox / Notification Count\n無 Cache]
+        B3[MessageHub 與 BO SPI\n共用同一台伺服器]
+    end
+    App端 --> C[呼叫量爆增]
+    API端 --> C
+    C --> D[DB 壓力過高\n30% 請求延遲]
+
+兩層問題同時存在：
+
+App 端呼叫頻率過高 — Account Summary 不應在每個頁面都觸發，只需在 Lobby 主選單呼叫
+API 端缺乏 Cache 保護 — 公告列表、未讀數等低變動資料每次都直查 DB
+
+以下為 App 中涉及高頻呼叫的 UI 元件位置：
+
+
+
+
+
+
+改善方案Ticket IDP-10145：App 端呼叫邏輯調整 + Announcement Cacheflowchart TD
+    subgraph Before["改善前"]
+        A1[任意頁面切換] --> B1[Account Summary API]
+        A2[Announcement 入口] --> B2[Announcement List API\n直接查 DB]
+    end
+    subgraph After["改善後 IDP-10145"]
+        C1[僅 Lobby Menu 觸發] --> D1[Account Summary API]
+        C2[Announcement 入口] --> D2[Announcement List API]
+        D2 --> E2{Redis Cache\n10 分鐘}
+        E2 -->|Cache Hit| F2[直接回傳]
+        E2 -->|Cache Miss| G2[查 DB 並寫入 Cache]
+    end
+
+改善項目：
+
+減少 Account Summary 呼叫 — 限制只在 Lobby Menu 觸發，消除其他頁面的多餘呼叫
+Announcement List 加入 10 分鐘 Cache — 公告內容變動頻率低，10 分鐘 Cache 可大幅降低 DB 壓力
+
+Ticket IDP-10136：SPI 端 Cache 保護flowchart TD
+    subgraph APIs["受保護 API"]
+        A[Get Inbox / Notification /\nAnnouncement Count]
+        B[Get Announcement List]
+    end
+    A --> C{Redis Cache\n5 分鐘}
+    B --> D{Redis Cache\n5 分鐘}
+    C -->|Hit| E[回傳快取結果]
+    C -->|Miss| F[查 DB 寫入 Cache]
+    D -->|Hit| E
+    D -->|Miss| F
+
+改善項目：
+
+Inbox &#x2F; Notification &#x2F; Announcement Count — 加入 5 分鐘 Redis Cache
+Announcement List — 加入 5 分鐘 Redis Cache
+
+基礎設施：MessageHub 拆分至獨立伺服器原本 BO SPI 與 SPI MessageHub 共用同一台伺服器，MessageHub 的長連線特性會佔用大量連線資源，影響一般 SPI 的請求處理。
+flowchart LR
+    subgraph Before["改善前（共用）"]
+        S1[Server]
+        S1 --- P1[BO SPI]
+        S1 --- P2[SPI MessageHub]
+        P2 -->|長連線資源競搶| P1
+    end
+    subgraph After["改善後（拆分）"]
+        S2[Server A] --- Q1[BO SPI]
+        S3[Server B] --- Q2[SPI MessageHub]
+    end
+
+拆分後：
+
+BO SPI 與 MessageHub 資源互不干擾
+MessageHub 長連線不再影響一般 API 的回應速度
+兩者可以各自獨立擴展（Scale Out）
+
+改善效益預估
+
+
+項目
+改善前
+改善後（預估）
+
+
+
+Account Summary 日呼叫量
+~1,610,000 次
+大幅減少（僅 Lobby 觸發）
+
+
+Announcement DB 查詢
+每次呼叫都查
+Cache Hit 率 &gt; 80%，DB 查詢降至 20%
+
+
+Inbox Count DB 查詢
+每次呼叫都查
+5 分鐘內同一用戶只查一次
+
+
+API 延遲 &gt; 門檻比例
+30%
+預期降至 &lt; 5%
+
+
+MessageHub 對 SPI 影響
+資源競搶
+完全隔離
+
+
+小結這次效能問題的根源在於 App 端呼叫邏輯與 API 端保護機制都不完善，在正常流量下尚可接受，但一旦遇到歐洲盃這類流量高峰，就會造成 DB 無法服務的風險。
+改善策略分三個層次：
+
+呼叫頻率控制（App 端） — 從源頭減少不必要的 API 請求
+Cache 保護（API 端） — Redis 攔截高頻低變動資料，保護 DB
+基礎設施隔離（部署端） — MessageHub 獨立，避免資源競搶
+
+三者缺一不可，才能在歐洲盃高流量期間確保服務穩定。
+]]></content>
+      <categories>
+        <category>效能調校</category>
+      </categories>
+      <tags>
+        <tag>Architecture</tag>
+        <tag>MobileApp</tag>
+        <tag>Performance</tag>
+        <tag>Redis</tag>
+        <tag>Cache</tag>
+        <tag>MessageHub</tag>
       </tags>
   </entry>
   <entry>
@@ -4766,45 +5440,6 @@ Sogou web spider&#x2F;4.0(+http://www.sogou.com/docs/help/webmasters.htm#07)
       </tags>
   </entry>
   <entry>
-    <title>iOS Safari Handle Elastic Scroll</title>
-    <url>/2023/03/28/PreventElasticScroll/</url>
-    <content><![CDATA[先說明這個問題主要是 通常在滾動頁面的時候 會有兩個需求
-
-往下滑動就要隱藏 Header
-
-開始上滑就要顯示 Header
-
-
-
-
-但是問題來了，iOS 有一個橡皮筋的功能叫做 Elastic Scroll ，他會造成你滑動到最上方以後 會再反彈
-如果沒有寫好的話，明明就滑動到最上方還是隱藏 Header (明明 Chrome 跟其他瀏覽器不會)….
-為了兼容這個問題 我們以 Vue Use 為例子做一個範例
-裡面其實只有 directions 跟 y 最重要
-因為我們判斷它是否為回彈事件為 判斷他 nextY &#x3D;&#x3D;&#x3D;0 代表他就在最上方
-不用管他是什麼事件，這樣就可以解決了
-這裡說明一下 為什麼使用這方法而不用 touchmove preventDefault 是因為 有可能舊版本的 safari 沒有這個 event…也不想要考慮太多相容性 就先保留這個行為 但是讓結果相同
-import &#123; useScroll &#125; from &#x27;@vueuse/core&#x27;;import &#123; ref, computed, toRefs, watch &#125; from &#x27;vue&#x27;;export default function useHeader() &#123;  const showHeader = ref(true);  const winComputedRef = computed(() =&gt; window);  const &#123; arrivedState, y, directions &#125; = useScroll(winComputedRef);  const &#123; top: toTop, bottom: toBottom &#125; = toRefs(directions);  const &#123; top: topArrived &#125; = toRefs(arrivedState);  watch([toBottom, y], ([toBottomNewValue, nextY]) =&gt; &#123;    //nextY to prevent iOS safari elastic scrolling    if (toBottomNewValue &amp;&amp; nextY !== 0) &#123;      showHeader.value = false;    &#125; else if (nextY === 0) &#123;      showHeader.value = true;    &#125;  &#125;);  watch(    () =&gt; toTop.value,    (newValue) =&gt; &#123;      if (newValue) &#123;        showHeader.value = true;      &#125;    &#125;  );  return &#123;    showHeader,    topArrived,    toBottom,    toTop,    y,  &#125;;&#125;
-
-這個問題主要要考慮的是 iOS 以及 safari 版本不同 有可能有不同的事件 所以最好是找一個比較符合的解決方法
-其他解法(要確認使用者大部分 Device 在什麼版本)
-touchmove prevent
-
-使用 debounce 限制 scroll top 抓取事件 delay 50 ms 之類 然後判斷高度 可以使用 lodash.throttle 套件
-
-
-ReferenceVue Use
-]]></content>
-      <categories>
-        <category>Troubleshooting</category>
-      </categories>
-      <tags>
-        <tag>Vue</tag>
-        <tag>iOS</tag>
-        <tag>Safari</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>使用 Redis Sorted Set 實作 API Rate Limiting — 滑動視窗 + 封鎖機制</title>
     <url>/2026/03/08/RateLimitInplementation/</url>
     <content><![CDATA[前言在面向全球用戶的平台系統中，API 被濫用幾乎是必然會遇到的問題——無論是攻擊者暴力嘗試登入、爬蟲高頻抓取資料，還是用戶無意間重複提交表單。
@@ -4998,6 +5633,45 @@ Block Key 分離計數與封鎖，讓被封鎖的請求以 O(1) 被攔截
         <tag>.NET</tag>
         <tag>Redis</tag>
         <tag>Rate Limiting</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>iOS Safari Handle Elastic Scroll</title>
+    <url>/2023/03/28/PreventElasticScroll/</url>
+    <content><![CDATA[先說明這個問題主要是 通常在滾動頁面的時候 會有兩個需求
+
+往下滑動就要隱藏 Header
+
+開始上滑就要顯示 Header
+
+
+
+
+但是問題來了，iOS 有一個橡皮筋的功能叫做 Elastic Scroll ，他會造成你滑動到最上方以後 會再反彈
+如果沒有寫好的話，明明就滑動到最上方還是隱藏 Header (明明 Chrome 跟其他瀏覽器不會)….
+為了兼容這個問題 我們以 Vue Use 為例子做一個範例
+裡面其實只有 directions 跟 y 最重要
+因為我們判斷它是否為回彈事件為 判斷他 nextY &#x3D;&#x3D;&#x3D;0 代表他就在最上方
+不用管他是什麼事件，這樣就可以解決了
+這裡說明一下 為什麼使用這方法而不用 touchmove preventDefault 是因為 有可能舊版本的 safari 沒有這個 event…也不想要考慮太多相容性 就先保留這個行為 但是讓結果相同
+import &#123; useScroll &#125; from &#x27;@vueuse/core&#x27;;import &#123; ref, computed, toRefs, watch &#125; from &#x27;vue&#x27;;export default function useHeader() &#123;  const showHeader = ref(true);  const winComputedRef = computed(() =&gt; window);  const &#123; arrivedState, y, directions &#125; = useScroll(winComputedRef);  const &#123; top: toTop, bottom: toBottom &#125; = toRefs(directions);  const &#123; top: topArrived &#125; = toRefs(arrivedState);  watch([toBottom, y], ([toBottomNewValue, nextY]) =&gt; &#123;    //nextY to prevent iOS safari elastic scrolling    if (toBottomNewValue &amp;&amp; nextY !== 0) &#123;      showHeader.value = false;    &#125; else if (nextY === 0) &#123;      showHeader.value = true;    &#125;  &#125;);  watch(    () =&gt; toTop.value,    (newValue) =&gt; &#123;      if (newValue) &#123;        showHeader.value = true;      &#125;    &#125;  );  return &#123;    showHeader,    topArrived,    toBottom,    toTop,    y,  &#125;;&#125;
+
+這個問題主要要考慮的是 iOS 以及 safari 版本不同 有可能有不同的事件 所以最好是找一個比較符合的解決方法
+其他解法(要確認使用者大部分 Device 在什麼版本)
+touchmove prevent
+
+使用 debounce 限制 scroll top 抓取事件 delay 50 ms 之類 然後判斷高度 可以使用 lodash.throttle 套件
+
+
+ReferenceVue Use
+]]></content>
+      <categories>
+        <category>Troubleshooting</category>
+      </categories>
+      <tags>
+        <tag>Vue</tag>
+        <tag>iOS</tag>
+        <tag>Safari</tag>
       </tags>
   </entry>
   <entry>
@@ -5613,6 +6287,59 @@ Chain-of-Responsibility Pattern
       </tags>
   </entry>
   <entry>
+    <title>TypeScript Object Using Enum as Key</title>
+    <url>/2022/12/24/TypeScriptEnumObject/</url>
+    <content><![CDATA[我們在使用 typescript 的時候 有可能需要宣告 Enum 來避免 傳入的參數可能大小寫不符合或是傳到沒有值的參數
+那相對我們在宣告物件的時候也想要把這個概念串接下來 讓我們可以使用如下方的範例: 我們先定義一個 Enum
+enum DateFormat &#123;  Default = 1, //DD/MM/YYYY HH:mm:ss  ShortDate = 2, //DD/MMM/YYYY  DateTimeWithComma = 3, //DD/MM/YYYY, HH:mm:ss&#125;
+
+目標是想要使用 以下物件去宣告
+type DateLanguage = &#123;  en: string;  zh: string;&#125;;type DateSetting&#123;    Default: DateLanguage    ShortDate: DateLanguage    DateTimeWithComma: DateLanguage&#125;
+
+大家有發現到嗎 假設我們新增一個 Enum 也想要相對應在 type 新增一個 key 但是又怕打錯字 或是 key 錯大小寫
+所以這是我今天想解決的問題
+Solution首先在這個 Case 我們使用 type 是因為 type 可以使用 typeof 取出 Key 並進行定義
+
+如果想了解 Interface vs type 區別 可以參考 reference如圖片使用 keyof type DateFormat 可以讓 DateFormatKey 必須是這三個的其中之一 不然會報錯
+
+接著使用 下面方法就可以定義出來我們想要的 Key 值
+type DateFormatFields = &#123; [key in DateFormatKeys]: DateLanguage &#125;;
+
+
+
+接著我們就可以定義我們的 object
+const dateSetting: DateFormatFields = &#123;  Default: &#123;    en: &#x27;DD/MM/YYYY HH:mm:ss&#x27;,    zh: &#x27;MM/DD/YYYY HH:mm:ss&#x27;,  &#125;,  ShortDate: &#123;    en: &#x27;DD/MM/YYYY&#x27;,    zh: &#x27;MM/DD/YYYY&#x27;,  &#125;,  DateTimeWithComma: &#123;    en: &#x27;DD/MM/YYYY, HH:mm:ss&#x27;,    zh: &#x27;MM/DD/YYYY, HH:mm:ss&#x27;,  &#125;,&#125;;
+
+最後是如何去取出呢?
+一開始發現想說可能可以用 C#的寫法把 Enum 的值 to string&#x3D;&gt; DateFormat.DateTimeWithComma.toString()後面發現不行要透過下面方式
+const key = DateFormat[DateFormat.DateTimeWithComma]; //string
+
+是因為實際上我們使用 typescript 宣告的 enum 他對應的 out 會長這樣 所以可以用這方法取出值
+Output&#123;  &quot;1&quot;: &quot;North&quot;,  &quot;2&quot;: &quot;East&quot;,  &quot;3&quot;: &quot;South&quot;,  &quot;4&quot;: &quot;West&quot;,  &quot;North&quot;: 1,  &quot;East&quot;: 2,  &quot;South&quot;: 3,  &quot;West&quot;: 4&#125;
+
+那我們取出的方法就會是這樣
+
+主要是因為 key 是 string 所以又要讓他 當成最上方的 type 傳入到我們的 object 內
+
+console.log(dateSetting[key as DateFormatKeys]);
+
+如果是這樣寫就會噴錯
+console.log(dateSetting[key]);
+
+Source Code
+
+
+ReferenceKey of type of 分析Interface vs type 區別Interface vs Type How To Use Enums in TypeScript
+]]></content>
+      <categories>
+        <category>前端開發</category>
+      </categories>
+      <tags>
+        <tag>TypeScript</tag>
+        <tag>Enum</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>UC Browser Support</title>
     <url>/2022/05/07/UCBrowserSupport/</url>
     <content><![CDATA[在開發 Global 的網頁的時候，通常會去評估各種網頁的支援度，如果沒有通常會請放 Upgrade your Browser.
@@ -5709,59 +6436,6 @@ DemoSourceCode
         <tag>Vue3</tag>
         <tag>Error Handling</tag>
         <tag>Axios</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>TypeScript Object Using Enum as Key</title>
-    <url>/2022/12/24/TypeScriptEnumObject/</url>
-    <content><![CDATA[我們在使用 typescript 的時候 有可能需要宣告 Enum 來避免 傳入的參數可能大小寫不符合或是傳到沒有值的參數
-那相對我們在宣告物件的時候也想要把這個概念串接下來 讓我們可以使用如下方的範例: 我們先定義一個 Enum
-enum DateFormat &#123;  Default = 1, //DD/MM/YYYY HH:mm:ss  ShortDate = 2, //DD/MMM/YYYY  DateTimeWithComma = 3, //DD/MM/YYYY, HH:mm:ss&#125;
-
-目標是想要使用 以下物件去宣告
-type DateLanguage = &#123;  en: string;  zh: string;&#125;;type DateSetting&#123;    Default: DateLanguage    ShortDate: DateLanguage    DateTimeWithComma: DateLanguage&#125;
-
-大家有發現到嗎 假設我們新增一個 Enum 也想要相對應在 type 新增一個 key 但是又怕打錯字 或是 key 錯大小寫
-所以這是我今天想解決的問題
-Solution首先在這個 Case 我們使用 type 是因為 type 可以使用 typeof 取出 Key 並進行定義
-
-如果想了解 Interface vs type 區別 可以參考 reference如圖片使用 keyof type DateFormat 可以讓 DateFormatKey 必須是這三個的其中之一 不然會報錯
-
-接著使用 下面方法就可以定義出來我們想要的 Key 值
-type DateFormatFields = &#123; [key in DateFormatKeys]: DateLanguage &#125;;
-
-
-
-接著我們就可以定義我們的 object
-const dateSetting: DateFormatFields = &#123;  Default: &#123;    en: &#x27;DD/MM/YYYY HH:mm:ss&#x27;,    zh: &#x27;MM/DD/YYYY HH:mm:ss&#x27;,  &#125;,  ShortDate: &#123;    en: &#x27;DD/MM/YYYY&#x27;,    zh: &#x27;MM/DD/YYYY&#x27;,  &#125;,  DateTimeWithComma: &#123;    en: &#x27;DD/MM/YYYY, HH:mm:ss&#x27;,    zh: &#x27;MM/DD/YYYY, HH:mm:ss&#x27;,  &#125;,&#125;;
-
-最後是如何去取出呢?
-一開始發現想說可能可以用 C#的寫法把 Enum 的值 to string&#x3D;&gt; DateFormat.DateTimeWithComma.toString()後面發現不行要透過下面方式
-const key = DateFormat[DateFormat.DateTimeWithComma]; //string
-
-是因為實際上我們使用 typescript 宣告的 enum 他對應的 out 會長這樣 所以可以用這方法取出值
-Output&#123;  &quot;1&quot;: &quot;North&quot;,  &quot;2&quot;: &quot;East&quot;,  &quot;3&quot;: &quot;South&quot;,  &quot;4&quot;: &quot;West&quot;,  &quot;North&quot;: 1,  &quot;East&quot;: 2,  &quot;South&quot;: 3,  &quot;West&quot;: 4&#125;
-
-那我們取出的方法就會是這樣
-
-主要是因為 key 是 string 所以又要讓他 當成最上方的 type 傳入到我們的 object 內
-
-console.log(dateSetting[key as DateFormatKeys]);
-
-如果是這樣寫就會噴錯
-console.log(dateSetting[key]);
-
-Source Code
-
-
-ReferenceKey of type of 分析Interface vs type 區別Interface vs Type How To Use Enums in TypeScript
-]]></content>
-      <categories>
-        <category>前端開發</category>
-      </categories>
-      <tags>
-        <tag>TypeScript</tag>
-        <tag>Enum</tag>
       </tags>
   </entry>
   <entry>
@@ -6283,245 +6957,6 @@ ReferenceXSS(Cross site scripting) 簡單範例XSS SampleVue 3 Sanitize
       </tags>
   </entry>
   <entry>
-    <title>Vue 3 新裝置 MFA 驗證架構：從登入攔截到 WebView 完成驗證的完整設計</title>
-    <url>/2026/04/21/VueMfaVerificationFlow/</url>
-    <content><![CDATA[背景：為什麼需要新裝置驗證App 的登入安全升級需求：當使用者從「未曾登入過的新裝置」登入時，需要完成 MFA 驗證，才能取得完整的登入 token 和 session。
-這個場景有幾個特殊的工程挑戰：
-
-MFA 流程在 WebView 中完成：App 收到「需要驗證」的訊號後開啟 WebView，驗證 UI 完全由 Web 端負責
-三種驗證方式共用一套 UI 邏輯：Email OTP、TOTP、Push Notification，切換時不能有狀態殘留
-Push Notification 需要前端輪詢：使用者在另一台設備點「允許」，前端要主動查詢結果
-驗證成功後產生短效 grantId：App 用 grantId 換取正式 token，WebView 本身不持有最終憑證
-
-
-整體登入流程（App + WebView 協作）flowchart TD
-    A["[App] POST /api/member/login"] --> B{"設備狀態"}
-    B -->|"已知設備"| C["正常返回 LoginResponse（含 token）"]
-    B -->|"新設備"| D["HTTP 200 ErrorCode = LOGN0020MfaChallenge: VerificationId / AccountId / AvailableMethods"]
-    D --> E["[App] 開啟 WebView傳入 VerificationId + AccountId + AvailableMethods"]
-    E --> F["[WebView] 渲染 MFA UIuseVerificationFlow 管理狀態"]
-    F --> G["使用者完成驗證（任一方式）"]
-    G --> H["[WebView] 呼叫 Web MFA verify API成功 → 後端寫入 Redis MFA:LoginGrant:{grantId}TTL 60~180s"]
-    H --> I["[WebView] 通知 App（帶回 grantId）"]
-    I --> J["[App] POST /api/member/exchange-login-grantBody: { GrantId: 'xxx' }"]
-    J --> K["後端從 Redis 讀 MFA:LoginGrant:{grantId}刪除 Grant Key（single-use）呼叫 InitSessionAndProfile"]
-    K --> L["回傳完整 LoginResponse（含 token/session/profile）[App] 登入完成"]
-
-關鍵設計：grantId 的一次性機制
-grantId 是短效（60~180 秒）一次性憑證。這樣設計的原因：
-
-WebView 完成驗證後立即簽發，App 用完即失效
-就算 grantId 在傳遞過程中被攔截，時間窗口極短
-重放攻擊（replay attack）無效：用過一次就從 Redis 刪除
-
-
-後端：MFA 方式的決定邏輯哪些 MFA 方式可用，由「API 回應」和「Config 設定」共同決定，兩者都 true 才啟用：
-可用 MFA 方式 = API 回應 ∩ Config 開關
-
-
-
-
-方式
-API 條件
-Config 開關
-啟用條件
-
-
-
-Push Notification
-pushNotificationEnable = true
-NewDeviceMfaEnablePushNotification = true
-兩者皆 true
-
-
-Email OTP
-無條件（預設可用）
-NewDeviceMfaEnableEmailOtp = true
-Config 為 true 即可
-
-
-TOTP
-totpEnable = true
-NewDeviceMfaEnableTotp = true
-兩者皆 true
-
-
-這個設計讓「會員沒有設定 TOTP」時 TOTP 不出現在列表，「Push Notification 功能全域關閉」時即使會員有綁定也不顯示。
-
-功能開關與版本控制新設備驗證功能透過 App 版本控制分階段上線：
-&lt;!-- FeatureVersionControl.config --&gt;&lt;FeatureVersion Name=&quot;AllowNewDeviceCheck&quot;                AndroidMinVersion=&quot;1.2.0&quot;  AndroidMaxVersion=&quot;*.*.*&quot;                iOSMinVersion=&quot;1.2.0&quot;      iOSMaxVersion=&quot;*.*.*&quot; /&gt;
-
-
-
-
-App 版本
-AllowNewDeviceCheck
-行為
-
-
-
-&lt; 1.2.0
-false
-完全不觸發新設備檢查，走原有登入流程
-
-
-≥ 1.2.0
-true
-新設備觸發 MFA，回傳 LOGN0020
-
-
-分階段上線策略：初期將版本門檻設為 1.9.0（只有最新版測試），確認穩定後降至 1.2.0。緊急關閉只需將版本門檻調高至 99.0.0。
-
-前端：useVerificationFlow Composable 設計WebView 裡的 MFA UI 完全由 useVerificationFlow 管理。設計目標：
-
-三種方式共用一套狀態，切換時自動清理
-Push Notification 的輪詢邏輯完全封裝在 Composable 內
-Callback 注入：Composable 不直接呼叫 API，由呼叫方提供實作
-onUnmounted 自動清理 Polling
-
-型別設計export enum LoginVerificationType &#123;  Email = 1,  PushNotification = 2,  // 注意：後端 enum 和前端順序不同  TOTP = 3,&#125;export enum VerificationErrorCode &#123;  InvalidCode = 1001,  MaxAttemptsReached = 1002,  PushPending = 2001,   // 輪詢回應：還在等待，不是錯誤  Exception = 9999,&#125;export interface UseVerificationFlowOptions &#123;  onTrigger?: (method: LoginVerificationType) =&gt; Promise&lt;TriggerResult&gt;;  onVerify?: (code: string, securityCodeId: string, method: LoginVerificationType) =&gt; Promise&lt;VerifyResult&gt;;  onCheckPushStatus?: (verificationId: string, accountId: number, securityCodeId: string) =&gt; Promise&lt;PushStatusResult&gt;;  onPushApproved?: (data: &#123; passport: string; recDomain: Array&lt;&#123; domain: string &#125;&gt; &#125;) =&gt; void;  onTimeout?: () =&gt; void;  onError?: (errorCode: number) =&gt; void;  onMaxAttemptsReached?: () =&gt; void;&#125;
-
-Callback 模式的工程理由：
-
-同一個 useVerificationFlow 可以在「登入驗證」和「裝置驗證」兩個不同頁面使用，注入不同的 API 函式
-Composable 本身可以被獨立單元測試，無需 mock HTTP client
-驗證成功後的導頁邏輯（onPushApproved）由呼叫方決定，Composable 不需要知道 router
-
-
-狀態設計：為什麼用 timestamp 而非 countdown// ❌ 常見但有問題的設計const resendCooldown = ref(60); // 秒數遞減setInterval(() =&gt; &#123; resendCooldown.value--; &#125;, 1000); // 需要管理 interval 清理// ✅ 本實作：timestamp 比對const resendCooldownEndTime = ref(0); // 到期時間點（ms）const canResend = computed(() =&gt; resendCooldownEndTime.value &lt;= Date.now());// 設定：resendCooldownEndTime.value = Date.now() + 60 * 1000;// UI 顯示剩餘秒數（由 UI 層自行計算，不需要 Composable 管理 interval）：const secondsLeft = computed(() =&gt;  Math.max(0, Math.ceil((resendCooldownEndTime.value - Date.now()) / 1000)));
-
-這個設計的優點：
-
-Composable 不需要持有任何 setInterval（倒數的驅動責任移交給 UI 層）
-頁面重整後恢復：只要把 endTime 存到 localStorage 就能重建狀態
-多個計時器（resend cooldown + verification expiry）各自獨立，不互相干擾
-
-
-Push Notification Polling 的完整狀態機Push Notification 是三種方式中最複雜的，因為它是非同步等待使用者在另一台設備操作：
-const PUSH_POLLING_INTERVAL = 3000; // 每 3 秒輪詢一次function startPolling(verificationId: string, accountId: number): void &#123;  if (!onCheckPushStatus || isPolling.value) return; // 冪等：重複呼叫無副作用  verificationIdForPolling.value = verificationId;  accountIdForPolling.value = accountId;  isPolling.value = true;  // 立即執行一次，不等第一個 3 秒 interval  // （使用者可能已在另一台設備預先點了允許）  checkPushStatus();  pollingIntervalId.value = window.setInterval(() =&gt; &#123;    // 每個 tick 都先檢查 session 是否已過期    // 不依賴 setInterval 的 timing 精度（可能因 tab 背景化而延遲）    if (verificationExpiryEndTime.value &gt; 0 &amp;&amp; Date.now() &gt;= verificationExpiryEndTime.value) &#123;      stopPolling();      onTimeout?.();      return;    &#125;    checkPushStatus();  &#125;, PUSH_POLLING_INTERVAL);&#125;async function checkPushStatus() &#123;  if (!onCheckPushStatus || !verificationIdForPolling.value) return &#123; success: false &#125;;  try &#123;    const result = await onCheckPushStatus(      verificationIdForPolling.value,      accountIdForPolling.value,      securityCodeId.value,    );    if (result.success) &#123;      stopPolling();      if (onPushApproved &amp;&amp; result.data) &#123;        onPushApproved(result.data as &#123; passport: string; recDomain: Array&lt;&#123; domain: string &#125;&gt; &#125;);      &#125;      return &#123; success: true &#125;;    &#125; else if (result.errorCode === VerificationErrorCode.PushPending) &#123;      // 還在等待：什麼都不做，繼續下一個 tick      return &#123; success: false &#125;;    &#125; else &#123;      // 真正的錯誤（過期、使用者拒絕等）      stopPolling();      onError?.(result.errorCode!);      return &#123; success: false, errorCode: result.errorCode &#125;;    &#125;  &#125; catch &#123;    // 網路錯誤：不停止 Polling，下一個 3 秒 tick 自動重試    return &#123; success: false &#125;;  &#125;&#125;
-
-三種 Push 狀態的不同處理：
-
-
-
-API 回應
-isPolling
-UI 行為
-呼叫 Callback
-
-
-
-success: true
-停止
-成功畫面
-onPushApproved(data)
-
-
-errorCode: PushPending
-繼續
-等待動畫
-無
-
-
-其他 errorCode
-停止
-錯誤 Dialog
-onError(code)
-
-
-Network error (catch)
-繼續
-等待動畫
-無
-
-
-網路錯誤不停 Polling 的設計理由：
-Push Notification 的場景中，使用者已在等待介面。網路短暫抖動不應該強制使用者重新操作。3 秒後自動重試，對 UX 更友好。只有真正的業務邏輯錯誤（session 過期、Push 被拒絕）才停止。
-
-精確的過期偵測：為什麼 setInterval 的 3 秒間隔不夠// 問題：setInterval 在 Tab 背景化時可能被 throttle 到 1 分鐘執行一次// 就算正常執行，3 秒的間隔意味著最多 3 秒的過期判斷誤差// 解法：額外加一個 1 秒精確檢查的 watcherwatch(  () =&gt; verificationExpiryEndTime.value,  (newEndTime) =&gt; &#123;    if (newEndTime &gt; 0 &amp;&amp; isPolling.value) &#123;      const expiryCheckInterval = setInterval(() =&gt; &#123;        if (Date.now() &gt;= newEndTime || !isPolling.value) &#123;          clearInterval(expiryCheckInterval);          if (Date.now() &gt;= newEndTime) &#123;            stopPolling();            onTimeout?.();          &#125;        &#125;      &#125;, 1000); // 1 秒精度    &#125;  &#125;,);
-
-這個 watch 在 verificationExpiryEndTime 被設定時（trigger 成功後）才啟動，避免在 Push 尚未開始時就跑多餘的 interval。
-
-setMethod：切換方式時的狀態清理function setMethod(method: LoginVerificationType) &#123;  // 從 Push 切換走：必須先停止 Polling  // 不停的話 Polling 會在背景繼續，成功後呼叫 onPushApproved，但 UI 已換成 Email 畫面  if (currentMethod.value === LoginVerificationType.PushNotification &amp;&amp; isPolling.value) &#123;    stopPolling();  &#125;  currentMethod.value = method;  // 清除輸入狀態，但保留 verificationExpiryEndTime  // 原因：session 還沒過期，切換方式不應重置過期時間  verificationCode.value = &#x27;&#x27;;  errorMessage.value = &#x27;&#x27;;  securityCodeId.value = &#x27;&#x27;; // 需要重新 trigger 才能取得新的 securityCodeId&#125;
-
-
-錯誤訊息的責任邊界function getErrorMessage(errorCode?: number, failCountValue?: number): string &#123;  switch (errorCode) &#123;    case VerificationErrorCode.InvalidCode:      // 只有「驗證碼錯誤」顯示在 input 下方（inline error）      if (failCountValue !== undefined &amp;&amp; maxFailCount.value &gt; 0) &#123;        const attemptsLeft = maxFailCount.value - failCountValue;        if (attemptsLeft &gt; 0) &#123;          // 語言複數處理：1 次用單數文案，多次用複數文案          const key = attemptsLeft &gt; 1            ? &#x27;txtAccountInvalidCodeErrors&#x27;            : &#x27;txtAccountInvalidCodeError&#x27;;          return t(key, &#123; attemptsLeft &#125;);        &#125;      &#125;      return &#x27;&#x27;; // attemptsLeft = 0 時，MaxAttemptsReached 由 Dialog 處理    default:      // 所有其他錯誤（session 過期、網路錯誤、後端錯誤）      // 由 UI 層的 Dialog 或 Toast 處理，Composable 不知道 Dialog 的存在      return &#x27;&#x27;;  &#125;&#125;
-
-這個邊界的工程意義：
-
-getErrorMessage 只返回「應該顯示在 input 旁的 inline 訊息」
-其他所有錯誤的呈現方式（Dialog、Toast、頁面跳轉）由 Composable 的 callback（onError、onTimeout、onMaxAttemptsReached）通知 UI 層
-這讓 Composable 不依賴任何 UI 框架，可以在不同的設計系統下複用
-
-
-verify：失敗計數與自動觸發 onMaxAttemptsReachedasync function verify() &#123;  if (!isCodeValid.value) return &#123; success: false &#125;;  errorMessage.value = &#x27;&#x27;;  try &#123;    const result = await onVerify!(      verificationCode.value,      securityCodeId.value,      currentMethod.value,    );    if (result.success) &#123;      return &#123; success: true, data: result.data &#125;;    &#125;    if (result.failCount !== undefined) &#123;      failCount.value = result.failCount;    &#125;    // 達到上限：通知 UI 層（通常是鎖定 Dialog），不顯示 inline error    if (result.failCount !== undefined &amp;&amp; maxFailCount.value &gt; 0) &#123;      const attemptsLeft = maxFailCount.value - result.failCount;      if (attemptsLeft &lt;= 0) &#123;        onMaxAttemptsReached?.();        return &#123; success: false, errorCode: result.errorCode, failCount: result.failCount &#125;;      &#125;    &#125;    // 未達上限：顯示 inline error（還剩 N 次）    errorMessage.value = getErrorMessage(result.errorCode, result.failCount);    verificationCode.value = &#x27;&#x27;; // 清空輸入，讓使用者重新輸入    return &#123; success: false, errorCode: result.errorCode, failCount: result.failCount &#125;;  &#125; catch &#123;    return &#123; success: false, errorCode: VerificationErrorCode.Exception &#125;;  &#125;&#125;
-
-maxFailCount 從 trigger 的 API 回應取得，而非硬編碼。這讓後端可以根據風險等級動態調整（例如風險較高的帳號縮短至 3 次）。
-
-reset 與 onUnmountedfunction reset() &#123;  stopPolling();  clearVerificationExpiryTimer();  clearResendCooldown();  verificationCode.value = &#x27;&#x27;;  errorMessage.value = &#x27;&#x27;;  securityCodeId.value = &#x27;&#x27;;  maskedEmail.value = &#x27;&#x27;;  failCount.value = 0;  // 注意：不重置 maxFailCount，它是由 API 決定的業務規則&#125;// 組件 unmount 時自動清理 Polling// 防止：使用者導頁後 setInterval 仍在背景執行，觸發 onPushApproved 並試圖操作已銷毀的 vue instanceonUnmounted(() =&gt; &#123;  stopPolling();&#125;);
-
-
-WebView 的使用方式（完整範例）&lt;script setup lang=&quot;ts&quot;&gt;import &#123; useRoute &#125; from &#x27;vue-router&#x27;;const route = useRoute();// WebView URL 從 App 傳入：?verificationId=xxx&amp;accountId=12345&amp;methods=1,2,3const verificationId = route.query.verificationId as string;const accountId = Number(route.query.accountId);const availableMethods = (route.query.methods as string)  .split(&#x27;,&#x27;)  .map(Number) as LoginVerificationType[];const &#123;  currentMethod,  verificationCode,  errorMessage,  canResend,  isPolling,  verificationExpiryEndTime,  setMethod,  trigger,  verify,  resend,  startPolling,  handleTimeout,  reset,&#125; = useVerificationFlow(&#123;  onTrigger: async (method) =&gt; &#123;    return await mfaApi.trigger(&#123; verificationId, accountId, method &#125;);  &#125;,  onVerify: async (code, securityCodeId, method) =&gt; &#123;    return await mfaApi.verify(&#123; verificationId, accountId, code, securityCodeId, method &#125;);  &#125;,  onCheckPushStatus: async (verificationId, accountId, securityCodeId) =&gt; &#123;    return await mfaApi.checkPushStatus(&#123; verificationId, accountId, securityCodeId &#125;);  &#125;,  onPushApproved: (data) =&gt; &#123;    // 透過 App Bridge 通知 App，帶回 grantId    nativeBridge.notifyVerificationComplete(&#123; grantId: data.passport &#125;);  &#125;,  onTimeout: () =&gt; &#123;    showTimeoutDialog.value = true;  &#125;,  onError: (errorCode) =&gt; &#123;    showErrorDialog(errorCode);  &#125;,  onMaxAttemptsReached: () =&gt; &#123;    showLockedDialog.value = true;  &#125;,&#125;);// 初始化：根據 availableMethods 設定預設方式，並觸發第一次驗證碼發送onMounted(async () =&gt; &#123;  // Push 優先（使用者體驗最佳），其次 Email，最後 TOTP  const preferredOrder = [    LoginVerificationType.PushNotification,    LoginVerificationType.Email,    LoginVerificationType.TOTP,  ];  const defaultMethod = preferredOrder.find(m =&gt; availableMethods.includes(m))    ?? LoginVerificationType.Email;  setMethod(defaultMethod);  const result = await trigger();  if (defaultMethod === LoginVerificationType.PushNotification &amp;&amp; result.success) &#123;    startPolling(verificationId, accountId);  &#125;&#125;);&lt;/script&gt;
-
-
-Redis 儲存結構（前後端對應）前端完成 MFA 驗證後，後端在 Redis 寫入兩種 key：
-MFA:ActiveSession:&#123;AccountId&#125;   TTL 30 分鐘  └─ MfaContext (JSON)       ├─ VerificationId, AccountId, LoginId, MemberCode       ├─ ClientIP, UserAgent, CountryCode, City       ├─ FingerPrintId, ScreenResolution, DeviceLanguage       ├─ DeviceType, BlackBox, DeviceId, DeviceModel       └─ LightSpeedToken, BundleId, WebAuthnCredentialIdMFA:LoginGrant:&#123;GrantId&#125;        TTL 60~180 秒（一次性）  └─ MfaContext 全量 snapshot（同上）
-
-MFA:ActiveSession 在同一 AccountId 重複登入時覆蓋舊記錄（踢單機制）。MFA:LoginGrant 兌換成功後立即刪除，防止重放攻擊。
-
-架構全景flowchart LR
-    subgraph BE["後端"]
-        LM["LoginMfaManagerHandleLoginMfaFlowGetAvailableMfaMethodsCreateMfaSession"]
-        AS["MFA:ActiveSession:{AccountId}"]
-        ELG["AccountService.ExchangeLoginGrant讀取 + 刪除 MFA:LoginGrantInitSessionAndProfile回傳 LoginResponse"]
-        LG["MFA:LoginGrant:{GrantId}TTL 60~180s，一次性"]
-    end
-    subgraph FE["前端 WebView"]
-        VF["useVerificationFlowcurrentMethod / code / timers / pollingtrigger / verify / startPolling"]
-        CB["CallbacksonTrigger / onVerifyonCheckPushStatus / onPushApproved"]
-    end
-    LM --> AS
-    LM --> LG
-    LG --> ELG
-    VF --> CB
-    CB -->|"成功 → grantId"| ELG
-]]></content>
-      <categories>
-        <category>前端架構</category>
-      </categories>
-      <tags>
-        <tag>MFA</tag>
-        <tag>TypeScript</tag>
-        <tag>Vue3</tag>
-        <tag>Composable</tag>
-        <tag>身份驗證</tag>
-        <tag>前端架構</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Vue Created Mounted example</title>
-    <url>/2022/05/28/VueMounted/</url>
-    <content><![CDATA[最近遇到一個 Issue，我們本來有跟 Partner 整合一個功能，做法是類似先 Inject 對方的 js，接著去指定一個 element 讓他生成到對應的頁面位置，因為當初開發的時候大家都是新手 邊做邊學，一開始把 init script 的方法放到 created function，會造成一個問題是 element 都還沒有被掛到 html 上面就先呼叫 init script有可能會無法生成畫面，但是神奇的是 當初寫沒有發現問題，等到有一天可能 Partner 突然有改 JS 的流程，造成我們整個頁面壞掉。所以又再回頭去 review code 才發現應該要放到 mounted
-
-
-&lt;script  async  id=&#x27;__ada&#x27;  data-handle=&#x27;&lt;YOUR-BOT-HANDLE&gt;&#x27;  src=&#x27;https://xxx.xxx.com/embed2.js&#x27;&gt;&lt;/script&gt;
-
-正確就是要放到 mounted 上面
-export default &#123;  created() &#123;    //element not create  &#125;,  mounted() &#123;    //element created  &#125;,&#125;;
-
-這裡附上 Kuro Hsu 的 Vue2 vs Vue 3 Life cycle 參考
-
-Reference
-]]></content>
-      <categories>
-        <category>前端開發</category>
-      </categories>
-      <tags>
-        <tag>Vue3</tag>
-        <tag>Vue Life Cycle</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Vue 前端錯誤處理架構 — 從基礎 ErrorHandler 到生產級 Exception Handler</title>
     <url>/2022/06/05/VueJsErrorHandling/</url>
     <content><![CDATA[前言前端開發中最難追蹤的不是語法錯誤，而是那些只在特定操作流程下才會出現的邏輯錯誤。使用者通常無法準確描述發生了什麼，如果沒有錯誤記錄機制，等於瞎子摸象。
@@ -6876,6 +7311,389 @@ Pinia $onAction
         <tag>Vue3</tag>
         <tag>Error Handling</tag>
         <tag>JavaScript</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Vue Created Mounted example</title>
+    <url>/2022/05/28/VueMounted/</url>
+    <content><![CDATA[最近遇到一個 Issue，我們本來有跟 Partner 整合一個功能，做法是類似先 Inject 對方的 js，接著去指定一個 element 讓他生成到對應的頁面位置，因為當初開發的時候大家都是新手 邊做邊學，一開始把 init script 的方法放到 created function，會造成一個問題是 element 都還沒有被掛到 html 上面就先呼叫 init script有可能會無法生成畫面，但是神奇的是 當初寫沒有發現問題，等到有一天可能 Partner 突然有改 JS 的流程，造成我們整個頁面壞掉。所以又再回頭去 review code 才發現應該要放到 mounted
+
+
+&lt;script  async  id=&#x27;__ada&#x27;  data-handle=&#x27;&lt;YOUR-BOT-HANDLE&gt;&#x27;  src=&#x27;https://xxx.xxx.com/embed2.js&#x27;&gt;&lt;/script&gt;
+
+正確就是要放到 mounted 上面
+export default &#123;  created() &#123;    //element not create  &#125;,  mounted() &#123;    //element created  &#125;,&#125;;
+
+這裡附上 Kuro Hsu 的 Vue2 vs Vue 3 Life cycle 參考
+
+Reference
+]]></content>
+      <categories>
+        <category>前端開發</category>
+      </categories>
+      <tags>
+        <tag>Vue3</tag>
+        <tag>Vue Life Cycle</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Vue 3 新裝置 MFA 驗證架構：從登入攔截到 WebView 完成驗證的完整設計</title>
+    <url>/2026/04/21/VueMfaVerificationFlow/</url>
+    <content><![CDATA[背景：為什麼需要新裝置驗證App 的登入安全升級需求：當使用者從「未曾登入過的新裝置」登入時，需要完成 MFA 驗證，才能取得完整的登入 token 和 session。
+這個場景有幾個特殊的工程挑戰：
+
+MFA 流程在 WebView 中完成：App 收到「需要驗證」的訊號後開啟 WebView，驗證 UI 完全由 Web 端負責
+三種驗證方式共用一套 UI 邏輯：Email OTP、TOTP、Push Notification，切換時不能有狀態殘留
+Push Notification 需要前端輪詢：使用者在另一台設備點「允許」，前端要主動查詢結果
+驗證成功後產生短效 grantId：App 用 grantId 換取正式 token，WebView 本身不持有最終憑證
+
+
+整體登入流程（App + WebView 協作）flowchart TD
+    A["[App] POST /api/member/login"] --> B{"設備狀態"}
+    B -->|"已知設備"| C["正常返回 LoginResponse（含 token）"]
+    B -->|"新設備"| D["HTTP 200 ErrorCode = LOGN0020MfaChallenge: VerificationId / AccountId / AvailableMethods"]
+    D --> E["[App] 開啟 WebView傳入 VerificationId + AccountId + AvailableMethods"]
+    E --> F["[WebView] 渲染 MFA UIuseVerificationFlow 管理狀態"]
+    F --> G["使用者完成驗證（任一方式）"]
+    G --> H["[WebView] 呼叫 Web MFA verify API成功 → 後端寫入 Redis MFA:LoginGrant:{grantId}TTL 60~180s"]
+    H --> I["[WebView] 通知 App（帶回 grantId）"]
+    I --> J["[App] POST /api/member/exchange-login-grantBody: { GrantId: 'xxx' }"]
+    J --> K["後端從 Redis 讀 MFA:LoginGrant:{grantId}刪除 Grant Key（single-use）呼叫 InitSessionAndProfile"]
+    K --> L["回傳完整 LoginResponse（含 token/session/profile）[App] 登入完成"]
+
+關鍵設計：grantId 的一次性機制
+grantId 是短效（60~180 秒）一次性憑證。這樣設計的原因：
+
+WebView 完成驗證後立即簽發，App 用完即失效
+就算 grantId 在傳遞過程中被攔截，時間窗口極短
+重放攻擊（replay attack）無效：用過一次就從 Redis 刪除
+
+
+後端：MFA 方式的決定邏輯哪些 MFA 方式可用，由「API 回應」和「Config 設定」共同決定，兩者都 true 才啟用：
+可用 MFA 方式 = API 回應 ∩ Config 開關
+
+
+
+
+方式
+API 條件
+Config 開關
+啟用條件
+
+
+
+Push Notification
+pushNotificationEnable = true
+NewDeviceMfaEnablePushNotification = true
+兩者皆 true
+
+
+Email OTP
+無條件（預設可用）
+NewDeviceMfaEnableEmailOtp = true
+Config 為 true 即可
+
+
+TOTP
+totpEnable = true
+NewDeviceMfaEnableTotp = true
+兩者皆 true
+
+
+這個設計讓「會員沒有設定 TOTP」時 TOTP 不出現在列表，「Push Notification 功能全域關閉」時即使會員有綁定也不顯示。
+
+功能開關與版本控制新設備驗證功能透過 App 版本控制分階段上線：
+&lt;!-- FeatureVersionControl.config --&gt;&lt;FeatureVersion Name=&quot;AllowNewDeviceCheck&quot;                AndroidMinVersion=&quot;1.2.0&quot;  AndroidMaxVersion=&quot;*.*.*&quot;                iOSMinVersion=&quot;1.2.0&quot;      iOSMaxVersion=&quot;*.*.*&quot; /&gt;
+
+
+
+
+App 版本
+AllowNewDeviceCheck
+行為
+
+
+
+&lt; 1.2.0
+false
+完全不觸發新設備檢查，走原有登入流程
+
+
+≥ 1.2.0
+true
+新設備觸發 MFA，回傳 LOGN0020
+
+
+分階段上線策略：初期將版本門檻設為 1.9.0（只有最新版測試），確認穩定後降至 1.2.0。緊急關閉只需將版本門檻調高至 99.0.0。
+
+前端：useVerificationFlow Composable 設計WebView 裡的 MFA UI 完全由 useVerificationFlow 管理。設計目標：
+
+三種方式共用一套狀態，切換時自動清理
+Push Notification 的輪詢邏輯完全封裝在 Composable 內
+Callback 注入：Composable 不直接呼叫 API，由呼叫方提供實作
+onUnmounted 自動清理 Polling
+
+型別設計export enum LoginVerificationType &#123;  Email = 1,  PushNotification = 2,  // 注意：後端 enum 和前端順序不同  TOTP = 3,&#125;export enum VerificationErrorCode &#123;  InvalidCode = 1001,  MaxAttemptsReached = 1002,  PushPending = 2001,   // 輪詢回應：還在等待，不是錯誤  Exception = 9999,&#125;export interface UseVerificationFlowOptions &#123;  onTrigger?: (method: LoginVerificationType) =&gt; Promise&lt;TriggerResult&gt;;  onVerify?: (code: string, securityCodeId: string, method: LoginVerificationType) =&gt; Promise&lt;VerifyResult&gt;;  onCheckPushStatus?: (verificationId: string, accountId: number, securityCodeId: string) =&gt; Promise&lt;PushStatusResult&gt;;  onPushApproved?: (data: &#123; passport: string; recDomain: Array&lt;&#123; domain: string &#125;&gt; &#125;) =&gt; void;  onTimeout?: () =&gt; void;  onError?: (errorCode: number) =&gt; void;  onMaxAttemptsReached?: () =&gt; void;&#125;
+
+Callback 模式的工程理由：
+
+同一個 useVerificationFlow 可以在「登入驗證」和「裝置驗證」兩個不同頁面使用，注入不同的 API 函式
+Composable 本身可以被獨立單元測試，無需 mock HTTP client
+驗證成功後的導頁邏輯（onPushApproved）由呼叫方決定，Composable 不需要知道 router
+
+
+狀態設計：為什麼用 timestamp 而非 countdown// ❌ 常見但有問題的設計const resendCooldown = ref(60); // 秒數遞減setInterval(() =&gt; &#123; resendCooldown.value--; &#125;, 1000); // 需要管理 interval 清理// ✅ 本實作：timestamp 比對const resendCooldownEndTime = ref(0); // 到期時間點（ms）const canResend = computed(() =&gt; resendCooldownEndTime.value &lt;= Date.now());// 設定：resendCooldownEndTime.value = Date.now() + 60 * 1000;// UI 顯示剩餘秒數（由 UI 層自行計算，不需要 Composable 管理 interval）：const secondsLeft = computed(() =&gt;  Math.max(0, Math.ceil((resendCooldownEndTime.value - Date.now()) / 1000)));
+
+這個設計的優點：
+
+Composable 不需要持有任何 setInterval（倒數的驅動責任移交給 UI 層）
+頁面重整後恢復：只要把 endTime 存到 localStorage 就能重建狀態
+多個計時器（resend cooldown + verification expiry）各自獨立，不互相干擾
+
+
+Push Notification Polling 的完整狀態機Push Notification 是三種方式中最複雜的，因為它是非同步等待使用者在另一台設備操作：
+const PUSH_POLLING_INTERVAL = 3000; // 每 3 秒輪詢一次function startPolling(verificationId: string, accountId: number): void &#123;  if (!onCheckPushStatus || isPolling.value) return; // 冪等：重複呼叫無副作用  verificationIdForPolling.value = verificationId;  accountIdForPolling.value = accountId;  isPolling.value = true;  // 立即執行一次，不等第一個 3 秒 interval  // （使用者可能已在另一台設備預先點了允許）  checkPushStatus();  pollingIntervalId.value = window.setInterval(() =&gt; &#123;    // 每個 tick 都先檢查 session 是否已過期    // 不依賴 setInterval 的 timing 精度（可能因 tab 背景化而延遲）    if (verificationExpiryEndTime.value &gt; 0 &amp;&amp; Date.now() &gt;= verificationExpiryEndTime.value) &#123;      stopPolling();      onTimeout?.();      return;    &#125;    checkPushStatus();  &#125;, PUSH_POLLING_INTERVAL);&#125;async function checkPushStatus() &#123;  if (!onCheckPushStatus || !verificationIdForPolling.value) return &#123; success: false &#125;;  try &#123;    const result = await onCheckPushStatus(      verificationIdForPolling.value,      accountIdForPolling.value,      securityCodeId.value,    );    if (result.success) &#123;      stopPolling();      if (onPushApproved &amp;&amp; result.data) &#123;        onPushApproved(result.data as &#123; passport: string; recDomain: Array&lt;&#123; domain: string &#125;&gt; &#125;);      &#125;      return &#123; success: true &#125;;    &#125; else if (result.errorCode === VerificationErrorCode.PushPending) &#123;      // 還在等待：什麼都不做，繼續下一個 tick      return &#123; success: false &#125;;    &#125; else &#123;      // 真正的錯誤（過期、使用者拒絕等）      stopPolling();      onError?.(result.errorCode!);      return &#123; success: false, errorCode: result.errorCode &#125;;    &#125;  &#125; catch &#123;    // 網路錯誤：不停止 Polling，下一個 3 秒 tick 自動重試    return &#123; success: false &#125;;  &#125;&#125;
+
+三種 Push 狀態的不同處理：
+
+
+
+API 回應
+isPolling
+UI 行為
+呼叫 Callback
+
+
+
+success: true
+停止
+成功畫面
+onPushApproved(data)
+
+
+errorCode: PushPending
+繼續
+等待動畫
+無
+
+
+其他 errorCode
+停止
+錯誤 Dialog
+onError(code)
+
+
+Network error (catch)
+繼續
+等待動畫
+無
+
+
+網路錯誤不停 Polling 的設計理由：
+Push Notification 的場景中，使用者已在等待介面。網路短暫抖動不應該強制使用者重新操作。3 秒後自動重試，對 UX 更友好。只有真正的業務邏輯錯誤（session 過期、Push 被拒絕）才停止。
+
+精確的過期偵測：為什麼 setInterval 的 3 秒間隔不夠// 問題：setInterval 在 Tab 背景化時可能被 throttle 到 1 分鐘執行一次// 就算正常執行，3 秒的間隔意味著最多 3 秒的過期判斷誤差// 解法：額外加一個 1 秒精確檢查的 watcherwatch(  () =&gt; verificationExpiryEndTime.value,  (newEndTime) =&gt; &#123;    if (newEndTime &gt; 0 &amp;&amp; isPolling.value) &#123;      const expiryCheckInterval = setInterval(() =&gt; &#123;        if (Date.now() &gt;= newEndTime || !isPolling.value) &#123;          clearInterval(expiryCheckInterval);          if (Date.now() &gt;= newEndTime) &#123;            stopPolling();            onTimeout?.();          &#125;        &#125;      &#125;, 1000); // 1 秒精度    &#125;  &#125;,);
+
+這個 watch 在 verificationExpiryEndTime 被設定時（trigger 成功後）才啟動，避免在 Push 尚未開始時就跑多餘的 interval。
+
+setMethod：切換方式時的狀態清理function setMethod(method: LoginVerificationType) &#123;  // 從 Push 切換走：必須先停止 Polling  // 不停的話 Polling 會在背景繼續，成功後呼叫 onPushApproved，但 UI 已換成 Email 畫面  if (currentMethod.value === LoginVerificationType.PushNotification &amp;&amp; isPolling.value) &#123;    stopPolling();  &#125;  currentMethod.value = method;  // 清除輸入狀態，但保留 verificationExpiryEndTime  // 原因：session 還沒過期，切換方式不應重置過期時間  verificationCode.value = &#x27;&#x27;;  errorMessage.value = &#x27;&#x27;;  securityCodeId.value = &#x27;&#x27;; // 需要重新 trigger 才能取得新的 securityCodeId&#125;
+
+
+錯誤訊息的責任邊界function getErrorMessage(errorCode?: number, failCountValue?: number): string &#123;  switch (errorCode) &#123;    case VerificationErrorCode.InvalidCode:      // 只有「驗證碼錯誤」顯示在 input 下方（inline error）      if (failCountValue !== undefined &amp;&amp; maxFailCount.value &gt; 0) &#123;        const attemptsLeft = maxFailCount.value - failCountValue;        if (attemptsLeft &gt; 0) &#123;          // 語言複數處理：1 次用單數文案，多次用複數文案          const key = attemptsLeft &gt; 1            ? &#x27;txtAccountInvalidCodeErrors&#x27;            : &#x27;txtAccountInvalidCodeError&#x27;;          return t(key, &#123; attemptsLeft &#125;);        &#125;      &#125;      return &#x27;&#x27;; // attemptsLeft = 0 時，MaxAttemptsReached 由 Dialog 處理    default:      // 所有其他錯誤（session 過期、網路錯誤、後端錯誤）      // 由 UI 層的 Dialog 或 Toast 處理，Composable 不知道 Dialog 的存在      return &#x27;&#x27;;  &#125;&#125;
+
+這個邊界的工程意義：
+
+getErrorMessage 只返回「應該顯示在 input 旁的 inline 訊息」
+其他所有錯誤的呈現方式（Dialog、Toast、頁面跳轉）由 Composable 的 callback（onError、onTimeout、onMaxAttemptsReached）通知 UI 層
+這讓 Composable 不依賴任何 UI 框架，可以在不同的設計系統下複用
+
+
+verify：失敗計數與自動觸發 onMaxAttemptsReachedasync function verify() &#123;  if (!isCodeValid.value) return &#123; success: false &#125;;  errorMessage.value = &#x27;&#x27;;  try &#123;    const result = await onVerify!(      verificationCode.value,      securityCodeId.value,      currentMethod.value,    );    if (result.success) &#123;      return &#123; success: true, data: result.data &#125;;    &#125;    if (result.failCount !== undefined) &#123;      failCount.value = result.failCount;    &#125;    // 達到上限：通知 UI 層（通常是鎖定 Dialog），不顯示 inline error    if (result.failCount !== undefined &amp;&amp; maxFailCount.value &gt; 0) &#123;      const attemptsLeft = maxFailCount.value - result.failCount;      if (attemptsLeft &lt;= 0) &#123;        onMaxAttemptsReached?.();        return &#123; success: false, errorCode: result.errorCode, failCount: result.failCount &#125;;      &#125;    &#125;    // 未達上限：顯示 inline error（還剩 N 次）    errorMessage.value = getErrorMessage(result.errorCode, result.failCount);    verificationCode.value = &#x27;&#x27;; // 清空輸入，讓使用者重新輸入    return &#123; success: false, errorCode: result.errorCode, failCount: result.failCount &#125;;  &#125; catch &#123;    return &#123; success: false, errorCode: VerificationErrorCode.Exception &#125;;  &#125;&#125;
+
+maxFailCount 從 trigger 的 API 回應取得，而非硬編碼。這讓後端可以根據風險等級動態調整（例如風險較高的帳號縮短至 3 次）。
+
+reset 與 onUnmountedfunction reset() &#123;  stopPolling();  clearVerificationExpiryTimer();  clearResendCooldown();  verificationCode.value = &#x27;&#x27;;  errorMessage.value = &#x27;&#x27;;  securityCodeId.value = &#x27;&#x27;;  maskedEmail.value = &#x27;&#x27;;  failCount.value = 0;  // 注意：不重置 maxFailCount，它是由 API 決定的業務規則&#125;// 組件 unmount 時自動清理 Polling// 防止：使用者導頁後 setInterval 仍在背景執行，觸發 onPushApproved 並試圖操作已銷毀的 vue instanceonUnmounted(() =&gt; &#123;  stopPolling();&#125;);
+
+
+WebView 的使用方式（完整範例）&lt;script setup lang=&quot;ts&quot;&gt;import &#123; useRoute &#125; from &#x27;vue-router&#x27;;const route = useRoute();// WebView URL 從 App 傳入：?verificationId=xxx&amp;accountId=12345&amp;methods=1,2,3const verificationId = route.query.verificationId as string;const accountId = Number(route.query.accountId);const availableMethods = (route.query.methods as string)  .split(&#x27;,&#x27;)  .map(Number) as LoginVerificationType[];const &#123;  currentMethod,  verificationCode,  errorMessage,  canResend,  isPolling,  verificationExpiryEndTime,  setMethod,  trigger,  verify,  resend,  startPolling,  handleTimeout,  reset,&#125; = useVerificationFlow(&#123;  onTrigger: async (method) =&gt; &#123;    return await mfaApi.trigger(&#123; verificationId, accountId, method &#125;);  &#125;,  onVerify: async (code, securityCodeId, method) =&gt; &#123;    return await mfaApi.verify(&#123; verificationId, accountId, code, securityCodeId, method &#125;);  &#125;,  onCheckPushStatus: async (verificationId, accountId, securityCodeId) =&gt; &#123;    return await mfaApi.checkPushStatus(&#123; verificationId, accountId, securityCodeId &#125;);  &#125;,  onPushApproved: (data) =&gt; &#123;    // 透過 App Bridge 通知 App，帶回 grantId    nativeBridge.notifyVerificationComplete(&#123; grantId: data.passport &#125;);  &#125;,  onTimeout: () =&gt; &#123;    showTimeoutDialog.value = true;  &#125;,  onError: (errorCode) =&gt; &#123;    showErrorDialog(errorCode);  &#125;,  onMaxAttemptsReached: () =&gt; &#123;    showLockedDialog.value = true;  &#125;,&#125;);// 初始化：根據 availableMethods 設定預設方式，並觸發第一次驗證碼發送onMounted(async () =&gt; &#123;  // Push 優先（使用者體驗最佳），其次 Email，最後 TOTP  const preferredOrder = [    LoginVerificationType.PushNotification,    LoginVerificationType.Email,    LoginVerificationType.TOTP,  ];  const defaultMethod = preferredOrder.find(m =&gt; availableMethods.includes(m))    ?? LoginVerificationType.Email;  setMethod(defaultMethod);  const result = await trigger();  if (defaultMethod === LoginVerificationType.PushNotification &amp;&amp; result.success) &#123;    startPolling(verificationId, accountId);  &#125;&#125;);&lt;/script&gt;
+
+
+Redis 儲存結構（前後端對應）前端完成 MFA 驗證後，後端在 Redis 寫入兩種 key：
+MFA:ActiveSession:&#123;AccountId&#125;   TTL 30 分鐘  └─ MfaContext (JSON)       ├─ VerificationId, AccountId, LoginId, MemberCode       ├─ ClientIP, UserAgent, CountryCode, City       ├─ FingerPrintId, ScreenResolution, DeviceLanguage       ├─ DeviceType, BlackBox, DeviceId, DeviceModel       └─ LightSpeedToken, BundleId, WebAuthnCredentialIdMFA:LoginGrant:&#123;GrantId&#125;        TTL 60~180 秒（一次性）  └─ MfaContext 全量 snapshot（同上）
+
+MFA:ActiveSession 在同一 AccountId 重複登入時覆蓋舊記錄（踢單機制）。MFA:LoginGrant 兌換成功後立即刪除，防止重放攻擊。
+
+架構全景flowchart LR
+    subgraph BE["後端"]
+        LM["LoginMfaManagerHandleLoginMfaFlowGetAvailableMfaMethodsCreateMfaSession"]
+        AS["MFA:ActiveSession:{AccountId}"]
+        ELG["AccountService.ExchangeLoginGrant讀取 + 刪除 MFA:LoginGrantInitSessionAndProfile回傳 LoginResponse"]
+        LG["MFA:LoginGrant:{GrantId}TTL 60~180s，一次性"]
+    end
+    subgraph FE["前端 WebView"]
+        VF["useVerificationFlowcurrentMethod / code / timers / pollingtrigger / verify / startPolling"]
+        CB["CallbacksonTrigger / onVerifyonCheckPushStatus / onPushApproved"]
+    end
+    LM --> AS
+    LM --> LG
+    LG --> ELG
+    VF --> CB
+    CB -->|"成功 → grantId"| ELG
+]]></content>
+      <categories>
+        <category>前端架構</category>
+      </categories>
+      <tags>
+        <tag>MFA</tag>
+        <tag>TypeScript</tag>
+        <tag>Vue3</tag>
+        <tag>Composable</tag>
+        <tag>身份驗證</tag>
+        <tag>前端架構</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯</title>
+    <url>/2026/04/06/WatcherUtilAopPerformance/</url>
+    <content><![CDATA[問題：效能監控程式碼到處散落一般做法是在每個方法手動埋計時：
+// 到處複製貼上，業務邏輯被監控代碼淹沒var start = DateTime.Now;try &#123;    result = db.GetSomething(key);    var ms = (DateTime.Now - start).TotalMilliseconds;    log.Performance(&quot;REDIS&quot;, &quot;GetSomething&quot;, ms.ToString(), &quot;&quot;);&#125; catch (Exception ex) &#123;    log.Exception(ex);&#125;
+
+這違反了 單一職責原則（SRP），監控邏輯和業務邏輯耦合在一起。
+
+
+解法：WatcherUtil — 用 Delegate 包裝flowchart TB
+    W[WatcherUtil]
+    W --> T1[記錄 startTime]
+    T1 --> BIZ[執行委派 Action 或 Func 業務程式碼不感知外層監控]
+    BIZ --> T2[計算 elapsed]
+    T2 --> L[log Performance]
+
+核心實作// WatcherUtil.cspublic class WatcherUtil&#123;    private readonly ISysLog log;    public WatcherUtil(ISysLog outLog)    &#123;        log = outLog;    &#125;    // 同步 void    public void Watch(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        func();        FunctionEnd(source, funcName, startTime);    &#125;    // 非同步 void    public async Task Watch(PerformanceSource source, string funcName, Func&lt;Task&gt; func)    &#123;        DateTime startTime = DateTime.Now;        await func();        FunctionEnd(source, funcName, startTime);    &#125;    // 同步有回傳值    public TResult Watch&lt;TResult&gt;(PerformanceSource source, string funcName, Func&lt;TResult&gt; func)    &#123;        DateTime startTime = DateTime.Now;        TResult t = func();        FunctionEnd(source, funcName, startTime);        return t;    &#125;    // 附例外處理的進階版    public void WatchAdvance(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        try        &#123;            func();            FunctionEnd(source, funcName, startTime);        &#125;        catch (Exception ex)        &#123;            log.Exception($&quot;&#123;funcName&#125; throwing error&quot;, ex.Message);        &#125;    &#125;    private void FunctionEnd(PerformanceSource source, string funcName, DateTime startTime)    &#123;        double timeSpan = (DateTime.Now - startTime).TotalMilliseconds;        log.Performance(source, funcName, timeSpan.ToString(&quot;0&quot;), &quot;&quot;);    &#125;&#125;
+
+PerformanceSource — 分類監控來源public enum PerformanceSource&#123;    REDIS,        // Redis 操作    DLL,          // 內部 DLL 呼叫    NUGETPACKAGE, // NuGet 套件呼叫    REQUEST,      // HTTP 外部請求    KAFKA         // Kafka 訊息發送&#125;
+
+每筆 Performance log 都會帶上來源分類，讓 log 平台可以按維度聚合分析。
+呼叫方式對比使用前// CacheLayerManager — 每個方法手動埋時間DateTime start = DateTime.Now;cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);double ms = (DateTime.Now - start).TotalMilliseconds;log.Performance(PerformanceSource.REDIS, &quot;FetchFromRedis&quot;, ms.ToString(), &quot;&quot;);
+
+使用後// 業務邏輯完全乾淨，監控是外層關心的事watcher.WatchAdvance(PerformanceSource.REDIS, $&quot;FetchFromRedis_&#123;cacheName&#125;&quot;, () =&gt;&#123;    cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));    result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);&#125;);
+
+實際使用案例flowchart LR
+    subgraph CLM["CacheLayerManager"]
+        A1[Watch REDIS GetDataAsync]
+        A2[WatchAdvance REDIS FetchFromRedis]
+        A3[Watch REDIS RedLockAction]
+    end
+    subgraph ASM["AccountStateManager"]
+        B1[Watch NUGETPACKAGE CreateAccountState]
+        B2[Watch NUGETPACKAGE GenerateToken]
+        B3[Watch NUGETPACKAGE GetAccountState]
+    end
+    subgraph KH["KafkaHelper"]
+        C1[Watch KAFKA SendAsync topic]
+    end
+    subgraph LM["LoginManager"]
+        D1[Watch DLL AuthenticateWithPlatform]
+    end
+    LOG["Performance Log log.Performance"]
+    A1 --> LOG
+    A2 --> LOG
+    A3 --> LOG
+    B1 --> LOG
+    B2 --> LOG
+    B3 --> LOG
+    C1 --> LOG
+    D1 --> LOG
+
+全專案共超過 20+ 個監控點，全部只用同一個 WatcherUtil。
+Watch vs WatchAdvance 差異
+
+
+項目
+Watch
+WatchAdvance
+
+
+
+例外
+直接往外拋，呼叫者處理
+捕捉後 log.Exception，不往外拋
+
+
+適用
+關鍵路徑，必須讓上層知道錯誤
+讀取／可降級場景（例如 cache miss 不影響主流程）
+
+
+行為示意
+例外流向 caller
+例外在工具內記錄後結束
+
+
+這是什麼設計模式？這是 Decorator Pattern 與 AOP（Aspect-Oriented Programming） 的輕量實作：在不修改業務方法本體的前提下，於執行前後加上計時與記錄。
+
+
+
+面向
+傳統 AOP 框架（如 PostSharp）
+WatcherUtil
+
+
+
+寫法
+Attribute + 織入 IL
+watcher.Watch(source, name, () =&gt; &#123; ... &#125;)
+
+
+依賴
+需框架、編譯期或執行期織入
+單一類別 + Action &#x2F; Func
+
+
+彈性
+宣告式，改動需重新編譯／部署策略
+呼叫端明確包一層，易讀易搜
+
+
+不需要任何 AOP 框架，利用 C# Action／Func delegate，就能以較小代價達到類似「橫切關注點」的效果。
+Log 輸出格式[Performance] source=REDIS | method=FetchFromRedis_TradingSession | time=3ms[Performance] source=NUGETPACKAGE | method=SingleSignOnService_GenerateToken | time=12ms[Performance] source=KAFKA | method=SendAsync_AP.FE.MEMBER_LOGIN | time=45ms[Performance] source=DLL | method=AuthenticateWithPlatform | time=230ms
+
+這些 log 可以直接接入 ELK &#x2F; Grafana，按 source、method 做 P95&#x2F;P99 分析。
+小結
+
+
+特性
+說明
+
+
+
+零侵入
+業務邏輯不需要加任何 attribute 或繼承
+
+
+泛型支援
+Watch&lt;TResult&gt; 支援有回傳值的函式
+
+
+async 支援
+Watch(Func&lt;Task&gt;) 原生支援 async&#x2F;await
+
+
+例外策略
+Watch vs WatchAdvance 兩種策略可選
+
+
+可測試
+ISysLog 可輕易 Mock，單元測試友善
+
+
+]]></content>
+      <categories>
+        <category>後端架構</category>
+      </categories>
+      <tags>
+        <tag>.NET</tag>
+        <tag>Design Pattern</tag>
+        <tag>AOP</tag>
       </tags>
   </entry>
   <entry>
@@ -7355,150 +8173,6 @@ regionTheme, logoUrl
         <tag>Vue.js</tag>
         <tag>Architecture</tag>
         <tag>Micro Frontend</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯</title>
-    <url>/2026/04/06/WatcherUtilAopPerformance/</url>
-    <content><![CDATA[問題：效能監控程式碼到處散落一般做法是在每個方法手動埋計時：
-// 到處複製貼上，業務邏輯被監控代碼淹沒var start = DateTime.Now;try &#123;    result = db.GetSomething(key);    var ms = (DateTime.Now - start).TotalMilliseconds;    log.Performance(&quot;REDIS&quot;, &quot;GetSomething&quot;, ms.ToString(), &quot;&quot;);&#125; catch (Exception ex) &#123;    log.Exception(ex);&#125;
-
-這違反了 單一職責原則（SRP），監控邏輯和業務邏輯耦合在一起。
-
-
-解法：WatcherUtil — 用 Delegate 包裝flowchart TB
-    W[WatcherUtil]
-    W --> T1[記錄 startTime]
-    T1 --> BIZ[執行委派 Action 或 Func 業務程式碼不感知外層監控]
-    BIZ --> T2[計算 elapsed]
-    T2 --> L[log Performance]
-
-核心實作// WatcherUtil.cspublic class WatcherUtil&#123;    private readonly ISysLog log;    public WatcherUtil(ISysLog outLog)    &#123;        log = outLog;    &#125;    // 同步 void    public void Watch(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        func();        FunctionEnd(source, funcName, startTime);    &#125;    // 非同步 void    public async Task Watch(PerformanceSource source, string funcName, Func&lt;Task&gt; func)    &#123;        DateTime startTime = DateTime.Now;        await func();        FunctionEnd(source, funcName, startTime);    &#125;    // 同步有回傳值    public TResult Watch&lt;TResult&gt;(PerformanceSource source, string funcName, Func&lt;TResult&gt; func)    &#123;        DateTime startTime = DateTime.Now;        TResult t = func();        FunctionEnd(source, funcName, startTime);        return t;    &#125;    // 附例外處理的進階版    public void WatchAdvance(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        try        &#123;            func();            FunctionEnd(source, funcName, startTime);        &#125;        catch (Exception ex)        &#123;            log.Exception($&quot;&#123;funcName&#125; throwing error&quot;, ex.Message);        &#125;    &#125;    private void FunctionEnd(PerformanceSource source, string funcName, DateTime startTime)    &#123;        double timeSpan = (DateTime.Now - startTime).TotalMilliseconds;        log.Performance(source, funcName, timeSpan.ToString(&quot;0&quot;), &quot;&quot;);    &#125;&#125;
-
-PerformanceSource — 分類監控來源public enum PerformanceSource&#123;    REDIS,        // Redis 操作    DLL,          // 內部 DLL 呼叫    NUGETPACKAGE, // NuGet 套件呼叫    REQUEST,      // HTTP 外部請求    KAFKA         // Kafka 訊息發送&#125;
-
-每筆 Performance log 都會帶上來源分類，讓 log 平台可以按維度聚合分析。
-呼叫方式對比使用前// CacheLayerManager — 每個方法手動埋時間DateTime start = DateTime.Now;cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);double ms = (DateTime.Now - start).TotalMilliseconds;log.Performance(PerformanceSource.REDIS, &quot;FetchFromRedis&quot;, ms.ToString(), &quot;&quot;);
-
-使用後// 業務邏輯完全乾淨，監控是外層關心的事watcher.WatchAdvance(PerformanceSource.REDIS, $&quot;FetchFromRedis_&#123;cacheName&#125;&quot;, () =&gt;&#123;    cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));    result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);&#125;);
-
-實際使用案例flowchart LR
-    subgraph CLM["CacheLayerManager"]
-        A1[Watch REDIS GetDataAsync]
-        A2[WatchAdvance REDIS FetchFromRedis]
-        A3[Watch REDIS RedLockAction]
-    end
-    subgraph ASM["AccountStateManager"]
-        B1[Watch NUGETPACKAGE CreateAccountState]
-        B2[Watch NUGETPACKAGE GenerateToken]
-        B3[Watch NUGETPACKAGE GetAccountState]
-    end
-    subgraph KH["KafkaHelper"]
-        C1[Watch KAFKA SendAsync topic]
-    end
-    subgraph LM["LoginManager"]
-        D1[Watch DLL AuthenticateWithPlatform]
-    end
-    LOG["Performance Log log.Performance"]
-    A1 --> LOG
-    A2 --> LOG
-    A3 --> LOG
-    B1 --> LOG
-    B2 --> LOG
-    B3 --> LOG
-    C1 --> LOG
-    D1 --> LOG
-
-全專案共超過 20+ 個監控點，全部只用同一個 WatcherUtil。
-Watch vs WatchAdvance 差異
-
-
-項目
-Watch
-WatchAdvance
-
-
-
-例外
-直接往外拋，呼叫者處理
-捕捉後 log.Exception，不往外拋
-
-
-適用
-關鍵路徑，必須讓上層知道錯誤
-讀取／可降級場景（例如 cache miss 不影響主流程）
-
-
-行為示意
-例外流向 caller
-例外在工具內記錄後結束
-
-
-這是什麼設計模式？這是 Decorator Pattern 與 AOP（Aspect-Oriented Programming） 的輕量實作：在不修改業務方法本體的前提下，於執行前後加上計時與記錄。
-
-
-
-面向
-傳統 AOP 框架（如 PostSharp）
-WatcherUtil
-
-
-
-寫法
-Attribute + 織入 IL
-watcher.Watch(source, name, () =&gt; &#123; ... &#125;)
-
-
-依賴
-需框架、編譯期或執行期織入
-單一類別 + Action &#x2F; Func
-
-
-彈性
-宣告式，改動需重新編譯／部署策略
-呼叫端明確包一層，易讀易搜
-
-
-不需要任何 AOP 框架，利用 C# Action／Func delegate，就能以較小代價達到類似「橫切關注點」的效果。
-Log 輸出格式[Performance] source=REDIS | method=FetchFromRedis_TradingSession | time=3ms[Performance] source=NUGETPACKAGE | method=SingleSignOnService_GenerateToken | time=12ms[Performance] source=KAFKA | method=SendAsync_AP.FE.MEMBER_LOGIN | time=45ms[Performance] source=DLL | method=AuthenticateWithPlatform | time=230ms
-
-這些 log 可以直接接入 ELK &#x2F; Grafana，按 source、method 做 P95&#x2F;P99 分析。
-小結
-
-
-特性
-說明
-
-
-
-零侵入
-業務邏輯不需要加任何 attribute 或繼承
-
-
-泛型支援
-Watch&lt;TResult&gt; 支援有回傳值的函式
-
-
-async 支援
-Watch(Func&lt;Task&gt;) 原生支援 async&#x2F;await
-
-
-例外策略
-Watch vs WatchAdvance 兩種策略可選
-
-
-可測試
-ISysLog 可輕易 Mock，單元測試友善
-
-
-]]></content>
-      <categories>
-        <category>後端架構</category>
-      </categories>
-      <tags>
-        <tag>.NET</tag>
-        <tag>Design Pattern</tag>
-        <tag>AOP</tag>
       </tags>
   </entry>
   <entry>
