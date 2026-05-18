@@ -471,6 +471,228 @@ bobjytan 在兩天內對 Important Notifications API 合計呼叫 74,919 次，�
       </tags>
   </entry>
   <entry>
+    <title>ASP.NET AccountState 設計：跨 Channel 登入狀態同步與踢出機制</title>
+    <url>/2026/05/17/AccountStateCrossChannelSession/</url>
+    <content><![CDATA[前言在一般網站裡，登入狀態通常只是一個 session flag：
+Session[&quot;IsLogin&quot;] = true;
+
+但大型會員平台通常不會這麼單純。使用者可能同時存在於 Desktop Web、Mobile Web、Native App WebView，不同 Channel 各自有 session、cookie、cache 與登入 token。
+這時候問題會變成：
+
+使用者在 App 登出，Web 是否也要失效？
+使用者被風控踢出，所有平台是否都要同步？
+Self Exclusion &#x2F; Time Out 後，其他 Channel 是否要強制 reload 或 logout？
+Redis session 還在，但帳號狀態已失效時怎麼處理？
+
+這個專案透過 AccountStateManager 建立一層獨立於 ASP.NET Session 的登入狀態控制層，集中處理 session cache、SSO token 與跨 Channel logout。
+
+
+AccountState 不是 Session核心檔案：
+src/AgileBet.Cash.Portal.BLL/AccountStateManager.cssrc/AgileBet.Cash.Portal.Web/HttpActionFilter/AccountStateCheckerActionFilter.cssrc/AgileBet.Cash.Portal.Web/BLL/WebAccountManager.cs
+
+AccountState 與傳統 session 的差異：
+
+
+
+機制
+用途
+
+
+
+ASP.NET Session
+保存目前 request 的會員資料
+
+
+Trading&#x2F;Profile cache
+Redis 中的會員 session cache
+
+
+AccountState
+判斷這個登入來源是否仍有效
+
+
+Passport token
+跨登入流程的一次性 token &#x2F; SSO token
+
+
+所以就算 ASP.NET Session 還存在，只要 AccountState 已經失效，後端仍然可以強制登出。
+初始化：把 Redis 與 SSO Service 包起來AccountStateManager.InitialAccountState() 會建立 SingleSignOnService：
+public static void InitialAccountState()&#123;    var accountStateDb = RedisUtil.connectionPool.GetDataBase(&quot;AccountState&quot;);    var ottDb = RedisUtil.connectionPool.GetDataBase(&quot;OneTimeToken&quot;);    JsonAdopter jsonAdopter = new JsonAdopter();    var redlockmultiplexer = RedisUtil.connectionPool.GetRedLockMultiplexer(&quot;AccountState&quot;);    var redLock = RedLockFactory.Create(redlockmultiplexer);    ssoService = new SingleSignOnService(accountStateDb, ottDb, jsonAdopter, redLock);&#125;
+
+這裡可以看出幾個責任分工：
+
+AccountState Redis DB：保存帳號登入狀態
+OneTimeToken Redis DB：保存短效 token
+RedLock：處理跨節點併發一致性
+SingleSignOnService：封裝 token 與 state 操作
+
+AccountStateManager 本身不是直接操作 Redis key，而是包裝 SSO package，讓上層 BLL 不需要理解底層資料結構。
+建立登入狀態登入成功後會呼叫：
+AccountStateManager.CreateAccountState(sourceApp, accountId, uniqueId, memberCode, hours);
+
+它會建立一筆帶 TTL 的 AccountState：
+var ttl = new TimeSpan(hours, 0, 0);ssoService.CreateAccountState(sourceApp, accountId, uniqueId, ttl);
+
+其中：
+
+sourceApp：來源 App，例如 Desktop Web 或 App
+accountId：會員帳號 ID
+uniqueId：此登入 session 的唯一識別
+ttl：狀態有效時間，預設 2 小時
+
+這個設計讓後端可以區分「同一會員」在「不同平台」上的登入狀態。
+Passport：跨流程的一次性登入令牌GeneratePassport 會把登入上下文包成 token：
+var content = new TokenContent()&#123;    AppId = AppDataManager.GetAppID(),    AccontId = accountId,    UniqueId = uniqueId,    OAuthInfo = oAuthInfo,    DeviceType = deviceType.ToString(),    WebAuthnCredentialId = webAuthnCredentialId,&#125;;token = ssoService.GenerateToken(content);
+
+這個 token 不只是 accountId，它還包含：
+
+AppId
+AccountId
+UniqueId
+OAuthInfo
+DeviceType
+WebAuthnCredentialId
+
+這對 OAuth、WebAuthn、MFA 後續登入流程都很重要。它避免前端或 App 端持有完整 session，只拿到一個短效、可驗證的 passport。
+驗證 AccountState核心方法是：
+public static StateResult CheckAccountState(    int appId,    long accountId,    string memberCode,    string sourceID)
+
+預設失敗策略是 invalid：
+var result = new StateResult()&#123;    IsValid = false,    Remark = ActionRemark.Kickout&#125;;
+
+這個設計偏向 fail closed：只要 Redis 找不到狀態、sourceID 為空，或 SSO service 發生 exception，預設都視為失效。
+if (sourceID.IsNullOrEmpty())&#123;    return result;&#125;state = ssoService.GetAccountState(appId, accountId, sourceID);if (state == null)&#123;    return result;&#125;result.IsValid = state.Status.Equals(Status.Validate);
+
+Remark 會被 parse 成 ActionRemark：
+if (Enum.TryParse&lt;ActionRemark&gt;(state.Remark, out actionRemark))    result.Remark = actionRemark;else    result.Remark = ActionRemark.Kickout;
+
+這讓 AccountState 不只是 true&#x2F;false，而是可以表達「為什麼失效」或「接下來要做什麼」。
+ActionRemark 的價值在 WebAccountManager.CheckAccountStateAction 裡可以看到 ActionRemark 的用途：
+if (!stateResult.IsValid)&#123;    result.requireRefresh = true;    if (stateResult.Remark == ActionRemark.Kickout)    &#123;        DoMemberLogout(trading);    &#125;    else    &#123;        result.alertMessage = stateResult.Remark.ToString();        result.remarks.Add(stateResult.Remark);    &#125;&#125;else&#123;    if (stateResult.Remark == ActionRemark.Reload)    &#123;        result.requireRefresh = true;        ReloadAccountSessionData(trading, profile);        AccountStateManager.ChangeAllChannelAccountState(            trading.MemberCode,            trading.AccountID,            Status.Validate,            ActionRemark.Login);    &#125;&#125;
+
+幾種典型語意：
+
+
+
+Remark
+意義
+
+
+
+Kickout
+立即登出
+
+
+Reload
+session cache 需要重新載入
+
+
+Login
+正常登入狀態
+
+
+DisplayNewTnc
+前端需要顯示新版條款
+
+
+這比單純 IsValid 更有彈性，因為它能讓後端把「下一步行為」一起傳給前端。
+AccountStateCheckerActionFilterAPI 層的防護由 AccountStateCheckerActionFilter 處理：
+public override void OnActionExecuting(HttpActionContext actionContext)&#123;    var isDesktopOrMobileWeb = AppDataManager.GetAppID().Equals(1);    if (isDesktopOrMobileWeb)    &#123;        var sessionData = (SessionData)resolver.GetService(typeof(SessionData));        var trading = sessionData.Trading;        if (trading.IsAuthenticated)        &#123;            var state = AccountStateManager.CheckAccountState(                trading.AppId,                trading.AccountID,                trading.MemberCode,                trading.UniqueID);            if (state.IsValid)            &#123;                LoginManager.SyncRedisToSession(trading, profile);            &#125;            else            &#123;                WebAccountManager.DoMemberLogout(trading);            &#125;        &#125;    &#125;&#125;
+
+這裡的重點是：
+
+Controller 不需要每支 API 自己檢查 AccountState
+狀態有效時同步 Redis cache 到 session
+狀態失效時直接做 logout
+只有 Desktop &#x2F; Mobile Web AppId 走這個 filter
+
+這是典型的 cross-cutting concern，放在 ActionFilter 會比散落在各個 Controller 更乾淨。
+跨 Channel 清除專案裡有兩個 Channel：
+private static int[] allChannelAppIds = new int[] &#123; 1, 90 &#125;;
+
+註解說明：
+// 1: STAR, 90: APP
+
+清除其他 Channel：
+public static void ClearAccountStateOtherChannelAsync(    int appId,    long accountId,    string memberCode)&#123;    List&lt;int&gt; appIds = allChannelAppIds.Where(val =&gt; val != appId).ToList();    ssoService.PurgeAccountStateAsync(accountId, appIds);&#125;
+
+更新所有 Channel：
+public static bool ChangeAllChannelAccountState(    string memberCode,    long accountId,    Status status,    ActionRemark action,    int? excludedAppId = null)
+
+這讓後端可以實現：
+
+App 登出時踢掉 Web
+Web 觸發 Self Exclusion 時踢掉 App
+狀態需要 Reload 時通知所有 Channel
+特定 Channel 可以被 excluded
+
+Logout 的完整流程WebAccountManager.DoMemberLogout 做的不只是清 session：
+AccountStateManager.ClearAccountStateAsync(    trading.AppId,    trading.AccountID,    trading.MemberCode,    trading.UniqueID);EventBusHelper.SetPayloadToFire(    EventName.MemberLogout,    BusCategory.Account,    new Dictionary&lt;string, string&gt;()    &#123;        &#123; &quot;key&quot;, trading.AccountID.ToString() &#125;,    &#125;);HttpContext.Current.Session.Clear();HttpContext.Current.Session.Abandon();HttpCookie cookie = new HttpCookie(&quot;ASP.NET_SessionId&quot;, &quot;&quot;);cookie.Expires = DateTime.Now.AddDays(-1);HttpContext.Current.Response.Cookies.Add(cookie);
+
+完整責任包括：
+
+清 AccountState
+發送 MemberLogout event
+impersonate service account
+清 ASP.NET session
+刪除 ASP.NET_SessionId cookie
+
+這就是大型系統 logout 複雜的地方：登出不是把 cookie 刪掉而已。
+架構流程圖flowchart TD
+    Login["Login Success"]
+    Create["CreateAccountStateappId, accountId, uniqueId"]
+    Redis["Redis AccountState"]
+    Api["Every protected API"]
+    Filter["AccountStateCheckerActionFilter"]
+    Valid["SyncRedisToSession"]
+    Invalid["DoMemberLogout"]
+
+    Login --> Create
+    Create --> Redis
+    Redis --> Api
+    Api --> Filter
+    Filter -->|valid| Valid
+    Filter -->|invalid| Invalid
+
+跨 Channel：
+flowchart TD
+    Trigger["Self Exclusion / Time Out / Kickout"]
+    Update["ChangeAllChannelAccountState或 ClearAccountStateOtherChannelAsync"]
+    RedisUpdated["Redis AccountState updated"]
+    NextRequest["Other Channel next request"]
+    Check["CheckAccountStatefailed or Reload"]
+    Action["Logout 或 Refresh session cache"]
+
+    Trigger --> Update
+    Update --> RedisUpdated
+    RedisUpdated --> NextRequest
+    NextRequest --> Check
+    Check --> Action
+
+小結這套 AccountState 設計的價值在於它把「登入狀態」從 ASP.NET Session 拉出來，變成一個跨 Channel、可觀測、可控制的狀態層。
+幾個值得借鑑的設計：
+
+不把 session 當唯一 truth source
+用 Redis AccountState 管理登入有效性
+用 ActionRemark 表達下一步行為
+用 ActionFilter 集中檢查狀態
+用 EventBus 同步 logout&#x2F;cache 失效
+支援 Desktop Web 與 App 之間的跨 Channel 踢出
+
+大型會員系統真正困難的不是「登入成功」，而是「登入後狀態如何保持一致」。AccountState 正是在解這個問題。
+]]></content>
+      <categories>
+        <category>後端架構</category>
+      </categories>
+      <tags>
+        <tag>Architecture</tag>
+        <tag>ASP.NET</tag>
+        <tag>Redis</tag>
+        <tag>SSO</tag>
+        <tag>Session</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Feature Version Control — APP 版本功能控管架構</title>
     <url>/2026/02/03/ApiFeatureVersionControl/</url>
     <content><![CDATA[前言Mobile APP 與 Web 不同，使用者不一定會即時更新到最新版本。當後端上線新功能時，舊版 APP 可能尚未支援該功能的 UI 或邏輯。若後端直接回傳新功能相關的資料，可能導致：
@@ -843,162 +1065,6 @@ D
         <tag>.NET</tag>
         <tag>Design Pattern</tag>
         <tag>Clean Architecture</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制</title>
-    <url>/2026/03/31/DebugManifestDynamicLoading/</url>
-    <content><![CDATA[背景正式環境下，前端 JS&#x2F;CSS 經 Webpack 打包後會帶 content hash 檔名；ASP.NET MVC 的 _Layout.cshtml 必須依 manifest.json 注入正確的 &lt;script&gt; &#x2F; &lt;link&gt;。本篇說明在 Debug 時如何 不必重啟後端 也能對齊 Webpack 即時編譯 的輸出。
-專案型態：前後端未分離的 .NET Framework MVC我們的專案 不是「獨立前端站 + 獨立 API 站」那種典型前後端分離：
-
-後端：.NET Framework 上的 ASP.NET MVC。頁面骨架仍由 Razor（例如 _Layout.cshtml）在伺服器端渲染，路由與部分畫面由 MVC 負責。
-前端互動：實際的 SPA／模組化 UI 由 Webpack 打包的 JS、CSS 在瀏覽器端啟動；正式環境這些靜態檔會放到 CDN，透過 hash 檔名 做快取破壞。
-Debug 開發：本機不強制走「部署到 CDN + 重讀 manifest」那條路，而是啟動 Webpack Dev Server（或同等 dev 流程），由它 動態編譯並提供 最新的 vendor.js、index.js 等。_Layout 在 Debug 組態下改把資源 URL 指到 本機 dev server，因此 重新 build &#x2F; HMR 後只要重新整理頁面，即可載入新 bundle，無須為了更新 hash 而去重啟 IIS 或整個 .NET 站台。
-
-簡單講：Release＝後端讀記憶體裡的 manifest.json，對應 CDN 上帶 hash 的檔；Debug＝後端略過 manifest，改連 dev server 上「當下編譯出來」的固定路徑（無 hash 或 dev 產物），讓「改前端 → 立刻看到畫面」。
-
-
-為什麼要區分 Debug 與 Production在 Production，manifest.json 與 bundle 一併部署，啟動時載入一次即可。若在 Debug 仍依賴磁碟／啟動時讀入的 manifest，每次 Webpack rebuild 改 hash，後端若不重啟就會繼續指向 舊檔名。因此在 Debug 改為 硬編本機 dev server URL，刻意 不經 manifest，與「CDN + hash」路徑脫鉤。
-整體架構流程flowchart TD
-    A[HTTP Request] --> B[_Layout.cshtml 渲染]
-    B --> C{Html IsDebug}
-    C -->|DEBUG| D[指向 localhost Webpack Dev Server 固定路徑]
-    C -->|RELEASE| E[ManifestHelper BuildUrl]
-    E --> F[AppConfigManager Manifest 讀 manifest.json]
-    F --> G[SelectToken JPath 取得 hash 路徑]
-    G --> H[CDN Domain 加 hash path]
-    H --> I[輸出 script 與 link]
-    D --> I
-
-_Layout.cshtml 的條件邏輯@if (Html.IsDebug())&#123;    // Debug: 直接指向 Webpack Dev Server，無需 manifest.json    &lt;script defer src=&quot;http://localhost:5100/cdn1121/star4/js/vendor.js&quot;&gt;&lt;/script&gt;    &lt;script defer src=&quot;http://localhost:5100/cdn1121/star4/js/index.js&quot;&gt;&lt;/script&gt;    &lt;link href=&quot;http://localhost:5100/cdn1121/star4/css/vendor.css&quot; rel=&quot;stylesheet&quot;&gt;    &lt;link href=&quot;http://localhost:5100/cdn1121/star4/css/index.css&quot; rel=&quot;stylesheet&quot;&gt;&#125;else&#123;    // Production: 透過 manifest.json 查詢帶 hash 的路徑    @(Html.AddStyleTag(&quot;$[&#x27;entries&#x27;].index.initial.css[0]&quot;))    @(Html.AddScriptTag(&quot;$[&#x27;entries&#x27;].index.initial.js[0]&quot;, new Dictionary&lt;string, string&gt;() &#123; &#123; &quot;type&quot;, &quot;module&quot; &#125; &#125;))    // ...更多 chunk&#125;
-
-IsDebug() 的實作是透過 C# preprocessor directive：
-// ManifestHelper.cspublic static bool IsDebug(this HtmlHelper htmlHelper)&#123;#if DEBUG    return true;#else    return false;#endif&#125;
-
-這表示它在 compile time 就決定，不需要任何 runtime flag。
-Debug 模式：Webpack Dev Server 動態提供flowchart TB
-    subgraph WDS["Webpack Dev Server localhost"]
-        W1[提供 JS CSS 與 HMR]
-        W2[rebuild 後立即可用]
-    end
-    subgraph MVC["ASP.NET MVC _Layout.cshtml"]
-        L[硬編 localhost 路徑 略過 manifest]
-    end
-    BR[Browser]
-    L --> BR
-    BR --> WDS
-
-優點：
-
-前端 rebuild 後，瀏覽器重新整理即可拿到最新版本
-不需重啟 .NET 後端
-支援 Webpack HMR（Hot Module Replacement）
-
-Channel &#x2F; Port 對應表（ManifestHelper.cs）：
-
-
-
-Channel ID
-Port
-說明
-
-
-
-1
-5000
-star4 (RWD)
-
-
-4
-5200
-star4webview
-
-
-
-注意：_Layout.cshtml 中的 port 5100 來自 Webpack／proxy 設定，實際須依 channel 與本機設定調整。
-
-Production 模式：manifest.json 的動態解析sequenceDiagram
-    participant App as App_Startup
-    participant ACM as AppConfigManager
-    participant MH as ManifestHelper
-    participant View as Layout_cshtml
-
-    App->>ACM: Initialize folderPath
-    ACM->>ACM: Manifest 載入 manifest.json
-    Note over ACM: 啟動時一次性讀入記憶體
-
-    View->>MH: Html AddScriptTag JPath
-    MH->>MH: BuildUrl 非 DEBUG 時 GetProductionUrl
-    MH->>ACM: Manifest SelectToken
-    ACM-->>MH: hash 相對路徑
-    MH->>MH: 組合 CDN Domain
-    MH-->>View: 輸出完整 script src
-
-manifest.json 結構範例&#123;  &quot;entries&quot;: &#123;    &quot;index&quot;: &#123;      &quot;initial&quot;: &#123;        &quot;js&quot;: [          &quot;/cdn1121/star4/js/vendor.abc123.js&quot;,          &quot;/cdn1121/star4/js/index.def456.js&quot;        ],        &quot;css&quot;: [          &quot;/cdn1121/star4/css/index.ghi789.css&quot;        ]      &#125;    &#125;  &#125;,  &quot;locales&quot;: &#123;    &quot;en-gb&quot;: &#123;      &quot;path&quot;: &quot;/cdn1121/star4/js/en-gb.jkl012.js&quot;    &#125;  &#125;&#125;
-
-JPath 查詢範例：
-// 查詢 CSS&quot;$[&#x27;entries&#x27;].index.initial.css[0]&quot;// → /cdn1121/star4/css/index.ghi789.css// 查詢 JS chunk&quot;$[&#x27;entries&#x27;].index.initial.js[0]&quot;// → /cdn1121/star4/js/vendor.abc123.js// 查詢語系 chunk&quot;$[&#x27;locales&#x27;][&#x27;en-gb&#x27;].path&quot;// → /cdn1121/star4/js/en-gb.jkl012.js
-
-App 啟動時的 manifest 載入manifest.json 在 Application_Start 時一次性載入至記憶體：
-// AppConfigManager.cspublic static void Initialize(string folderPath)&#123;    // ... 其他設定檔 ...    Manifest = JsonSerializerHelpr.ToObj&lt;JObject&gt;(folderPath, &quot;manifest.json&quot;);&#125;
-
-重要含義：
-
-manifest.json 與前端 bundle 一併部署
-Production 不需 File Watch，啟動後 manifest 即固定
-若只更新 bundle 未重啟站台，可能仍指向舊路徑（需 App Pool Recycle）
-
-語系 JS 動態注入_Layout.cshtml 還根據 URL segment 動態注入對應語系的 JS chunk：
-if (Request.Url.Segments.Length &gt; 1 &amp;&amp;    ManifestHelper.isAvailableLanguage(Request.Url.Segments[1].Replace(&quot;/&quot;, &quot;&quot;)))&#123;    @(Html.AddScriptTag(        &quot;$[&#x27;locales&#x27;][&#x27;&quot; + Request.Url.Segments[1].Replace(&quot;/&quot;, &quot;&quot;) + &quot;&#x27;].path&quot;,        new Dictionary&lt;string, string&gt;() &#123; &#123; &quot;type&quot;, &quot;module&quot; &#125; &#125;    ))&#125;
-
-例如 URL 為 /en-gb/home，則注入 locales[&#39;en-gb&#39;].path 對應的 JS。
-總結對比
-
-
-面向
-Debug 模式
-Production 模式
-
-
-
-JS 來源
-Webpack Dev Server（本機）
-CDN（manifest 內 hash 路徑）
-
-
-版本更新
-Webpack rebuild 後重整即可
-需部署新 bundle，常需 App Pool Recycle
-
-
-manifest.json
-不使用（略過 hash 對照）
-啟動時載入記憶體
-
-
-Hash
-通常固定 dev 路徑
-Content hash 快取破壞
-
-
-HMR
-可支援
-不適用
-
-
-Service Worker
-不啟用
-啟用
-
-
-]]></content>
-      <categories>
-        <category>工程實踐</category>
-      </categories>
-      <tags>
-        <tag>.NET Framework</tag>
-        <tag>Debug</tag>
-        <tag>Webpack</tag>
       </tags>
   </entry>
   <entry>
@@ -1737,6 +1803,162 @@ API 路由規則公開 API：     /api/&#123;controller&#125;/&#123;action&#125;
       </tags>
   </entry>
   <entry>
+    <title>Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制</title>
+    <url>/2026/03/31/DebugManifestDynamicLoading/</url>
+    <content><![CDATA[背景正式環境下，前端 JS&#x2F;CSS 經 Webpack 打包後會帶 content hash 檔名；ASP.NET MVC 的 _Layout.cshtml 必須依 manifest.json 注入正確的 &lt;script&gt; &#x2F; &lt;link&gt;。本篇說明在 Debug 時如何 不必重啟後端 也能對齊 Webpack 即時編譯 的輸出。
+專案型態：前後端未分離的 .NET Framework MVC我們的專案 不是「獨立前端站 + 獨立 API 站」那種典型前後端分離：
+
+後端：.NET Framework 上的 ASP.NET MVC。頁面骨架仍由 Razor（例如 _Layout.cshtml）在伺服器端渲染，路由與部分畫面由 MVC 負責。
+前端互動：實際的 SPA／模組化 UI 由 Webpack 打包的 JS、CSS 在瀏覽器端啟動；正式環境這些靜態檔會放到 CDN，透過 hash 檔名 做快取破壞。
+Debug 開發：本機不強制走「部署到 CDN + 重讀 manifest」那條路，而是啟動 Webpack Dev Server（或同等 dev 流程），由它 動態編譯並提供 最新的 vendor.js、index.js 等。_Layout 在 Debug 組態下改把資源 URL 指到 本機 dev server，因此 重新 build &#x2F; HMR 後只要重新整理頁面，即可載入新 bundle，無須為了更新 hash 而去重啟 IIS 或整個 .NET 站台。
+
+簡單講：Release＝後端讀記憶體裡的 manifest.json，對應 CDN 上帶 hash 的檔；Debug＝後端略過 manifest，改連 dev server 上「當下編譯出來」的固定路徑（無 hash 或 dev 產物），讓「改前端 → 立刻看到畫面」。
+
+
+為什麼要區分 Debug 與 Production在 Production，manifest.json 與 bundle 一併部署，啟動時載入一次即可。若在 Debug 仍依賴磁碟／啟動時讀入的 manifest，每次 Webpack rebuild 改 hash，後端若不重啟就會繼續指向 舊檔名。因此在 Debug 改為 硬編本機 dev server URL，刻意 不經 manifest，與「CDN + hash」路徑脫鉤。
+整體架構流程flowchart TD
+    A[HTTP Request] --> B[_Layout.cshtml 渲染]
+    B --> C{Html IsDebug}
+    C -->|DEBUG| D[指向 localhost Webpack Dev Server 固定路徑]
+    C -->|RELEASE| E[ManifestHelper BuildUrl]
+    E --> F[AppConfigManager Manifest 讀 manifest.json]
+    F --> G[SelectToken JPath 取得 hash 路徑]
+    G --> H[CDN Domain 加 hash path]
+    H --> I[輸出 script 與 link]
+    D --> I
+
+_Layout.cshtml 的條件邏輯@if (Html.IsDebug())&#123;    // Debug: 直接指向 Webpack Dev Server，無需 manifest.json    &lt;script defer src=&quot;http://localhost:5100/cdn1121/star4/js/vendor.js&quot;&gt;&lt;/script&gt;    &lt;script defer src=&quot;http://localhost:5100/cdn1121/star4/js/index.js&quot;&gt;&lt;/script&gt;    &lt;link href=&quot;http://localhost:5100/cdn1121/star4/css/vendor.css&quot; rel=&quot;stylesheet&quot;&gt;    &lt;link href=&quot;http://localhost:5100/cdn1121/star4/css/index.css&quot; rel=&quot;stylesheet&quot;&gt;&#125;else&#123;    // Production: 透過 manifest.json 查詢帶 hash 的路徑    @(Html.AddStyleTag(&quot;$[&#x27;entries&#x27;].index.initial.css[0]&quot;))    @(Html.AddScriptTag(&quot;$[&#x27;entries&#x27;].index.initial.js[0]&quot;, new Dictionary&lt;string, string&gt;() &#123; &#123; &quot;type&quot;, &quot;module&quot; &#125; &#125;))    // ...更多 chunk&#125;
+
+IsDebug() 的實作是透過 C# preprocessor directive：
+// ManifestHelper.cspublic static bool IsDebug(this HtmlHelper htmlHelper)&#123;#if DEBUG    return true;#else    return false;#endif&#125;
+
+這表示它在 compile time 就決定，不需要任何 runtime flag。
+Debug 模式：Webpack Dev Server 動態提供flowchart TB
+    subgraph WDS["Webpack Dev Server localhost"]
+        W1[提供 JS CSS 與 HMR]
+        W2[rebuild 後立即可用]
+    end
+    subgraph MVC["ASP.NET MVC _Layout.cshtml"]
+        L[硬編 localhost 路徑 略過 manifest]
+    end
+    BR[Browser]
+    L --> BR
+    BR --> WDS
+
+優點：
+
+前端 rebuild 後，瀏覽器重新整理即可拿到最新版本
+不需重啟 .NET 後端
+支援 Webpack HMR（Hot Module Replacement）
+
+Channel &#x2F; Port 對應表（ManifestHelper.cs）：
+
+
+
+Channel ID
+Port
+說明
+
+
+
+1
+5000
+star4 (RWD)
+
+
+4
+5200
+star4webview
+
+
+
+注意：_Layout.cshtml 中的 port 5100 來自 Webpack／proxy 設定，實際須依 channel 與本機設定調整。
+
+Production 模式：manifest.json 的動態解析sequenceDiagram
+    participant App as App_Startup
+    participant ACM as AppConfigManager
+    participant MH as ManifestHelper
+    participant View as Layout_cshtml
+
+    App->>ACM: Initialize folderPath
+    ACM->>ACM: Manifest 載入 manifest.json
+    Note over ACM: 啟動時一次性讀入記憶體
+
+    View->>MH: Html AddScriptTag JPath
+    MH->>MH: BuildUrl 非 DEBUG 時 GetProductionUrl
+    MH->>ACM: Manifest SelectToken
+    ACM-->>MH: hash 相對路徑
+    MH->>MH: 組合 CDN Domain
+    MH-->>View: 輸出完整 script src
+
+manifest.json 結構範例&#123;  &quot;entries&quot;: &#123;    &quot;index&quot;: &#123;      &quot;initial&quot;: &#123;        &quot;js&quot;: [          &quot;/cdn1121/star4/js/vendor.abc123.js&quot;,          &quot;/cdn1121/star4/js/index.def456.js&quot;        ],        &quot;css&quot;: [          &quot;/cdn1121/star4/css/index.ghi789.css&quot;        ]      &#125;    &#125;  &#125;,  &quot;locales&quot;: &#123;    &quot;en-gb&quot;: &#123;      &quot;path&quot;: &quot;/cdn1121/star4/js/en-gb.jkl012.js&quot;    &#125;  &#125;&#125;
+
+JPath 查詢範例：
+// 查詢 CSS&quot;$[&#x27;entries&#x27;].index.initial.css[0]&quot;// → /cdn1121/star4/css/index.ghi789.css// 查詢 JS chunk&quot;$[&#x27;entries&#x27;].index.initial.js[0]&quot;// → /cdn1121/star4/js/vendor.abc123.js// 查詢語系 chunk&quot;$[&#x27;locales&#x27;][&#x27;en-gb&#x27;].path&quot;// → /cdn1121/star4/js/en-gb.jkl012.js
+
+App 啟動時的 manifest 載入manifest.json 在 Application_Start 時一次性載入至記憶體：
+// AppConfigManager.cspublic static void Initialize(string folderPath)&#123;    // ... 其他設定檔 ...    Manifest = JsonSerializerHelpr.ToObj&lt;JObject&gt;(folderPath, &quot;manifest.json&quot;);&#125;
+
+重要含義：
+
+manifest.json 與前端 bundle 一併部署
+Production 不需 File Watch，啟動後 manifest 即固定
+若只更新 bundle 未重啟站台，可能仍指向舊路徑（需 App Pool Recycle）
+
+語系 JS 動態注入_Layout.cshtml 還根據 URL segment 動態注入對應語系的 JS chunk：
+if (Request.Url.Segments.Length &gt; 1 &amp;&amp;    ManifestHelper.isAvailableLanguage(Request.Url.Segments[1].Replace(&quot;/&quot;, &quot;&quot;)))&#123;    @(Html.AddScriptTag(        &quot;$[&#x27;locales&#x27;][&#x27;&quot; + Request.Url.Segments[1].Replace(&quot;/&quot;, &quot;&quot;) + &quot;&#x27;].path&quot;,        new Dictionary&lt;string, string&gt;() &#123; &#123; &quot;type&quot;, &quot;module&quot; &#125; &#125;    ))&#125;
+
+例如 URL 為 /en-gb/home，則注入 locales[&#39;en-gb&#39;].path 對應的 JS。
+總結對比
+
+
+面向
+Debug 模式
+Production 模式
+
+
+
+JS 來源
+Webpack Dev Server（本機）
+CDN（manifest 內 hash 路徑）
+
+
+版本更新
+Webpack rebuild 後重整即可
+需部署新 bundle，常需 App Pool Recycle
+
+
+manifest.json
+不使用（略過 hash 對照）
+啟動時載入記憶體
+
+
+Hash
+通常固定 dev 路徑
+Content hash 快取破壞
+
+
+HMR
+可支援
+不適用
+
+
+Service Worker
+不啟用
+啟用
+
+
+]]></content>
+      <categories>
+        <category>工程實踐</category>
+      </categories>
+      <tags>
+        <tag>.NET Framework</tag>
+        <tag>Debug</tag>
+        <tag>Webpack</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study</title>
     <url>/2026/04/14/ELKSharing/</url>
     <content><![CDATA[前言本文是團隊內部 ELK（Elasticsearch + Logstash + Kibana）使用分享，涵蓋四大主題：
@@ -2374,90 +2596,6 @@ Elasticsearch: Text vs. Keyword
         <tag>Elasticsearch</tag>
         <tag>Kibana</tag>
         <tag>Logging</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄</title>
-    <url>/2026/03/10/ErrorContentDecoding/</url>
-    <content><![CDATA[前言之前在正式環境遇到一個棘手的問題：使用者回報某支 API 回傳 HTTP 200，瀏覽器卻直接噴出 ERR_CONTENT_DECODING_FAILED。當下排查了很久才發現問題出在 Response Header 中多了一個不該出現的 gzip，特別記錄一下整個排查過程。
-
-
-
-問題現象打開 DevTools 檢查異常 API 的 Response Headers，可以看到幾個關鍵資訊：
-
-Content-Encoding: gzip — 伺服器宣稱回傳內容經過 gzip 壓縮
-Transfer-Encoding: chunked — 資料以分段方式傳輸
-X-Powered-By: ASP.NET — 請求可能直接打到後端 .NET 伺服器，或經過了某層 Proxy 轉發
-
-問題核心：空 Body + gzip 標頭瀏覽器收到 Content-Encoding: gzip 後，會自動嘗試用 gzip 解碼器解壓內容。但實際上這支 API 的 Response Body 是空的（長度為 0），解碼器無法處理一個空的壓縮流，因此直接報出 ERR_CONTENT_DECODING_FAILED。
-為什麼 Body 會是空的？根據 Header 中的 X-Powered-By: ASP.NET，可能有兩種原因：
-
-後端程式異常中斷 — ASP.NET 拋出 Exception 後沒有回傳 500，而是直接結束了 Response，導致 Body 為空。
-查詢超時 — 後端資料庫查詢耗時過久，連線中斷，最終只傳回了 Headers 就結束了。
-
-關鍵線索：對比正常與異常的 API進一步對比同專案中兩支 API 的 Response Headers，差異一目了然：
-
-
-
-欄位
-異常 API
-正常 API
-
-
-
-Content-Encoding
-gzip
-(無)
-
-
-X-Powered-By
-ASP.NET
-(無)
-
-
-X-Aspnet-Version
-4.0.30319
-(無)
-
-
-正常的 API 回傳的 Headers 很乾淨，是經過 Nuxt BFF（Node.js）處理後回傳的；而異常的 API 卻直接暴露了 ASP.NET 的資訊。這代表：
-
-情況 A：這支 API 繞過了 Nuxt BFF，直接打到了後端 .NET 伺服器。
-情況 B：後端 .NET 伺服器強制啟動了 gzip 壓縮，但因資料量過大或超時導致傳輸中斷，最終變成「空 Body + gzip 標頭」的組合。
-
-真相：Nitro 透傳 Response 物件導致 gzip 標頭外洩後端伺服器其實沒有噴錯，它正常回傳了資料（只是內容為空陣列或空物件）。真正的問題出在 Nuxt Server（Nitro）端的 API Handler 寫法。
-檢查 Server 端程式碼後，發現異常的 API Handler 是這樣寫的：
-const response = await api.memberGetMemberPriorityHistories(query);return response; // 直接回傳整個 Response 物件
-
-這裡 api.memberGetMemberPriorityHistories() 回傳的是一個繼承自原生 Response 的物件。當直接 return response 時，Nitro 引擎會將其視為透傳（Proxy），把後端的所有原始標頭原封不動地轉發給瀏覽器。
-整個流程是這樣的：
-
-後端 ASP.NET 回傳帶有 Content-Encoding: gzip 的壓縮內容
-Nuxt Server（Node.js）在接收時已經自動解壓了 gzip 內容
-但因為直接 return response，Nitro 把後端的原始 Headers（包含 Content-Encoding: gzip）照搬給瀏覽器
-瀏覽器收到 Content-Encoding: gzip 標頭，嘗試解壓 Body —— 但 Body 早就被 Node.js 解壓過了，已經不是 gzip 格式
-解碼失敗，噴出 ERR_CONTENT_DECODING_FAILED
-
-簡單來說：gzip 被 Nuxt Server Side 解開了一次，但 gzip 標頭卻還在，瀏覽器又試圖解第二次，自然就失敗了。
-這也解釋了為什麼對比表中異常 API 會帶有 X-Powered-By: ASP.NET 和 X-Aspnet-Version — 這些都是後端的原始標頭被透傳出來的結果。
-修正方式根因找到後，修正方式很明確：不要直接回傳整個 Response 物件，改為只回傳 response.data。 這樣 Nitro 會重新封裝成乾淨的 JSON Response，由 Nuxt 統一處理壓縮，後端的 ASP.NET 標頭就不會外洩。
-修改前：
-export default defineLogAndAuthHandler(async (event) =&gt; &#123;  const query = getQuery(event);  const api = new GetMemberPriorityHistories();  const response = await api.memberGetMemberPriorityHistories(query);  return response; // 透傳整個物件，標頭外洩&#125;);
-
-修改後：
-export default defineLogAndAuthHandler(async (event) =&gt; &#123;  const query = getQuery(event);  const api = new GetMemberPriorityHistories();  const response = await api.memberGetMemberPriorityHistories(query);  return response.data; // 只回傳資料，Nitro 重新封裝 JSON&#125;);
-
-這個修正需要系統性地檢查所有 Server API Handler，只要有直接 return response 的地方都應該改為 return response.data，避免同樣的問題在其他 API 上重演。
-結論這個問題的根因不在後端、也不在前端元件，而是 Nuxt Server（Nitro）的 API Handler 直接透傳了後端 Response 物件。Node.js 在接收後端回應時已經解開了 gzip，但透傳卻把原始的 Content-Encoding: gzip 標頭一併帶給瀏覽器，導致瀏覽器嘗試二次解壓而失敗。
-排查這類問題的關鍵：對比正常與異常 API 的 Response Headers。當你發現某支 API 突然多了 X-Powered-By: ASP.NET 和 Content-Encoding: gzip，而其他 API 都沒有，很可能就是 Nitro 把後端的原始標頭透傳出來了。回去檢查 Server API Handler 的回傳值，把 return response 改成 return response.data 就能解決。
-]]></content>
-      <categories>
-        <category>Troubleshooting</category>
-      </categories>
-      <tags>
-        <tag>Debug</tag>
-        <tag>Nuxt3</tag>
-        <tag>Gzip</tag>
       </tags>
   </entry>
   <entry>
@@ -3297,6 +3435,90 @@ flowchart LR
         <tag>ELK</tag>
         <tag>Monitoring</tag>
         <tag>Elasticsearch</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄</title>
+    <url>/2026/03/10/ErrorContentDecoding/</url>
+    <content><![CDATA[前言之前在正式環境遇到一個棘手的問題：使用者回報某支 API 回傳 HTTP 200，瀏覽器卻直接噴出 ERR_CONTENT_DECODING_FAILED。當下排查了很久才發現問題出在 Response Header 中多了一個不該出現的 gzip，特別記錄一下整個排查過程。
+
+
+
+問題現象打開 DevTools 檢查異常 API 的 Response Headers，可以看到幾個關鍵資訊：
+
+Content-Encoding: gzip — 伺服器宣稱回傳內容經過 gzip 壓縮
+Transfer-Encoding: chunked — 資料以分段方式傳輸
+X-Powered-By: ASP.NET — 請求可能直接打到後端 .NET 伺服器，或經過了某層 Proxy 轉發
+
+問題核心：空 Body + gzip 標頭瀏覽器收到 Content-Encoding: gzip 後，會自動嘗試用 gzip 解碼器解壓內容。但實際上這支 API 的 Response Body 是空的（長度為 0），解碼器無法處理一個空的壓縮流，因此直接報出 ERR_CONTENT_DECODING_FAILED。
+為什麼 Body 會是空的？根據 Header 中的 X-Powered-By: ASP.NET，可能有兩種原因：
+
+後端程式異常中斷 — ASP.NET 拋出 Exception 後沒有回傳 500，而是直接結束了 Response，導致 Body 為空。
+查詢超時 — 後端資料庫查詢耗時過久，連線中斷，最終只傳回了 Headers 就結束了。
+
+關鍵線索：對比正常與異常的 API進一步對比同專案中兩支 API 的 Response Headers，差異一目了然：
+
+
+
+欄位
+異常 API
+正常 API
+
+
+
+Content-Encoding
+gzip
+(無)
+
+
+X-Powered-By
+ASP.NET
+(無)
+
+
+X-Aspnet-Version
+4.0.30319
+(無)
+
+
+正常的 API 回傳的 Headers 很乾淨，是經過 Nuxt BFF（Node.js）處理後回傳的；而異常的 API 卻直接暴露了 ASP.NET 的資訊。這代表：
+
+情況 A：這支 API 繞過了 Nuxt BFF，直接打到了後端 .NET 伺服器。
+情況 B：後端 .NET 伺服器強制啟動了 gzip 壓縮，但因資料量過大或超時導致傳輸中斷，最終變成「空 Body + gzip 標頭」的組合。
+
+真相：Nitro 透傳 Response 物件導致 gzip 標頭外洩後端伺服器其實沒有噴錯，它正常回傳了資料（只是內容為空陣列或空物件）。真正的問題出在 Nuxt Server（Nitro）端的 API Handler 寫法。
+檢查 Server 端程式碼後，發現異常的 API Handler 是這樣寫的：
+const response = await api.memberGetMemberPriorityHistories(query);return response; // 直接回傳整個 Response 物件
+
+這裡 api.memberGetMemberPriorityHistories() 回傳的是一個繼承自原生 Response 的物件。當直接 return response 時，Nitro 引擎會將其視為透傳（Proxy），把後端的所有原始標頭原封不動地轉發給瀏覽器。
+整個流程是這樣的：
+
+後端 ASP.NET 回傳帶有 Content-Encoding: gzip 的壓縮內容
+Nuxt Server（Node.js）在接收時已經自動解壓了 gzip 內容
+但因為直接 return response，Nitro 把後端的原始 Headers（包含 Content-Encoding: gzip）照搬給瀏覽器
+瀏覽器收到 Content-Encoding: gzip 標頭，嘗試解壓 Body —— 但 Body 早就被 Node.js 解壓過了，已經不是 gzip 格式
+解碼失敗，噴出 ERR_CONTENT_DECODING_FAILED
+
+簡單來說：gzip 被 Nuxt Server Side 解開了一次，但 gzip 標頭卻還在，瀏覽器又試圖解第二次，自然就失敗了。
+這也解釋了為什麼對比表中異常 API 會帶有 X-Powered-By: ASP.NET 和 X-Aspnet-Version — 這些都是後端的原始標頭被透傳出來的結果。
+修正方式根因找到後，修正方式很明確：不要直接回傳整個 Response 物件，改為只回傳 response.data。 這樣 Nitro 會重新封裝成乾淨的 JSON Response，由 Nuxt 統一處理壓縮，後端的 ASP.NET 標頭就不會外洩。
+修改前：
+export default defineLogAndAuthHandler(async (event) =&gt; &#123;  const query = getQuery(event);  const api = new GetMemberPriorityHistories();  const response = await api.memberGetMemberPriorityHistories(query);  return response; // 透傳整個物件，標頭外洩&#125;);
+
+修改後：
+export default defineLogAndAuthHandler(async (event) =&gt; &#123;  const query = getQuery(event);  const api = new GetMemberPriorityHistories();  const response = await api.memberGetMemberPriorityHistories(query);  return response.data; // 只回傳資料，Nitro 重新封裝 JSON&#125;);
+
+這個修正需要系統性地檢查所有 Server API Handler，只要有直接 return response 的地方都應該改為 return response.data，避免同樣的問題在其他 API 上重演。
+結論這個問題的根因不在後端、也不在前端元件，而是 Nuxt Server（Nitro）的 API Handler 直接透傳了後端 Response 物件。Node.js 在接收後端回應時已經解開了 gzip，但透傳卻把原始的 Content-Encoding: gzip 標頭一併帶給瀏覽器，導致瀏覽器嘗試二次解壓而失敗。
+排查這類問題的關鍵：對比正常與異常 API 的 Response Headers。當你發現某支 API 突然多了 X-Powered-By: ASP.NET 和 Content-Encoding: gzip，而其他 API 都沒有，很可能就是 Nitro 把後端的原始標頭透傳出來了。回去檢查 Server API Handler 的回傳值，把 return response 改成 return response.data 就能解決。
+]]></content>
+      <categories>
+        <category>Troubleshooting</category>
+      </categories>
+      <tags>
+        <tag>Debug</tag>
+        <tag>Nuxt3</tag>
+        <tag>Gzip</tag>
       </tags>
   </entry>
   <entry>
@@ -4785,227 +5007,10 @@ Cache 保護（API 端） — Redis 攔截高頻低變動資料，保護 DB
       <tags>
         <tag>Architecture</tag>
         <tag>MobileApp</tag>
-        <tag>Performance</tag>
         <tag>Redis</tag>
+        <tag>Performance</tag>
         <tag>Cache</tag>
         <tag>MessageHub</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Hangfire Multi-Queue 資源隔離：讓重量級 Job 不拖垮整個排程系統</title>
-    <url>/2026/04/21/MultiQueueResourceIsolation/</url>
-    <content><![CDATA[問題：重量級 Job 拖垮輕量 Job所有 Hangfire Job 都跑在同一個 Worker Pool 時，有一個隱藏的資源競爭問題。
-以本系統的 Job 分類為例：
-輕量 Job（毫秒~秒級）：
-
-Maintenance：查一個 API，存一個 key
-FaqContent：幾篇 FAQ 文章
-OTPValidationSetting：幾筆設定值
-
-重量 Job（秒~十幾秒）：
-
-CasinoCache：拉全部 Casino 遊戲清單（數千筆）+ Jackpot feed + 多語言轉換
-LiveCache：拉全部 Live Casino 遊戲 + 即時賠率 feed
-EsportsCache：拉 Esports 遊戲清單 + 賽事 feed
-
-如果 8 個 Worker 同時執行 CasinoCache、LiveCache、EsportsCache⋯⋯
-問題 1：SPI API Timeout  重量 Job 並行呼叫同一個 API，超過 API Rate Limit → Timeout  Hangfire 自動 Retry → 更多並行請求 → 更多 Timeout → 雪崩問題 2：輕量 Job 被餓死  8 個 Worker 全被重量 Job 佔用  Maintenance（3 分鐘更新一次）無法執行 → 快取過期
-
-
-解法：多 Queue + 獨立 Worker PoolHangfire 支援 Multi-Server + Multi-Queue 架構：每個 BackgroundJobServer 實例可以只監聽特定 Queue，並有自己獨立的 Worker 數量。
-flowchart TD
-    subgraph DS["Default Queue Server"]
-        D["Worker Count: ProcessorCount（e.g., 8）監聽 Queue: default處理：Maintenance / FaqContent / OTP / Country / ..."]
-    end
-    subgraph GS["Game Cache Queue Server"]
-        G["Worker Count: 1（序列執行）監聽 Queue: game-cache-queue處理：CasinoCache / LiveCache / EsportsCache / LottoCache"]
-    end
-
-重量 Job 被隔離到 game-cache-queue，獨立 1 個 Worker 序列執行，對外 API 的壓力從「N 個並行請求」降為「1 個串行請求」。輕量 Job 的 8 個 Worker 完全不受影響。
-
-設定驅動的 Multi-Queue（hangfire.json）Queue 設定完全由設定檔控制，不需要修改程式碼：
-&#123;  &quot;HangfireSetting&quot;: &#123;    &quot;SpecialQueues&quot;: [      &#123;        &quot;QueueName&quot;: &quot;game-cache-queue&quot;,        &quot;WorkerCount&quot;: 1      &#125;    ],    &quot;DefaultSpecialQueueWorkerCount&quot;: 1  &#125;&#125;
-
-未來新增一個 payment-queue 只需加一筆 JSON，完全不碰 C#。
-
-核心實作Worker Count 決策邏輯（HangfireSetting）public static int GetWorkerCountForQueue(string queueName)&#123;    // 優先查明確設定的特殊 Queue    var specialQueue = GetQueueByPattern(queueName);    if (specialQueue != null)        return specialQueue.WorkerCount;    // 名稱符合 -queue 後綴但沒有明確設定，使用預設值（通常為 1）    if (IsSpecialQueue(queueName))        return DefaultSpecialQueueWorkerCount;    // Default Queue：使用 CPU 核心數，充分利用硬體並行能力    return Environment.ProcessorCount;&#125;public static bool IsSpecialQueue(string queueName)&#123;    return queueName.EndsWith(&quot;-queue&quot;, StringComparison.OrdinalIgnoreCase);&#125;
-
-命名慣例：Queue 名稱以 -queue 結尾即為「特殊 Queue」，自動套用 Worker 限制。
-動態建立多個 BackgroundJobServer（ServiceCollectionExtension）public static IServiceCollection AddHangfireServices(this IServiceCollection services)&#123;    // 設定 Hangfire 使用 Redis 作為 Job Storage    services.AddHangfire((serviceProvider, config) =&gt;    &#123;        config.UseRedisStorage(            HangfireSetting.RedisConnectionString,            new RedisStorageOptions &#123; Prefix = HangfireSetting.PrefixKey &#125;        ).WithJobExpirationTimeout(TimeSpan.FromDays(1));    &#125;);    // 預設 Server（處理 default queue，Worker 數 = CPU 核心數）    services.AddHangfireServer();    // 為每個特殊 Queue 建立獨立 Server    var specialQueues = HangfireSetting.GetAllSpecialQueueNames();    foreach (var queueName in specialQueues)    &#123;        var workerCount = HangfireSetting.GetWorkerCountForQueue(queueName);        services.AddHangfireServer(options =&gt;        &#123;            options.Queues = new[] &#123; queueName &#125;;            options.WorkerCount = workerCount;            // Server 命名便於在 Hangfire Dashboard 辨識            options.ServerName = $&quot;&#123;queueName.Replace(&quot;-&quot;, &quot;&quot;).ToUpper()&#125;Server-&#123;Environment.MachineName&#125;&quot;;        &#125;);    &#125;    return services;&#125;
-
-ServerName 格式 GAMECACHEQUEUE Server-MYSERVER01 讓 Dashboard 一眼看出每個 Server 負責哪個 Queue。
-Job 指派到 Queue（appCacheSetting.json）&#123;  &quot;Name&quot;: &quot;CasinoCache&quot;,  &quot;CacheTime&quot;: &quot;10&quot;,  &quot;QueueName&quot;: &quot;game-cache-queue&quot;   ← 明確路由到特殊 Queue&#125;,&#123;  &quot;Name&quot;: &quot;Maintenance&quot;,  &quot;CacheTime&quot;: &quot;3&quot;  // QueueName 未設定，預設為 &quot;default&quot;&#125;
-
-CacheTimeSetting 的 QueueName 預設值為 &quot;default&quot;：
-public class CacheTimeSetting&#123;    public AppDataCacheNameEnum Name &#123; get; set; &#125;    public HangFireJobTimeEnum CacheTime &#123; get; set; &#125;    public string QueueName &#123; get; set; &#125; = &quot;default&quot;;  // 預設 default queue    // ...&#125;
-
-
-設定驗證（Fail Fast）Hangfire Server 建立時若 WorkerCount &lt;= 0 會在運行期才爆，很難 debug。把驗證移到啟動期：
-public void Validate()&#123;    if (DefaultSpecialQueueWorkerCount &lt;= 0)        throw new ArgumentException(&quot;DefaultSpecialQueueWorkerCount must be &gt; 0&quot;);    foreach (var queue in SpecialQueues ?? Enumerable.Empty&lt;SpecialQueueConfig&gt;())    &#123;        if (string.IsNullOrEmpty(queue.QueueName))            throw new ArgumentException(&quot;SpecialQueue QueueName cannot be empty&quot;);        if (queue.WorkerCount &lt;= 0)            throw new ArgumentException($&quot;Queue &#x27;&#123;queue.QueueName&#125;&#x27; WorkerCount must be &gt; 0&quot;);    &#125;&#125;
-
-設定錯誤 → 啟動失敗 → 明確錯誤訊息，不會等到 Job 執行時才無聲失敗。
-
-實戰：如何新增一支 Job 並指定 Queue以下用新增一支 SmsNotification Job 為例，完整走一次四個步驟。
-
-情境一：加入已有的 Queue（例如 game-cache-queue）只需改動 三個地方。
-
-Step 1 — 定義介面路徑：Application/Interfaces/ISmsNotificationJob.cs
-namespace Application.Interfaces&#123;    public interface ISmsNotificationJob    &#123;        Task DoJob();    &#125;&#125;
-
-
-命名規則固定為 I&#123;JobName&#125;Job，JobInitializeService 會用 Reflection 自動用這個名稱找到你的介面，名稱不符合就找不到。
-
-
-Step 2 — 實作 Job 類別路徑：Application/Jobs/SmsNotificationJob.cs
-namespace Application.Jobs&#123;    public class SmsNotificationJob : ISmsNotificationJob    &#123;        public async Task DoJob()        &#123;            // 實際業務邏輯        &#125;    &#125;&#125;
-
-
-Step 3 — 在 DI 容器註冊路徑：Application/DependencyInjection/ServiceCollectionExtension.cs
-在 AddApplicationServices() 裡加一行：
-// 找到其他 Job 的註冊行，在附近加入services.AddTransient&lt;ISmsNotificationJob, SmsNotificationJob&gt;();
-
-
-沒有這行的話，JobInitializeService 在 ValidateServiceRegistration() 階段就會拋錯，App 無法啟動。
-
-
-Step 4 — 在設定檔新增排程設定路徑：Presentation/webspi.frontend.cache/Configs/appCacheSetting.json
-&#123;  &quot;AppCacheSetting&quot;: &#123;    &quot;CacheTimeSettings&quot;: [      // ... 其他 Job ...      &#123;        &quot;Name&quot;: &quot;SmsNotification&quot;,        &quot;CacheTime&quot;: &quot;5&quot;,        &quot;QueueName&quot;: &quot;game-cache-queue&quot;      &#125;    ]  &#125;&#125;
-
-
-
-
-欄位
-說明
-
-
-
-Name
-必須和介面名稱 I&#123;Name&#125;Job 對應，大小寫一致
-
-
-CacheTime
-執行頻率（分鐘），對應 HangFireJobTimeEnum 的數值
-
-
-QueueName
-要路由到哪個 Queue；不填預設為 &quot;default&quot;
-
-
-完成。重啟 App 後 JobInitializeService 會自動在 Hangfire 掛上這支排程。
-
-情境二：新增一個全新的 Queue如果 game-cache-queue 的 Worker&#x3D;1 不適合你的需求（例如你需要 2 個 Worker），或你想把某類 Job 完全獨立出來，就需要建立新 Queue。
-在情境一的四個步驟之外，多加一個步驟：
-Step 0（額外）— 在 hangfire.json 宣告新 Queue路徑：Presentation/webspi.frontend.cache/Configs/hangfire.json
-&#123;  &quot;HangfireSetting&quot;: &#123;    &quot;SpecialQueues&quot;: [      &#123;        &quot;QueueName&quot;: &quot;game-cache-queue&quot;,        &quot;WorkerCount&quot;: 1      &#125;,      &#123;        &quot;QueueName&quot;: &quot;sms-queue&quot;,        &quot;WorkerCount&quot;: 2      &#125;    ]  &#125;&#125;
-
-加入後，ServiceCollectionExtension.AddHangfireServices() 會在啟動時自動為 sms-queue 建立一個獨立的 BackgroundJobServer，配置 2 個 Worker。
-然後 Step 4 的 appCacheSetting.json 把 QueueName 設為 &quot;sms-queue&quot; 即可：
-&#123;  &quot;Name&quot;: &quot;SmsNotification&quot;,  &quot;CacheTime&quot;: &quot;5&quot;,  &quot;QueueName&quot;: &quot;sms-queue&quot;&#125;
-
-
-命名慣例：Queue 名稱結尾要加 -queue（例如 sms-queue、payment-queue），HangfireSetting.IsSpecialQueue() 靠這個後綴來識別特殊 Queue。不符合慣例的 Queue 名稱會被視為 default queue，不會建立獨立 Server。
-
-
-新增 Job 的完整檔案清單
-
-
-情境
-需要改動的檔案
-
-
-
-加入已有 Queue
-① 新增 Interfaces/I&#123;Name&#125;Job.cs ② 新增 Jobs/&#123;Name&#125;Job.cs ③ DependencyInjection/ServiceCollectionExtension.cs ④ Configs/appCacheSetting.json
-
-
-新增全新 Queue
-同上，再加 ⑤ Configs/hangfire.json
-
-
-
-實際 Queue 分配一覽依據 appCacheSetting.json 的設定：
-
-
-
-Queue
-Job
-Worker 數
-執行模式
-
-
-
-default
-Maintenance, BankMaintenance, OTPValidation, FaqContent, PmsSetting, Affiliate, …
-ProcessorCount
-並行
-
-
-game-cache-queue
-EsportsCache, CasinoCache, LiveCache, LottoCache, PromoCache, VirtualCache, ChessCache
-1
-序列
-
-
-
-多實例部署的擴展方式當單台 Server 的 game-cache-queue 處理不過來（Job 積壓），不需要修改程式碼，只需部署第二台 Server 並讓它只監聽 game-cache-queue：
-Server A：default queue（8 workers）+ game-cache-queue（1 worker）Server B：game-cache-queue only（1 worker）
-
-兩台 Server 共享同一個 Redis Job Storage，Hangfire 自動做 Job 分配，game-cache-queue 的吞吐量翻倍。
-
-效益對比
-
-
-場景
-單一 Queue
-Multi-Queue
-
-
-
-重量 Job 執行中
-輕量 Job 被排隊等待
-輕量 Job 不受影響
-
-
-SPI API 並行壓力
-N 個 Worker 同時打 API
-Game Queue 序列，一次一個
-
-
-Job 積壓時的擴展
-加 Worker → 更多 API 壓力
-加 Game Server → 獨立擴展
-
-
-Queue 設定變更
-改程式碼 + 部署
-改 JSON + 重啟
-
-
-Dashboard 可見度
-所有 Job 混在一起
-各 Queue 分開監控
-
-
-
-小結Multi-Queue 架構的核心價值是資源隔離：不讓一類工作的資源消耗影響到另一類工作的 SLA。
-設計要點：
-
-以 -queue 後綴作為特殊 Queue 的命名慣例，便於自動識別
-每個特殊 Queue 對應獨立的 BackgroundJobServer，Worker 數可獨立設定
-設定驅動：新增 Queue 只需改 JSON，程式碼本身是通用的
-啟動期驗證：錯誤設定立即爆出，不等到執行期
-
-]]></content>
-      <categories>
-        <category>後端架構</category>
-      </categories>
-      <tags>
-        <tag>Architecture</tag>
-        <tag>CSharp</tag>
-        <tag>DotNet</tag>
-        <tag>Hangfire</tag>
-        <tag>Performance</tag>
-        <tag>Queue</tag>
       </tags>
   </entry>
   <entry>
@@ -5264,6 +5269,223 @@ const &#123; data, phoneNumber &#125; = storeToRefs(rootStore);const computedTim
       </tags>
   </entry>
   <entry>
+    <title>Hangfire Multi-Queue 資源隔離：讓重量級 Job 不拖垮整個排程系統</title>
+    <url>/2026/04/21/MultiQueueResourceIsolation/</url>
+    <content><![CDATA[問題：重量級 Job 拖垮輕量 Job所有 Hangfire Job 都跑在同一個 Worker Pool 時，有一個隱藏的資源競爭問題。
+以本系統的 Job 分類為例：
+輕量 Job（毫秒~秒級）：
+
+Maintenance：查一個 API，存一個 key
+FaqContent：幾篇 FAQ 文章
+OTPValidationSetting：幾筆設定值
+
+重量 Job（秒~十幾秒）：
+
+CasinoCache：拉全部 Casino 遊戲清單（數千筆）+ Jackpot feed + 多語言轉換
+LiveCache：拉全部 Live Casino 遊戲 + 即時賠率 feed
+EsportsCache：拉 Esports 遊戲清單 + 賽事 feed
+
+如果 8 個 Worker 同時執行 CasinoCache、LiveCache、EsportsCache⋯⋯
+問題 1：SPI API Timeout  重量 Job 並行呼叫同一個 API，超過 API Rate Limit → Timeout  Hangfire 自動 Retry → 更多並行請求 → 更多 Timeout → 雪崩問題 2：輕量 Job 被餓死  8 個 Worker 全被重量 Job 佔用  Maintenance（3 分鐘更新一次）無法執行 → 快取過期
+
+
+解法：多 Queue + 獨立 Worker PoolHangfire 支援 Multi-Server + Multi-Queue 架構：每個 BackgroundJobServer 實例可以只監聽特定 Queue，並有自己獨立的 Worker 數量。
+flowchart TD
+    subgraph DS["Default Queue Server"]
+        D["Worker Count: ProcessorCount（e.g., 8）監聽 Queue: default處理：Maintenance / FaqContent / OTP / Country / ..."]
+    end
+    subgraph GS["Game Cache Queue Server"]
+        G["Worker Count: 1（序列執行）監聽 Queue: game-cache-queue處理：CasinoCache / LiveCache / EsportsCache / LottoCache"]
+    end
+
+重量 Job 被隔離到 game-cache-queue，獨立 1 個 Worker 序列執行，對外 API 的壓力從「N 個並行請求」降為「1 個串行請求」。輕量 Job 的 8 個 Worker 完全不受影響。
+
+設定驅動的 Multi-Queue（hangfire.json）Queue 設定完全由設定檔控制，不需要修改程式碼：
+&#123;  &quot;HangfireSetting&quot;: &#123;    &quot;SpecialQueues&quot;: [      &#123;        &quot;QueueName&quot;: &quot;game-cache-queue&quot;,        &quot;WorkerCount&quot;: 1      &#125;    ],    &quot;DefaultSpecialQueueWorkerCount&quot;: 1  &#125;&#125;
+
+未來新增一個 payment-queue 只需加一筆 JSON，完全不碰 C#。
+
+核心實作Worker Count 決策邏輯（HangfireSetting）public static int GetWorkerCountForQueue(string queueName)&#123;    // 優先查明確設定的特殊 Queue    var specialQueue = GetQueueByPattern(queueName);    if (specialQueue != null)        return specialQueue.WorkerCount;    // 名稱符合 -queue 後綴但沒有明確設定，使用預設值（通常為 1）    if (IsSpecialQueue(queueName))        return DefaultSpecialQueueWorkerCount;    // Default Queue：使用 CPU 核心數，充分利用硬體並行能力    return Environment.ProcessorCount;&#125;public static bool IsSpecialQueue(string queueName)&#123;    return queueName.EndsWith(&quot;-queue&quot;, StringComparison.OrdinalIgnoreCase);&#125;
+
+命名慣例：Queue 名稱以 -queue 結尾即為「特殊 Queue」，自動套用 Worker 限制。
+動態建立多個 BackgroundJobServer（ServiceCollectionExtension）public static IServiceCollection AddHangfireServices(this IServiceCollection services)&#123;    // 設定 Hangfire 使用 Redis 作為 Job Storage    services.AddHangfire((serviceProvider, config) =&gt;    &#123;        config.UseRedisStorage(            HangfireSetting.RedisConnectionString,            new RedisStorageOptions &#123; Prefix = HangfireSetting.PrefixKey &#125;        ).WithJobExpirationTimeout(TimeSpan.FromDays(1));    &#125;);    // 預設 Server（處理 default queue，Worker 數 = CPU 核心數）    services.AddHangfireServer();    // 為每個特殊 Queue 建立獨立 Server    var specialQueues = HangfireSetting.GetAllSpecialQueueNames();    foreach (var queueName in specialQueues)    &#123;        var workerCount = HangfireSetting.GetWorkerCountForQueue(queueName);        services.AddHangfireServer(options =&gt;        &#123;            options.Queues = new[] &#123; queueName &#125;;            options.WorkerCount = workerCount;            // Server 命名便於在 Hangfire Dashboard 辨識            options.ServerName = $&quot;&#123;queueName.Replace(&quot;-&quot;, &quot;&quot;).ToUpper()&#125;Server-&#123;Environment.MachineName&#125;&quot;;        &#125;);    &#125;    return services;&#125;
+
+ServerName 格式 GAMECACHEQUEUE Server-MYSERVER01 讓 Dashboard 一眼看出每個 Server 負責哪個 Queue。
+Job 指派到 Queue（appCacheSetting.json）&#123;  &quot;Name&quot;: &quot;CasinoCache&quot;,  &quot;CacheTime&quot;: &quot;10&quot;,  &quot;QueueName&quot;: &quot;game-cache-queue&quot;   ← 明確路由到特殊 Queue&#125;,&#123;  &quot;Name&quot;: &quot;Maintenance&quot;,  &quot;CacheTime&quot;: &quot;3&quot;  // QueueName 未設定，預設為 &quot;default&quot;&#125;
+
+CacheTimeSetting 的 QueueName 預設值為 &quot;default&quot;：
+public class CacheTimeSetting&#123;    public AppDataCacheNameEnum Name &#123; get; set; &#125;    public HangFireJobTimeEnum CacheTime &#123; get; set; &#125;    public string QueueName &#123; get; set; &#125; = &quot;default&quot;;  // 預設 default queue    // ...&#125;
+
+
+設定驗證（Fail Fast）Hangfire Server 建立時若 WorkerCount &lt;= 0 會在運行期才爆，很難 debug。把驗證移到啟動期：
+public void Validate()&#123;    if (DefaultSpecialQueueWorkerCount &lt;= 0)        throw new ArgumentException(&quot;DefaultSpecialQueueWorkerCount must be &gt; 0&quot;);    foreach (var queue in SpecialQueues ?? Enumerable.Empty&lt;SpecialQueueConfig&gt;())    &#123;        if (string.IsNullOrEmpty(queue.QueueName))            throw new ArgumentException(&quot;SpecialQueue QueueName cannot be empty&quot;);        if (queue.WorkerCount &lt;= 0)            throw new ArgumentException($&quot;Queue &#x27;&#123;queue.QueueName&#125;&#x27; WorkerCount must be &gt; 0&quot;);    &#125;&#125;
+
+設定錯誤 → 啟動失敗 → 明確錯誤訊息，不會等到 Job 執行時才無聲失敗。
+
+實戰：如何新增一支 Job 並指定 Queue以下用新增一支 SmsNotification Job 為例，完整走一次四個步驟。
+
+情境一：加入已有的 Queue（例如 game-cache-queue）只需改動 三個地方。
+
+Step 1 — 定義介面路徑：Application/Interfaces/ISmsNotificationJob.cs
+namespace Application.Interfaces&#123;    public interface ISmsNotificationJob    &#123;        Task DoJob();    &#125;&#125;
+
+
+命名規則固定為 I&#123;JobName&#125;Job，JobInitializeService 會用 Reflection 自動用這個名稱找到你的介面，名稱不符合就找不到。
+
+
+Step 2 — 實作 Job 類別路徑：Application/Jobs/SmsNotificationJob.cs
+namespace Application.Jobs&#123;    public class SmsNotificationJob : ISmsNotificationJob    &#123;        public async Task DoJob()        &#123;            // 實際業務邏輯        &#125;    &#125;&#125;
+
+
+Step 3 — 在 DI 容器註冊路徑：Application/DependencyInjection/ServiceCollectionExtension.cs
+在 AddApplicationServices() 裡加一行：
+// 找到其他 Job 的註冊行，在附近加入services.AddTransient&lt;ISmsNotificationJob, SmsNotificationJob&gt;();
+
+
+沒有這行的話，JobInitializeService 在 ValidateServiceRegistration() 階段就會拋錯，App 無法啟動。
+
+
+Step 4 — 在設定檔新增排程設定路徑：Presentation/webspi.frontend.cache/Configs/appCacheSetting.json
+&#123;  &quot;AppCacheSetting&quot;: &#123;    &quot;CacheTimeSettings&quot;: [      // ... 其他 Job ...      &#123;        &quot;Name&quot;: &quot;SmsNotification&quot;,        &quot;CacheTime&quot;: &quot;5&quot;,        &quot;QueueName&quot;: &quot;game-cache-queue&quot;      &#125;    ]  &#125;&#125;
+
+
+
+
+欄位
+說明
+
+
+
+Name
+必須和介面名稱 I&#123;Name&#125;Job 對應，大小寫一致
+
+
+CacheTime
+執行頻率（分鐘），對應 HangFireJobTimeEnum 的數值
+
+
+QueueName
+要路由到哪個 Queue；不填預設為 &quot;default&quot;
+
+
+完成。重啟 App 後 JobInitializeService 會自動在 Hangfire 掛上這支排程。
+
+情境二：新增一個全新的 Queue如果 game-cache-queue 的 Worker&#x3D;1 不適合你的需求（例如你需要 2 個 Worker），或你想把某類 Job 完全獨立出來，就需要建立新 Queue。
+在情境一的四個步驟之外，多加一個步驟：
+Step 0（額外）— 在 hangfire.json 宣告新 Queue路徑：Presentation/webspi.frontend.cache/Configs/hangfire.json
+&#123;  &quot;HangfireSetting&quot;: &#123;    &quot;SpecialQueues&quot;: [      &#123;        &quot;QueueName&quot;: &quot;game-cache-queue&quot;,        &quot;WorkerCount&quot;: 1      &#125;,      &#123;        &quot;QueueName&quot;: &quot;sms-queue&quot;,        &quot;WorkerCount&quot;: 2      &#125;    ]  &#125;&#125;
+
+加入後，ServiceCollectionExtension.AddHangfireServices() 會在啟動時自動為 sms-queue 建立一個獨立的 BackgroundJobServer，配置 2 個 Worker。
+然後 Step 4 的 appCacheSetting.json 把 QueueName 設為 &quot;sms-queue&quot; 即可：
+&#123;  &quot;Name&quot;: &quot;SmsNotification&quot;,  &quot;CacheTime&quot;: &quot;5&quot;,  &quot;QueueName&quot;: &quot;sms-queue&quot;&#125;
+
+
+命名慣例：Queue 名稱結尾要加 -queue（例如 sms-queue、payment-queue），HangfireSetting.IsSpecialQueue() 靠這個後綴來識別特殊 Queue。不符合慣例的 Queue 名稱會被視為 default queue，不會建立獨立 Server。
+
+
+新增 Job 的完整檔案清單
+
+
+情境
+需要改動的檔案
+
+
+
+加入已有 Queue
+① 新增 Interfaces/I&#123;Name&#125;Job.cs ② 新增 Jobs/&#123;Name&#125;Job.cs ③ DependencyInjection/ServiceCollectionExtension.cs ④ Configs/appCacheSetting.json
+
+
+新增全新 Queue
+同上，再加 ⑤ Configs/hangfire.json
+
+
+
+實際 Queue 分配一覽依據 appCacheSetting.json 的設定：
+
+
+
+Queue
+Job
+Worker 數
+執行模式
+
+
+
+default
+Maintenance, BankMaintenance, OTPValidation, FaqContent, PmsSetting, Affiliate, …
+ProcessorCount
+並行
+
+
+game-cache-queue
+EsportsCache, CasinoCache, LiveCache, LottoCache, PromoCache, VirtualCache, ChessCache
+1
+序列
+
+
+
+多實例部署的擴展方式當單台 Server 的 game-cache-queue 處理不過來（Job 積壓），不需要修改程式碼，只需部署第二台 Server 並讓它只監聽 game-cache-queue：
+Server A：default queue（8 workers）+ game-cache-queue（1 worker）Server B：game-cache-queue only（1 worker）
+
+兩台 Server 共享同一個 Redis Job Storage，Hangfire 自動做 Job 分配，game-cache-queue 的吞吐量翻倍。
+
+效益對比
+
+
+場景
+單一 Queue
+Multi-Queue
+
+
+
+重量 Job 執行中
+輕量 Job 被排隊等待
+輕量 Job 不受影響
+
+
+SPI API 並行壓力
+N 個 Worker 同時打 API
+Game Queue 序列，一次一個
+
+
+Job 積壓時的擴展
+加 Worker → 更多 API 壓力
+加 Game Server → 獨立擴展
+
+
+Queue 設定變更
+改程式碼 + 部署
+改 JSON + 重啟
+
+
+Dashboard 可見度
+所有 Job 混在一起
+各 Queue 分開監控
+
+
+
+小結Multi-Queue 架構的核心價值是資源隔離：不讓一類工作的資源消耗影響到另一類工作的 SLA。
+設計要點：
+
+以 -queue 後綴作為特殊 Queue 的命名慣例，便於自動識別
+每個特殊 Queue 對應獨立的 BackgroundJobServer，Worker 數可獨立設定
+設定驅動：新增 Queue 只需改 JSON，程式碼本身是通用的
+啟動期驗證：錯誤設定立即爆出，不等到執行期
+
+]]></content>
+      <categories>
+        <category>後端架構</category>
+      </categories>
+      <tags>
+        <tag>Architecture</tag>
+        <tag>CSharp</tag>
+        <tag>DotNet</tag>
+        <tag>Hangfire</tag>
+        <tag>Performance</tag>
+        <tag>Queue</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Pre Commit ESLint Local Rules</title>
     <url>/2022/07/19/PreCommitLocalRules/</url>
     <content><![CDATA[我們在開發專案的時候，為了程式碼的品質 通常會用各種輔助工具幫助我們檢查（例如： ESLint, Formater, Testing …)
@@ -5437,6 +5659,45 @@ Sogou web spider&#x2F;4.0(+http://www.sogou.com/docs/help/webmasters.htm#07)
         <tag>SEO</tag>
         <tag>Prerender</tag>
         <tag>Asp.net</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>iOS Safari Handle Elastic Scroll</title>
+    <url>/2023/03/28/PreventElasticScroll/</url>
+    <content><![CDATA[先說明這個問題主要是 通常在滾動頁面的時候 會有兩個需求
+
+往下滑動就要隱藏 Header
+
+開始上滑就要顯示 Header
+
+
+
+
+但是問題來了，iOS 有一個橡皮筋的功能叫做 Elastic Scroll ，他會造成你滑動到最上方以後 會再反彈
+如果沒有寫好的話，明明就滑動到最上方還是隱藏 Header (明明 Chrome 跟其他瀏覽器不會)….
+為了兼容這個問題 我們以 Vue Use 為例子做一個範例
+裡面其實只有 directions 跟 y 最重要
+因為我們判斷它是否為回彈事件為 判斷他 nextY &#x3D;&#x3D;&#x3D;0 代表他就在最上方
+不用管他是什麼事件，這樣就可以解決了
+這裡說明一下 為什麼使用這方法而不用 touchmove preventDefault 是因為 有可能舊版本的 safari 沒有這個 event…也不想要考慮太多相容性 就先保留這個行為 但是讓結果相同
+import &#123; useScroll &#125; from &#x27;@vueuse/core&#x27;;import &#123; ref, computed, toRefs, watch &#125; from &#x27;vue&#x27;;export default function useHeader() &#123;  const showHeader = ref(true);  const winComputedRef = computed(() =&gt; window);  const &#123; arrivedState, y, directions &#125; = useScroll(winComputedRef);  const &#123; top: toTop, bottom: toBottom &#125; = toRefs(directions);  const &#123; top: topArrived &#125; = toRefs(arrivedState);  watch([toBottom, y], ([toBottomNewValue, nextY]) =&gt; &#123;    //nextY to prevent iOS safari elastic scrolling    if (toBottomNewValue &amp;&amp; nextY !== 0) &#123;      showHeader.value = false;    &#125; else if (nextY === 0) &#123;      showHeader.value = true;    &#125;  &#125;);  watch(    () =&gt; toTop.value,    (newValue) =&gt; &#123;      if (newValue) &#123;        showHeader.value = true;      &#125;    &#125;  );  return &#123;    showHeader,    topArrived,    toBottom,    toTop,    y,  &#125;;&#125;
+
+這個問題主要要考慮的是 iOS 以及 safari 版本不同 有可能有不同的事件 所以最好是找一個比較符合的解決方法
+其他解法(要確認使用者大部分 Device 在什麼版本)
+touchmove prevent
+
+使用 debounce 限制 scroll top 抓取事件 delay 50 ms 之類 然後判斷高度 可以使用 lodash.throttle 套件
+
+
+ReferenceVue Use
+]]></content>
+      <categories>
+        <category>Troubleshooting</category>
+      </categories>
+      <tags>
+        <tag>Vue</tag>
+        <tag>iOS</tag>
+        <tag>Safari</tag>
       </tags>
   </entry>
   <entry>
@@ -5633,45 +5894,6 @@ Block Key 分離計數與封鎖，讓被封鎖的請求以 O(1) 被攔截
         <tag>.NET</tag>
         <tag>Redis</tag>
         <tag>Rate Limiting</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>iOS Safari Handle Elastic Scroll</title>
-    <url>/2023/03/28/PreventElasticScroll/</url>
-    <content><![CDATA[先說明這個問題主要是 通常在滾動頁面的時候 會有兩個需求
-
-往下滑動就要隱藏 Header
-
-開始上滑就要顯示 Header
-
-
-
-
-但是問題來了，iOS 有一個橡皮筋的功能叫做 Elastic Scroll ，他會造成你滑動到最上方以後 會再反彈
-如果沒有寫好的話，明明就滑動到最上方還是隱藏 Header (明明 Chrome 跟其他瀏覽器不會)….
-為了兼容這個問題 我們以 Vue Use 為例子做一個範例
-裡面其實只有 directions 跟 y 最重要
-因為我們判斷它是否為回彈事件為 判斷他 nextY &#x3D;&#x3D;&#x3D;0 代表他就在最上方
-不用管他是什麼事件，這樣就可以解決了
-這裡說明一下 為什麼使用這方法而不用 touchmove preventDefault 是因為 有可能舊版本的 safari 沒有這個 event…也不想要考慮太多相容性 就先保留這個行為 但是讓結果相同
-import &#123; useScroll &#125; from &#x27;@vueuse/core&#x27;;import &#123; ref, computed, toRefs, watch &#125; from &#x27;vue&#x27;;export default function useHeader() &#123;  const showHeader = ref(true);  const winComputedRef = computed(() =&gt; window);  const &#123; arrivedState, y, directions &#125; = useScroll(winComputedRef);  const &#123; top: toTop, bottom: toBottom &#125; = toRefs(directions);  const &#123; top: topArrived &#125; = toRefs(arrivedState);  watch([toBottom, y], ([toBottomNewValue, nextY]) =&gt; &#123;    //nextY to prevent iOS safari elastic scrolling    if (toBottomNewValue &amp;&amp; nextY !== 0) &#123;      showHeader.value = false;    &#125; else if (nextY === 0) &#123;      showHeader.value = true;    &#125;  &#125;);  watch(    () =&gt; toTop.value,    (newValue) =&gt; &#123;      if (newValue) &#123;        showHeader.value = true;      &#125;    &#125;  );  return &#123;    showHeader,    topArrived,    toBottom,    toTop,    y,  &#125;;&#125;
-
-這個問題主要要考慮的是 iOS 以及 safari 版本不同 有可能有不同的事件 所以最好是找一個比較符合的解決方法
-其他解法(要確認使用者大部分 Device 在什麼版本)
-touchmove prevent
-
-使用 debounce 限制 scroll top 抓取事件 delay 50 ms 之類 然後判斷高度 可以使用 lodash.throttle 套件
-
-
-ReferenceVue Use
-]]></content>
-      <categories>
-        <category>Troubleshooting</category>
-      </categories>
-      <tags>
-        <tag>Vue</tag>
-        <tag>iOS</tag>
-        <tag>Safari</tag>
       </tags>
   </entry>
   <entry>
@@ -5937,6 +6159,183 @@ ConfigureAwait(false) — 避免 ASP.NET SynchronizationContext 死鎖
         <tag>.NET</tag>
         <tag>Redis</tag>
         <tag>Cache</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Responsible Gambling 後端防護設計：Self Exclusion / Time Out 不是前端按鈕</title>
+    <url>/2026/05/17/ResponsibleGamblingProtection/</url>
+    <content><![CDATA[前言Responsible Gambling 功能看起來像會員中心裡的一個設定頁：
+
+使用者選擇 Self Exclusion
+使用者選擇 Time Out
+系統顯示限制期間
+
+但從後端角度看，這不是一般的 profile setting。
+它牽涉到：
+
+帳號狀態更新
+Session cache 更新
+其他平台踢出
+頁面權限限制
+通知會員與 risk team
+Product &#x2F; Deposit &#x2F; Promotion 類頁面的存取限制
+
+因此 Responsible Gambling 不能只靠前端 UI 隱藏，必須由後端狀態與權限管線共同保護。
+
+
+相關檔案src/AgileBet.Cash.Portal.BLL/ResponsibleGamingManager.cssrc/AgileBet.Cash.Portal.Web/BLL/WebAccountManager.cssrc/AgileBet.Cash.Portal.BLL/AccountManager.cssrc/AgileBet.Cash.Portal.Web/MvcActionFilter/ResponsibleGamblingCheckerActionFilter.cssrc/AgileBet.Cash.Portal.Web/Utilities/UserPagePermissionChecker.cssrc/AgileBet.Cash.Portal.Model/MyAccount/ResponsibleGamblingSetting.cs
+
+兩種核心狀態Model 層有共同 base：
+public interface IResponsibleGamblingBase&#123;    double ExpiredDate &#123; get; &#125;    int Period &#123; get; set; &#125;    double AppliedDate &#123; get; &#125;    DateTime ExpiredDateTime &#123; get; set; &#125;    DateTime AppliedDateTime &#123; get; set; &#125;&#125;
+
+Time Out：
+public class TimeOutSetting : ResponsibleGamblingBase&#123;    [DataMember(Name = &quot;method&quot;)]    public RemovalMethod TimeOutMethod &#123; get; set; &#125;&#125;
+
+Self Exclusion：
+public class SelfExclusionSetting : ResponsibleGamblingBase&#123;    [DataMember(Name = &quot;endDate&quot;)]    public double RemoveEndDate =&gt;        this.SelfExclusionEndDateTime.ToJsMilliseconds();    [IgnoreDataMember]    public DateTime SelfExclusionEndDateTime &#123; get; set; &#125;&#125;
+
+兩者都包含三個核心欄位：
+
+applied date
+expired date
+period
+
+Self Exclusion 則額外保留 remove request date，用來處理解除申請與到期判斷。
+從 DTO 轉成前端設定ResponsibleGamingManager 會根據 UserDto 與 UserRestrictionDto 組出設定：
+public static SelfExclusionSetting GetSelfExclusionSettingByDto(    UserDto userDto,    UserRestrictionDto userRestrictionDto)&#123;    var setting = new SelfExclusionSetting();    if (userDto.SelfExclusion || userDto.PermanentSelfExclusion)    &#123;        setting.AppliedDateTime =            userRestrictionDto.MEMBERSELFEXCLUSIONLASTDATE;        setting.ExpiredDateTime = userDto.PermanentSelfExclusion            ? new DateTime(9999, 12, 30)            : userRestrictionDto.UpliftDate;        setting.Period = userDto.PermanentSelfExclusion            ? (int)SelfExclusionStatus.Permanent            : userRestrictionDto.SelfExcludeByMonth;        setting.SelfExclusionEndDateTime =            userRestrictionDto.SelfExclusionRemoveRequestDate != null                ? userRestrictionDto.UpliftDate                : DateTime.MinValue;    &#125;    return setting;&#125;
+
+永久 Self Exclusion 使用 9999-12-30 表示沒有正常 expiry。
+Time Out：
+public static TimeOutSetting GetTimeOutSettingByDto(    UserDto userDto,    UserRestrictionDto userRestrictionDto)&#123;    var setting = new TimeOutSetting();    if (userDto.Timeout)    &#123;        setting.AppliedDateTime =            userRestrictionDto.SEVENDAYCOOLINGPERIODLASTDATE;        setting.ExpiredDateTime =            userRestrictionDto.TimeoutUpliftedDate ?? DateTime.MinValue;        setting.Period = userRestrictionDto.SelfExcludeByMonth;        setting.TimeOutMethod =            (RemovalMethod)Enum.Parse(typeof(RemovalMethod),                userRestrictionDto.RemovalMethod.ToString());    &#125;    return setting;&#125;
+
+SetSelfExclusion 流程WebAccountManager.SetSelfExclusion 做了很多事，不只是呼叫 API。
+第一步，如果目前已在 exclusion 且尚未過期，直接擋掉：
+if (trading.SelfExclusion &amp;&amp;    DateTime.Now.ToJsMilliseconds() &lt;    trading.ExclusionExpiredDate.ToJsMilliseconds())&#123;    internalResponse.ReturnCode =        ResponsibleGamblingEnum.UnderExclusionOrTimeout;    result.Response = (int)internalResponse.ReturnCode;    return result;&#125;
+
+第二步，呼叫 Customer SPI：
+var model = new SelfExclusionInternalRequestModel()&#123;    IpAddress = trading.ClientIP,    Period = (int)setting.SelfExclusionPeriod,    AccountId = trading.AccountID,&#125;;internalResponse = AccountManager.UpdateSelfExclusion(    model,    trading.MemberCode,    trading.AppId);
+
+第三步，成功後更新目前 session 的 trading 狀態：
+trading.ExclusionExpiredDate = internalResponse.ResponseData.UpliftedDate;trading.ExclusionAppliedDate = internalResponse.ResponseData.AppliedDate;trading.ExclusionPeriod = (int)setting.SelfExclusionPeriod;trading.SelfExclusion = true;trading.IsExcluded = true;trading.SessionUpdateTime = DateTime.MinValue;
+
+第四步，更新 Redis TradingSession cache：
+CacheLayerManager.UpdateData&lt;TradingSessionCache&gt;(    CacheName.TradingSession,    trading.AccountID.ToString(),    trading);
+
+第五步，寄信給會員與 risk team：
+MsgHubManager.SendSelfExcludeMessage(    exclusionStatus,    trading,    profile,    trading.ExclusionAppliedDate,    trading.ExclusionExpiredDate);MsgHubManager.SendSelfExcludeRiskMessage(    setting.EnglishPeriodMessage,    trading,    profile);
+
+SetTimeOut 流程Time Out 類似，但狀態欄位不同：
+var model = new TimeOutInternalRequestModel()&#123;    IpAddress = trading.ClientIP,    Period = (int)setting.TimeOutPeriod,    AccountId = trading.AccountID,    RemovalMethod = (int)RemovalMethod.Auto&#125;;result = AccountManager.UpdateTimeOut(    model,    trading.MemberCode,    trading.AppId);
+
+成功後：
+trading.TimeOutMethod = RemovalMethod.Auto;trading.IsTimeOut = true;trading.IsExcluded = true;trading.ExclusionAppliedDate = result.ResponseData.AppliedDate;trading.ExclusionExpiredDate = result.ResponseData.UpliftedDate;trading.SessionUpdateTime = DateTime.MinValue;trading.ExclusionPeriod = (int)setting.TimeOutPeriod;CacheLayerManager.UpdateData&lt;TradingSessionCache&gt;(    CacheName.TradingSession,    trading.AccountID.ToString(),    trading);
+
+通知：
+MsgHubManager.SendTimeoutMessage(    timeOutInDay,    setting.TimeOutPeriod,    trading,    profile);MsgHubManager.SendTimeoutRiskMessage(    setting.EnglishPeriodMessage,    trading,    profile);
+
+Customer SPI 更新AccountManager.UpdateSelfExclusion 會呼叫 customerSpi：
+var updateSelfExclusionUrl = customerSpi.url +    customerSpi.AppSettings        ?.FirstOrDefault(appSetting =&gt;            appSetting.Key == &quot;SetSelfExclusion&quot;).Value;result = RequestUtil.SendRequest&lt;SelfExclusionInternalResponseModel&gt;(    updateSelfExclusionUrl,    &quot;POST&quot;,    JsonConvert.SerializeObject(model),    &quot;application/json&quot;);
+
+成功時會觸發 AccountState：
+if (result.ReturnCode == ResponsibleGamblingEnum.Success)&#123;    AccountStateManager.ChangeAllChannelAccountState(        memberCode,        model.AccountId,        Status.Invalidate,        ActionRemark.SelfExclusion,        appId);&#125;
+
+Time Out 也是類似：
+if (result.ReturnCode == ResponsibleGamblingEnum.Success)&#123;    AccountStateManager.ChangeAllChannelAccountState(        memberCode,        model.AccountId,        Status.Invalidate,        ActionRemark.TimeOut,        appId);&#125;
+
+這代表 Responsible Gambling 狀態不是只改目前 session，而是要讓其他 channel 都被標記失效。
+失敗時的補償動作WebAccountManager 有一個暫時解法：
+if (internalResponse.ReturnCode == ResponsibleGamblingEnum.GeneralError)&#123;    ForReloadAndKickOutOtherPlatform(trading);&#125;
+
+補償邏輯：
+private static void ForReloadAndKickOutOtherPlatform(Trading trading)&#123;    trading.SessionUpdateTime = DateTime.MinValue;    CacheLayerManager.UpdateData&lt;TradingSessionCache&gt;(        CacheName.TradingSession,        trading.AccountID.ToString(),        trading);    AccountStateManager.ClearAccountStateOtherChannelAsync(        trading.AppId,        trading.AccountID,        trading.MemberCode);&#125;
+
+即使 SPI 回 general error，也會強制目前 cache reload，並踢掉其他平台，降低狀態不一致風險。
+頁面防護：ResponsibleGamblingCheckerActionFilterMVC 頁面層有 filter：
+public override void OnActionExecuting(ActionExecutingContext filterContext)&#123;    var session = DependencyResolver.Current.GetService&lt;SessionData&gt;();    var permissionChecker =        DependencyResolver.Current.GetService&lt;UserPagePermissionChecker&gt;();    bool isForbidden = permissionChecker.IsInDisallowPath(        session,        disallowRgStatus,        HttpContext.Current.Request.Url.AbsolutePath,        byPassPathChecker);    if (isForbidden)        filterContext.Result = new RedirectResult(            $&quot;~/&#123;session.Trading.PreferData.Languages&#125;/forbidden?type=limit-access&quot;);&#125;
+
+API PageGuard 裡也會使用同一個 UserPagePermissionChecker。
+Block Path 設計UserPagePermissionChecker 會根據 RGType 建立 blocking list：
+blockingList.Add(RGType.TimeOut, BlockPaths);blockingList.Add(RGType.SelfExclusion, BlockPaths);blockingList.Add(RGType.PermanentExclusion, BlockPaths);
+
+Block paths：
+private static readonly List&lt;PathModel&gt; BlockPaths =    new List&lt;PathModel&gt;()&#123;    new PathModel() &#123; pathRegex = &quot;^/[a-z]&#123;2&#125;-[a-z]&#123;2&#125;/overlay$&quot; &#125;,    new PathModel() &#123; pathRegex = &quot;^/[a-z]&#123;2&#125;-[a-z]&#123;2&#125;/news&quot; &#125;,    new PathModel() &#123; pathRegex = &quot;^/[a-z]&#123;2&#125;-[a-z]&#123;2&#125;/rules&quot; &#125;,    new PathModel() &#123; pathRegex = &quot;^/[a-z]&#123;2&#125;-[a-z]&#123;2&#125;/applications&quot; &#125;,    new PathModel() &#123; pathRegex = &quot;^/[a-z]&#123;2&#125;-[a-z]&#123;2&#125;/my-account/deposit&quot; &#125;,    new PathModel() &#123; pathRegex = &quot;^/[a-z]&#123;2&#125;-[a-z]&#123;2&#125;/my-account/settings&quot; &#125;,&#125;;
+
+判斷邏輯：
+if (session.Trading.IsExcluded)&#123;    foreach (var status in disallowRgStatus)    &#123;        bool isExcluded = GetIsExcludedByStatus(session.Trading, status);        if (isExcluded &amp;&amp;            (byPassPathChecker || IsInBlockList(status, destinationPath)))            return true;    &#125;&#125;
+
+byPassPathChecker 可以讓某些情境直接 block all path，不需要再看 block list。
+通知設計Self Exclusion 會員通知：
+var clientMessage = new ClientMessage()&#123;    EventName = &quot;tSelfExclusion&quot; +        GetSelfExclusionTemplateByPeriod((int)status),    Params = emailParams,    Region = trading.PreferData.RegionCode,    Language = profile.PreferLanguage,&#125;;MsgHubManagement.RequestMessagingToMember(    clientMessage,    trading.MemberCode);
+
+Risk team 通知：
+var clientMessage = new ClientMessage()&#123;    EventName = &quot;tSelfExclusionConfirmForRisk&quot;,    Params = emailParams,    Recipient = riskSender,&#125;;MsgHubManagement.RequestMessagingToUser(    clientMessage,    trading.MemberCode,    trading.AccountID);
+
+Time Out 也是同樣模式。
+這代表 Responsible Gambling 是一個跨 domain 流程：
+flowchart LR
+    SPI["Account SPI"]
+    Cache["Trading Cache"]
+    State["AccountState"]
+    Guard["PageGuard"]
+    Msg["MsgHub"]
+
+    SPI --> Cache
+    Cache --> State
+    State --> Guard
+    State --> Msg
+
+完整流程圖flowchart TD
+    Submit["User submitsSelf Exclusion / Time Out"]
+    Web["WebAccountManager"]
+    Spi["AccountManager calls Customer SPI"]
+    UpdateSession["Update Trading session fields"]
+    UpdateCache["Update TradingSession cache"]
+    ChangeState["ChangeAllChannelAccountState"]
+    SendMsg["Send member + risk messages"]
+    Compensate["Force cache reloadand kick out other platform"]
+
+    Submit --> Web
+    Web --> Spi
+    Spi -->|Success| UpdateSession
+    UpdateSession --> UpdateCache
+    UpdateCache --> ChangeState
+    ChangeState --> SendMsg
+    Spi -->|GeneralError| Compensate
+
+頁面防護：
+flowchart TD
+    Request["Next request"]
+    Guard["PageGuard / ResponsibleGamblingCheckerActionFilter"]
+    Checker["UserPagePermissionChecker"]
+    Pass["Pass"]
+    Block["403 或 redirect forbidden"]
+
+    Request --> Guard
+    Guard --> Checker
+    Checker -->|allowed path| Pass
+    Checker -->|blocked path| Block
+
+小結Responsible Gambling 在後端不該被當成普通會員設定，它是一個安全與合規管線。
+這套設計值得借鑑的地方：
+
+SPI 更新成功後同步 Trading cache
+AccountState 讓其他 Channel 失效
+PageGuard &#x2F; ActionFilter 在後端攔截限制頁
+Notification &#x2F; MsgHub 同步通知會員與 risk team
+Self Exclusion &#x2F; Time Out 共用基底模型，但保留各自差異
+失敗情境仍做 cache reload 與其他平台 kickout，避免狀態漂移
+
+一句話總結：Responsible Gambling 的核心不是「使用者不能看到某些按鈕」，而是「整個系統都要承認這個狀態，並在所有入口強制執行」。
+]]></content>
+      <categories>
+        <category>後端架構</category>
+      </categories>
+      <tags>
+        <tag>Architecture</tag>
+        <tag>Security</tag>
+        <tag>ASP.NET</tag>
+        <tag>Session</tag>
+        <tag>Responsible Gambling</tag>
       </tags>
   </entry>
   <entry>
@@ -6439,132 +6838,6 @@ DemoSourceCode
       </tags>
   </entry>
   <entry>
-    <title>TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</title>
-    <url>/2026/03/15/VueDialogQueue/</url>
-    <content><![CDATA[前言在平台系統中，操作過程經常同時觸發多個彈窗——HTTP 錯誤、銀行維護提示、KYC 驗證結果、交易確認等。如果各元件各自管理 v-model，多個 overlay 會同時疊加在畫面上，不僅使用者體驗混亂，對開發者來說也極度難以維護。
-我們需要一個統一的 Dialog 管理機制：所有需要彈窗的地方都不自己開 Dialog，而是把「要顯示什麼」丟進佇列，由一個元件依序一個一個渲染。
-
-
-
-
-
-架構總覽flowchart LR
-    subgraph Callers ["呼叫端（散佈各處）"]
-        C1["composable"]
-        C2["Pinia store"]
-        C3["Vue component"]
-        C4["router guard"]
-    end
-    subgraph Store ["dialog-queue store"]
-        OQ["optionQueueFIFO Array"]
-        ST["visible / payload / settingreactive state"]
-    end
-    subgraph UI ["TheDialogQueue.vue"]
-        SD["SDialog統一渲染"]
-    end
-    C1 -->|"queue(payload, setting)"| OQ
-    C2 -->|"queue(payload, setting)"| OQ
-    C3 -->|"queue(payload, setting)"| OQ
-    C4 -->|"queue(payload, setting)"| OQ
-    OQ -->|"open(): 取第一個"| ST
-    ST -->|"storeToRefs 綁定"| SD
-    SD -->|"用戶操作 → close()"| OQ
-
-涉及檔案：
-
-
-
-檔案
-路徑
-職責
-
-
-
-Store
-stores/dialog-queue.ts
-佇列資料管理
-
-
-UI
-components/utilities/TheDialogQueue.vue
-統一渲染
-
-
-Types
-typings/dialog-queue.ts
-型別定義
-
-
-Store 運作機制資料結構interface Option &#123;  payload: Payload;  setting: Setting;&#125;interface Payload &#123;  title: string;  msg: string;                              // 支援 HTML（經 v-sanitize）  type?: &#x27;success&#x27; | &#x27;fail&#x27; | &#x27;reject&#x27;;    // 對應不同圖示  buttons?: Button[];  closeAction?: () =&gt; void;                 // overlay 關閉時的 callback&#125;interface Setting &#123;  titleAlign?: &#x27;left&#x27; | &#x27;center&#x27; | &#x27;right&#x27;;  buttonAlign?: &#x27;left&#x27; | &#x27;center&#x27; | &#x27;right&#x27; | &#x27;stacked-left&#x27; | &#x27;stacked-center&#x27; | &#x27;stacked-right&#x27;;  contentAlign?: &#x27;left&#x27; | &#x27;center&#x27; | &#x27;right&#x27;;  persistent?: boolean;                     // 禁止點 overlay 關閉  beforeClose?: number;                     // 自動關閉倒數（毫秒）  showClose?: boolean;                      // 右上角 X 按鈕  titleAtTop?: boolean;                     // 標題在圖示上方 or 下方&#125;
-
-Payload 管「顯示什麼」，Setting 管「怎麼顯示」，呼叫端不需要知道 UI 實作細節。
-佇列流程sequenceDiagram
-    participant Caller as 呼叫端
-    participant Store as dialog-queue store
-    participant Vue as TheDialogQueue.vue
-    Caller->>Store: queue(payload, setting)
-    Store->>Store: fillUpWithDefault() 補齊預設值
-    Store->>Store: optionQueue.push(option)
-    Store->>Store: open()
-    Note over Store: 取 optionQueue[0]設給 payload / settingvisible = true
-    Store-->>Vue: storeToRefs 響應式更新
-    Vue->>Vue: SDialog 顯示
-    Note over Vue: 用戶點擊按鈕
-    Vue->>Store: close()
-    Store->>Store: 執行 payload.closeAction()（如有）
-    Store->>Store: optionQueue.shift()
-    Note over Store: setTimeout 20ms
-    Store->>Store: open()
-    alt 佇列還有下一個
-        Store-->>Vue: 顯示下一個彈窗
-    else 佇列空了
-        Store-->>Vue: visible = false，關閉
-    end
-
-關鍵設計細節20ms setTimeout
-close() 在 shift 掉當前項目後，等 20ms 才呼叫 open() 顯示下一個。這是為了讓 SDialog 的 fab-transition 離場動畫完成，再觸發下一個的進場動畫，避免兩個 transition 撞在一起。
-fillUpWithDefault()
-呼叫端可以只傳必要的欄位，其餘由預設值補齊：
-const defaultSetting: Setting = &#123;  titleAlign: &#x27;left&#x27;,  buttonAlign: &#x27;right&#x27;,  persistent: false,  showClose: false,  titleAtTop: true,&#125;;function fillUpWithDefault(option: Option) &#123;  return &#123;    payload: Object.assign(&#123;&#125;, defaultPayload, option.payload),    setting: Object.assign(&#123;&#125;, defaultSetting, option.setting),  &#125;;&#125;
-
-beforeClose 自動關閉
-open() 時如果 setting.beforeClose &gt; 0，會自動起一個 setTimeout，時間到了呼叫 close()：
-if (this.setting.beforeClose &amp;&amp; this.setting.beforeClose &gt; 0) &#123;  setTimeout(() =&gt; &#123; this.close(); &#125;, this.setting.beforeClose);&#125;
-
-UI 元件設計掛載位置TheDialogQueue 掛在 App.vue 根層級，與 router-view 平行，確保任何頁面都能顯示：
-&lt;router-view /&gt;&lt;TheDialogQueue /&gt;
-
-響應式綁定元件透過 storeToRefs 直接綁定 store state，store 更新時畫面自動響應：
-const dialogQueueStore = useDialogQueueStore();const &#123; visible, payload, setting &#125; = storeToRefs(dialogQueueStore);const &#123; close &#125; = dialogQueueStore;
-
-按鈕排版策略
-2 個以內：水平排列，對齊方式由 setting.buttonAlign 控制
-超過 2 個：強制垂直堆疊靠右
-
-多語系環境下按鈕文字長度差異很大，超過兩個水平排列容易破版。
-XSS 防護payload.msg 和按鈕文字 item.text 使用 v-sanitize 而非 v-html。部分內容來自後端回傳且帶有 HTML 格式化標籤，v-sanitize 可以允許安全的 HTML 同時過濾惡意腳本。
-瀏覽器上一頁處理useEventListener(window, &#x27;popstate&#x27;, () =&gt; &#123;  dialogQueueStore.clearQueue();&#125;);
-
-用戶按瀏覽器上一頁時直接清空整個佇列，避免前一頁觸發的彈窗殘留在新頁面上。
-使用範例基本用法import &#123; useDialogQueueStore &#125; from &#x27;@star/common/stores/dialog-queue&#x27;;const dialogQueueStore = useDialogQueueStore();dialogQueueStore.queue(&#123;  title: &#x27;操作成功&#x27;,  msg: &#x27;您的資料已更新&#x27;,  type: &#x27;success&#x27;,  buttons: [&#123; text: &#x27;確定&#x27;, type: &#x27;primary&#x27; &#125;],&#125;);
-
-帶 callback 的確認彈窗dialogQueueStore.queue(  &#123;    title: &#x27;確認提款&#x27;,    msg: `即將提款 &lt;b&gt;$&#123;amount&#125;&lt;/b&gt; 至您的銀行帳戶`,    buttons: [      &#123; text: &#x27;取消&#x27;, type: &#x27;text&#x27; &#125;,      &#123; text: &#x27;確認&#x27;, type: &#x27;primary&#x27;, action: () =&gt; submitWithdrawal() &#125;,    ],  &#125;,  &#123; persistent: true, buttonAlign: &#x27;right&#x27; &#125;,);
-
-自動消失的提示dialogQueueStore.queue(  &#123; title: &#x27;&#x27;, msg: &#x27;系統維護中，請稍後再試&#x27; &#125;,  &#123; beforeClose: 3000 &#125;,);
-
-結語這套機制的核心其實很簡單——一個 FIFO 陣列加上一個 Pinia Store。但它解決的問題很實際：在多模組、多非同步操作的平台中，讓所有彈窗都有秩序地排隊顯示，而不是互相覆蓋。
-呼叫端只需要一行 dialogQueueStore.queue()，不需要關心 Dialog 的 v-model、z-index、transition 動畫、還是同時有幾個彈窗在排隊。所有複雜度都被封裝在 Store 和 TheDialogQueue 元件裡。
-]]></content>
-      <categories>
-        <category>前端架構</category>
-      </categories>
-      <tags>
-        <tag>Vue.js</tag>
-        <tag>Architecture</tag>
-        <tag>Pinia</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計</title>
     <url>/2026/03/12/VueBroadCastImplement/</url>
     <content><![CDATA[前言在多分頁的 Web 應用中，跨 Tab 同步狀態是常見需求——例如閒置登出同步、Session 過期通知、T&amp;C 接受後其他 Tab 強制刷新等。瀏覽器原生的 BroadcastChannel API 是最直覺的方案，搭配 VueUse 的 useBroadcastChannel 封裝更是方便。
@@ -6899,6 +7172,390 @@ Handler 註冊機制 — 開放封閉原則，新功能不改舊程式碼
         <tag>Vue.js</tag>
         <tag>Architecture</tag>
         <tag>TypeScript</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Xuenn.Trigger.EventSPI — 透過 RabbitMQ Topic 清除 Cache 資料</title>
+    <url>/2026/04/01/TriggerEventSpiRabbitMqCache/</url>
+    <content><![CDATA[
+本文介紹 Xuenn.Trigger.EventSPI 這個早期的 Cache 清除機制：呼叫端（資料修改端）透過傳遞 account id 與 topic，通知此服務對 Redis 中相關的 CacheState key 執行失效處理。
+
+
+
+
+1. 背景與設計思路在早期系統設計中，Cache 的失效策略採用「事件通知 + 主動清除」的方式：
+
+資料修改完成後，呼叫端發送一個包含 account id 的 TopicMessage 到 RabbitMQ
+Topic 格式帶有事件類型（如 DPTransStatus、WDTransStatus），讓下游知道是哪類資料變動
+EventSPI 作為 Cache 清除的中間層，訂閱這些 Topic，依規則對 Redis 的 CacheState key 執行 ExpireKey
+
+這屬於間接清除的做法——呼叫端不需要知道哪些 Redis key 存在，由 EventSPI 統一管理對應關係。
+
+2. 系統架構總覽
+
+
+
+
+元件
+說明
+
+
+
+Caller Service
+資料修改端，發送 TopicMessage（含 account id）至 EventSPI
+
+
+EventSPI
+ASP.NET Web API，接收請求並 Publish 訊息至 RabbitMQ
+
+
+RabbitMQ
+Topic Exchange（MessageCentralDev），依 BindingKey 路由訊息
+
+
+AccountListener
+Consumer，訂閱 *.Account.* pattern，依 ConsumerRules 執行
+
+
+Redis Cache
+儲存 &#123;CacheName&#125;:&#123;accountId&#125;:CacheState key，失效後觸發 re-fetch
+
+
+
+3. Topic 命名規則與 Cache Key 對應
+
+3.1 Topic 格式&#123;EventType&#125;.Account.&#123;accountId&#125;
+
+範例：
+
+
+
+Topic
+意義
+
+
+
+DPTransStatus.Account.12345
+帳號 12345 的存款交易狀態變動
+
+
+WDTransStatus.Account.12345
+帳號 12345 的提款交易狀態變動
+
+
+KYCDocStatus.Account.12345
+帳號 12345 的 KYC 文件狀態變動
+
+
+MemberStatus.Account.12345
+帳號 12345 的會員狀態變動
+
+
+PromoStatus.Account.12345
+帳號 12345 的促銷狀態變動
+
+
+MemberLogout.Account.12345
+帳號 12345 登出
+
+
+3.2 TopicMessage 資料結構public class TopicMessage&#123;    public string Guid   &#123; get; set; &#125;  // 唯一識別碼（用於 log 追蹤）    public string Topic  &#123; get; set; &#125;  // e.g. &quot;DPTransStatus.Account.12345&quot;    public string Action &#123; get; set; &#125;  // 操作說明    public Dictionary&lt;string, string&gt; Data &#123; get; set; &#125;    // Data[&quot;key&quot;] = accountId，e.g. &quot;12345&quot;&#125;
+
+3.3 Redis Cache Key 格式&#123;CacheName&#125;:&#123;accountId&#125;:CacheState
+
+範例（對應不同 Topic）：
+PendingTransaction:12345:CacheStateDepositTransactions:12345:CacheStateWithdrawalTransactions:12345:CacheStateMemberStatus:12345:CacheStateStar4KYCVerification:12345:CacheStateMemberPromotions:12345:CacheStateTradingSession:12345:CacheState
+
+
+設計慣例：key 加上 :CacheState 後綴，表示這是快取狀態控制 key，CacheData 為實際資料 key（由其他服務管理）。
+
+
+4. 完整流程說明（Sequence Diagram）
+
+步驟說明
+
+
+步驟
+元件
+動作
+
+
+
+①
+Caller → EventSPI
+HTTP POST /api/messagecental，帶入 &#123; Topic, Action, Data: &#123;key: accountId&#125; &#125;
+
+
+②
+EventSPI → RabbitMQ
+MQService.EmitMessage() 將訊息 Publish 至 Topic Exchange
+
+
+③
+RabbitMQ → Consumer
+BindingKey *.Account.* 匹配，訊息投遞至 AccountListener Queue
+
+
+④
+Consumer 內部
+RuleService.RuleFilterTrigger() 依 TopicFilter Regex 比對規則
+
+
+⑤
+Consumer 內部
+RedLockFactory.CreateLockAsync() 取得分散式鎖（避免並發重複執行）
+
+
+⑥
+Consumer → Redis
+呼叫 RedisService.ExpireKey()
+
+
+⑦
+Redis 內部
+db.KeyExpire(key, TTL=0) → CacheState key 立即失效
+
+
+⑧
+Redis → Consumer
+回傳 true（key 存在已失效）或 false（key 不存在）
+
+
+⑨
+Consumer 內部
+log.Messages() 記錄操作結果
+
+
+
+5. 核心實作程式碼5.1 發送端 — MessageCentralController呼叫端透過此 API 傳入 TopicMessage：
+// Controllers/MessageCentralController.cs[HttpPost]public IHttpActionResult Post([FromBody] TopicMessage topicMessage)&#123;    mqService.EmitMessage&lt;TopicMessage&gt;(        ConfigUtility.AppSettings.GetProducer(&quot;MessageCentral&quot;),        topicMessage);    return Ok();&#125;
+
+5.2 MQService — 發佈到 RabbitMQ// Utility/MQService.cspublic void EmitMessage&lt;T&gt;(ProducerBinding producer, T messageObj)&#123;    using (var advancedBus = RabbitHutch.CreateBus(rabbitMqConnection).Advanced)    &#123;        var exchange = advancedBus.ExchangeDeclare(            producer.ExchangeName, producer.ExchangeType);        var message = JsonConvert.SerializeObject(messageObj);        var body = Encoding.UTF8.GetBytes(message);        advancedBus.Publish(exchange, producer.RoutingKey, false,            new MessageProperties &#123; DeliveryMode = 2 &#125;, body);    &#125;&#125;
+
+5.3 Consumer 啟動 — Global.asax.cs應用程式啟動時初始化 Consumer：
+// Global.asax.cs — SetUpConsumer()case &quot;AccountListener&quot;:    mqService.ConsumeMessage(consumer.Name, RuleService.RuleFilterTrigger);    break;default:    mqService.ConsumeMessage(consumer.Name, RedisService.ExpireKey);    break;
+
+5.4 RuleService — 規則比對與 Redis 操作// Utility/RuleService.cspublic static void RuleFilterTrigger(string consumerName, TopicMessage message)&#123;    var rules = ConfigUtility.AppSettings.GetConsumerRules(consumerName);    // 用 Regex 比對 Topic    var matchRules = rules        .Where(rule =&gt; new Regex(rule.TopicFilter).IsMatch(message.Topic))        .ToList();    matchRules.ForEach(rule =&gt; &#123;        switch (rule.Action)        &#123;            case RuleAction.ExpireRedisKey:                // &#123;0&#125; = message.Data[&quot;key&quot;]（account id）                var redisKeyPattern = string.Format(rule.KeyPatten, message.Data[&quot;key&quot;]);                RedisService.ExpireKey(                    RedisService.AccountCacheConn,                    redisKeyPattern,                    rule._ExpirySeconds);   // 0 = 立即失效                break;            case RuleAction.AddToRedis:                // 將資料寫入 Redis（如 VIP 等級資料）                RedisService.AddValueIntoRedis(RedisService.VIPDB,                    string.Format(rule.KeyPatten, message.Data[&quot;key&quot;]),                    JsonConvert.SerializeObject(message.Data),                    rule._ExpirySeconds);                break;        &#125;    &#125;);&#125;
+
+5.5 RedisService.ExpireKey — 實際清除// Utility/RedisService.cspublic static bool ExpireKey(string dbname, string key, int expirySeconds)&#123;    var db = GetDataBase(dbname);    if (db.KeyExists(key))    &#123;        db.KeyExpire(key, TimeSpan.FromSeconds(expirySeconds));        // expirySeconds = 0 → 立即失效（等同 KeyDelete）        return true;    &#125;    return false;&#125;
+
+
+6. 設定檔（AppSettings.config）所有 Consumer &#x2F; Producer &#x2F; Rule 的對應關係都定義在 Configuration/AppSettings.config：
+&lt;!-- RabbitMQ Consumer 訂閱設定 --&gt;&lt;ConsumerBinding Name=&quot;AccountListener&quot;    ExchangeName=&quot;MessageCentralDev&quot;    ExchangeType=&quot;topic&quot;    QueueName=&quot;AccountListener&quot;    BindingKey=&quot;*.Account.*&quot;    Count=&quot;4&quot; /&gt;&lt;!-- ConsumerRule 範例：存款狀態變動 → 清除多個相關 Cache key --&gt;&lt;ConsumerRuleBinding Name=&quot;AccountListener&quot;    TopicFilter=&quot;DPTransStatus.Account.*&quot;    Action=&quot;ExpireRedisKey&quot;    KeyPatten=&quot;PendingTransaction:&#123;0&#125;:CacheState&quot; /&gt;&lt;ConsumerRuleBinding Name=&quot;AccountListener&quot;    TopicFilter=&quot;DPTransStatus.Account.*&quot;    Action=&quot;ExpireRedisKey&quot;    KeyPatten=&quot;DepositTransactions:&#123;0&#125;:CacheState&quot; /&gt;&lt;!-- ExpiryTime 有值 = 設定 TTL 分鐘數；無值 = 立即失效 --&gt;&lt;ConsumerRuleBinding Name=&quot;AccountListener&quot;    TopicFilter=&quot;PromoStatus.Account.*&quot;    Action=&quot;ExpireRedisKey&quot;    KeyPatten=&quot;MemberPromotions:&#123;0&#125;:CacheState&quot;    ExpiryTime=&quot;1&quot; /&gt;
+
+
+Count&#x3D;”4” 表示同時啟動 4 個 Consumer 並行消費，提升處理吞吐量。
+
+
+7. 分散式鎖（RedLock）機制在 MQService.ConsumeMessage() 的直接清除路徑中，使用 RedLock 防止並發競爭：
+using (var redLock = RedisService.RedisLockFactory    .CreateLockAsync(        message.Data[&quot;key&quot;],    // lock key        TimeSpan.FromSeconds(3), // expiry        TimeSpan.FromSeconds(3), // wait        TimeSpan.FromSeconds(1)  // retry interval    ).Result)&#123;    if (!redLock.IsAcquired)    &#123;        // 取鎖失敗，記錄後放棄（訊息會被重新投遞）        log.Messages(..., $&quot;Retry to expire Key after 1 sec&quot;);        return;    &#125;    callback(RedisService.AccountCacheConn, message.Data[&quot;key&quot;], 0);&#125;
+
+
+8. 各 Topic 對應的 Cache Key 清除清單
+
+
+Topic (EventType)
+會被清除的 Cache Key Pattern
+
+
+
+DPTransStatus.Account.*
+PendingTransaction:&#123;id&#125;:CacheState、PaymentInfo:&#123;id&#125;:CacheState、DepositTransactions:&#123;id&#125;:CacheState
+
+
+WDTransStatus.Account.*
+PendingTransaction:&#123;id&#125;:CacheState、PaymentInfo:&#123;id&#125;:CacheState、WithdrawalTransactions:&#123;id&#125;:CacheState
+
+
+KYCDocStatus.Account.*
+Star4KYCVerification:&#123;id&#125;:CacheState、MemberStatus:&#123;id&#125;:CacheState、MemeberKYCDocsStatus:&#123;id&#125;:CacheState
+
+
+MemberStatus.Account.*
+MemberStatus:&#123;id&#125;:CacheState
+
+
+ProfileVerification.Account.*
+Star4KYCVerification:&#123;id&#125;:CacheState
+
+
+PromoStatus.Account.*
+MemberPromotions:&#123;id&#125;:CacheState (TTL 1min)、QualifyingPromotions:&#123;id&#125;:CacheState (TTL 1min)、PromotionClaims:&#123;id&#125;:CacheState、MemberRewards:&#123;id&#125;:CacheState
+
+
+MemberLogout.Account.*
+TradingSession:&#123;id&#125;:CacheState、ProfileSession:&#123;id&#125;:CacheState
+
+
+Notifications.Account.*
+多個 Notification 相關 key
+
+
+LoginProtection.Account.*
+SuspiciousLogin:ForgotAccount:&#123;id&#125;
+
+
+IpTraces.Account.*
+AddToRedis: Iptrace:&#123;id&#125;（TTL 43200 min）
+
+
+SignupComplete.Account.*
+Log + MemberStatus:&#123;id&#125;:CacheState
+
+
+PreferLanguage.Account.*
+PendingTransaction、KYC、Deposit&#x2F;Withdrawal、Promotion 等多個 key
+
+
+
+9. 這個設計的特點與限制優點
+呼叫端解耦：資料修改端只需傳送 accountId + topic，不需知道 Redis key 的命名細節
+彈性設定：新增&#x2F;修改 Cache 清除規則只需改 AppSettings.config，不需改程式碼
+集中管理：所有 Cache 失效邏輯集中在 EventSPI，容易追蹤
+
+限制（早期設計的取捨）
+Topic 僅攜帶 accountId（Data[&quot;key&quot;]），無法針對更細粒度的資料（如單筆交易 id）做精確清除
+以 CacheState key 間接觸發失效，實際 CacheData 由其他讀取服務自行重建，需搭配對應的 Cache 讀取機制
+Consumer 並發數固定在設定檔（Count），無動態擴縮能力
+
+
+此架構為早期設計，後續系統可考慮使用更精細的 Cache Tag &#x2F; Cache Dependency 機制取代 Topic+accountId 的粗粒度清除方式。
+]]></content>
+      <categories>
+        <category>後端架構</category>
+      </categories>
+      <tags>
+        <tag>.NET</tag>
+        <tag>Redis</tag>
+        <tag>RabbitMQ</tag>
+        <tag>Cache Invalidation</tag>
+        <tag>EventSPI</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制</title>
+    <url>/2026/03/15/VueDialogQueue/</url>
+    <content><![CDATA[前言在平台系統中，操作過程經常同時觸發多個彈窗——HTTP 錯誤、銀行維護提示、KYC 驗證結果、交易確認等。如果各元件各自管理 v-model，多個 overlay 會同時疊加在畫面上，不僅使用者體驗混亂，對開發者來說也極度難以維護。
+我們需要一個統一的 Dialog 管理機制：所有需要彈窗的地方都不自己開 Dialog，而是把「要顯示什麼」丟進佇列，由一個元件依序一個一個渲染。
+
+
+
+
+
+架構總覽flowchart LR
+    subgraph Callers ["呼叫端（散佈各處）"]
+        C1["composable"]
+        C2["Pinia store"]
+        C3["Vue component"]
+        C4["router guard"]
+    end
+    subgraph Store ["dialog-queue store"]
+        OQ["optionQueueFIFO Array"]
+        ST["visible / payload / settingreactive state"]
+    end
+    subgraph UI ["TheDialogQueue.vue"]
+        SD["SDialog統一渲染"]
+    end
+    C1 -->|"queue(payload, setting)"| OQ
+    C2 -->|"queue(payload, setting)"| OQ
+    C3 -->|"queue(payload, setting)"| OQ
+    C4 -->|"queue(payload, setting)"| OQ
+    OQ -->|"open(): 取第一個"| ST
+    ST -->|"storeToRefs 綁定"| SD
+    SD -->|"用戶操作 → close()"| OQ
+
+涉及檔案：
+
+
+
+檔案
+路徑
+職責
+
+
+
+Store
+stores/dialog-queue.ts
+佇列資料管理
+
+
+UI
+components/utilities/TheDialogQueue.vue
+統一渲染
+
+
+Types
+typings/dialog-queue.ts
+型別定義
+
+
+Store 運作機制資料結構interface Option &#123;  payload: Payload;  setting: Setting;&#125;interface Payload &#123;  title: string;  msg: string;                              // 支援 HTML（經 v-sanitize）  type?: &#x27;success&#x27; | &#x27;fail&#x27; | &#x27;reject&#x27;;    // 對應不同圖示  buttons?: Button[];  closeAction?: () =&gt; void;                 // overlay 關閉時的 callback&#125;interface Setting &#123;  titleAlign?: &#x27;left&#x27; | &#x27;center&#x27; | &#x27;right&#x27;;  buttonAlign?: &#x27;left&#x27; | &#x27;center&#x27; | &#x27;right&#x27; | &#x27;stacked-left&#x27; | &#x27;stacked-center&#x27; | &#x27;stacked-right&#x27;;  contentAlign?: &#x27;left&#x27; | &#x27;center&#x27; | &#x27;right&#x27;;  persistent?: boolean;                     // 禁止點 overlay 關閉  beforeClose?: number;                     // 自動關閉倒數（毫秒）  showClose?: boolean;                      // 右上角 X 按鈕  titleAtTop?: boolean;                     // 標題在圖示上方 or 下方&#125;
+
+Payload 管「顯示什麼」，Setting 管「怎麼顯示」，呼叫端不需要知道 UI 實作細節。
+佇列流程sequenceDiagram
+    participant Caller as 呼叫端
+    participant Store as dialog-queue store
+    participant Vue as TheDialogQueue.vue
+    Caller->>Store: queue(payload, setting)
+    Store->>Store: fillUpWithDefault() 補齊預設值
+    Store->>Store: optionQueue.push(option)
+    Store->>Store: open()
+    Note over Store: 取 optionQueue[0]設給 payload / settingvisible = true
+    Store-->>Vue: storeToRefs 響應式更新
+    Vue->>Vue: SDialog 顯示
+    Note over Vue: 用戶點擊按鈕
+    Vue->>Store: close()
+    Store->>Store: 執行 payload.closeAction()（如有）
+    Store->>Store: optionQueue.shift()
+    Note over Store: setTimeout 20ms
+    Store->>Store: open()
+    alt 佇列還有下一個
+        Store-->>Vue: 顯示下一個彈窗
+    else 佇列空了
+        Store-->>Vue: visible = false，關閉
+    end
+
+關鍵設計細節20ms setTimeout
+close() 在 shift 掉當前項目後，等 20ms 才呼叫 open() 顯示下一個。這是為了讓 SDialog 的 fab-transition 離場動畫完成，再觸發下一個的進場動畫，避免兩個 transition 撞在一起。
+fillUpWithDefault()
+呼叫端可以只傳必要的欄位，其餘由預設值補齊：
+const defaultSetting: Setting = &#123;  titleAlign: &#x27;left&#x27;,  buttonAlign: &#x27;right&#x27;,  persistent: false,  showClose: false,  titleAtTop: true,&#125;;function fillUpWithDefault(option: Option) &#123;  return &#123;    payload: Object.assign(&#123;&#125;, defaultPayload, option.payload),    setting: Object.assign(&#123;&#125;, defaultSetting, option.setting),  &#125;;&#125;
+
+beforeClose 自動關閉
+open() 時如果 setting.beforeClose &gt; 0，會自動起一個 setTimeout，時間到了呼叫 close()：
+if (this.setting.beforeClose &amp;&amp; this.setting.beforeClose &gt; 0) &#123;  setTimeout(() =&gt; &#123; this.close(); &#125;, this.setting.beforeClose);&#125;
+
+UI 元件設計掛載位置TheDialogQueue 掛在 App.vue 根層級，與 router-view 平行，確保任何頁面都能顯示：
+&lt;router-view /&gt;&lt;TheDialogQueue /&gt;
+
+響應式綁定元件透過 storeToRefs 直接綁定 store state，store 更新時畫面自動響應：
+const dialogQueueStore = useDialogQueueStore();const &#123; visible, payload, setting &#125; = storeToRefs(dialogQueueStore);const &#123; close &#125; = dialogQueueStore;
+
+按鈕排版策略
+2 個以內：水平排列，對齊方式由 setting.buttonAlign 控制
+超過 2 個：強制垂直堆疊靠右
+
+多語系環境下按鈕文字長度差異很大，超過兩個水平排列容易破版。
+XSS 防護payload.msg 和按鈕文字 item.text 使用 v-sanitize 而非 v-html。部分內容來自後端回傳且帶有 HTML 格式化標籤，v-sanitize 可以允許安全的 HTML 同時過濾惡意腳本。
+瀏覽器上一頁處理useEventListener(window, &#x27;popstate&#x27;, () =&gt; &#123;  dialogQueueStore.clearQueue();&#125;);
+
+用戶按瀏覽器上一頁時直接清空整個佇列，避免前一頁觸發的彈窗殘留在新頁面上。
+使用範例基本用法import &#123; useDialogQueueStore &#125; from &#x27;@star/common/stores/dialog-queue&#x27;;const dialogQueueStore = useDialogQueueStore();dialogQueueStore.queue(&#123;  title: &#x27;操作成功&#x27;,  msg: &#x27;您的資料已更新&#x27;,  type: &#x27;success&#x27;,  buttons: [&#123; text: &#x27;確定&#x27;, type: &#x27;primary&#x27; &#125;],&#125;);
+
+帶 callback 的確認彈窗dialogQueueStore.queue(  &#123;    title: &#x27;確認提款&#x27;,    msg: `即將提款 &lt;b&gt;$&#123;amount&#125;&lt;/b&gt; 至您的銀行帳戶`,    buttons: [      &#123; text: &#x27;取消&#x27;, type: &#x27;text&#x27; &#125;,      &#123; text: &#x27;確認&#x27;, type: &#x27;primary&#x27;, action: () =&gt; submitWithdrawal() &#125;,    ],  &#125;,  &#123; persistent: true, buttonAlign: &#x27;right&#x27; &#125;,);
+
+自動消失的提示dialogQueueStore.queue(  &#123; title: &#x27;&#x27;, msg: &#x27;系統維護中，請稍後再試&#x27; &#125;,  &#123; beforeClose: 3000 &#125;,);
+
+結語這套機制的核心其實很簡單——一個 FIFO 陣列加上一個 Pinia Store。但它解決的問題很實際：在多模組、多非同步操作的平台中，讓所有彈窗都有秩序地排隊顯示，而不是互相覆蓋。
+呼叫端只需要一行 dialogQueueStore.queue()，不需要關心 Dialog 的 v-model、z-index、transition 動畫、還是同時有幾個彈窗在排隊。所有複雜度都被封裝在 Store 和 TheDialogQueue 元件裡。
+]]></content>
+      <categories>
+        <category>前端架構</category>
+      </categories>
+      <tags>
+        <tag>Vue.js</tag>
+        <tag>Architecture</tag>
+        <tag>Pinia</tag>
       </tags>
   </entry>
   <entry>
@@ -7314,29 +7971,6 @@ Pinia $onAction
       </tags>
   </entry>
   <entry>
-    <title>Vue Created Mounted example</title>
-    <url>/2022/05/28/VueMounted/</url>
-    <content><![CDATA[最近遇到一個 Issue，我們本來有跟 Partner 整合一個功能，做法是類似先 Inject 對方的 js，接著去指定一個 element 讓他生成到對應的頁面位置，因為當初開發的時候大家都是新手 邊做邊學，一開始把 init script 的方法放到 created function，會造成一個問題是 element 都還沒有被掛到 html 上面就先呼叫 init script有可能會無法生成畫面，但是神奇的是 當初寫沒有發現問題，等到有一天可能 Partner 突然有改 JS 的流程，造成我們整個頁面壞掉。所以又再回頭去 review code 才發現應該要放到 mounted
-
-
-&lt;script  async  id=&#x27;__ada&#x27;  data-handle=&#x27;&lt;YOUR-BOT-HANDLE&gt;&#x27;  src=&#x27;https://xxx.xxx.com/embed2.js&#x27;&gt;&lt;/script&gt;
-
-正確就是要放到 mounted 上面
-export default &#123;  created() &#123;    //element not create  &#125;,  mounted() &#123;    //element created  &#125;,&#125;;
-
-這裡附上 Kuro Hsu 的 Vue2 vs Vue 3 Life cycle 參考
-
-Reference
-]]></content>
-      <categories>
-        <category>前端開發</category>
-      </categories>
-      <tags>
-        <tag>Vue3</tag>
-        <tag>Vue Life Cycle</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Vue 3 新裝置 MFA 驗證架構：從登入攔截到 WebView 完成驗證的完整設計</title>
     <url>/2026/04/21/VueMfaVerificationFlow/</url>
     <content><![CDATA[背景：為什麼需要新裝置驗證App 的登入安全升級需求：當使用者從「未曾登入過的新裝置」登入時，需要完成 MFA 驗證，才能取得完整的登入 token 和 session。
@@ -7553,147 +8187,26 @@ MFA:ActiveSession 在同一 AccountId 重複登入時覆蓋舊記錄（踢單機
       </tags>
   </entry>
   <entry>
-    <title>WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯</title>
-    <url>/2026/04/06/WatcherUtilAopPerformance/</url>
-    <content><![CDATA[問題：效能監控程式碼到處散落一般做法是在每個方法手動埋計時：
-// 到處複製貼上，業務邏輯被監控代碼淹沒var start = DateTime.Now;try &#123;    result = db.GetSomething(key);    var ms = (DateTime.Now - start).TotalMilliseconds;    log.Performance(&quot;REDIS&quot;, &quot;GetSomething&quot;, ms.ToString(), &quot;&quot;);&#125; catch (Exception ex) &#123;    log.Exception(ex);&#125;
-
-這違反了 單一職責原則（SRP），監控邏輯和業務邏輯耦合在一起。
+    <title>Vue Created Mounted example</title>
+    <url>/2022/05/28/VueMounted/</url>
+    <content><![CDATA[最近遇到一個 Issue，我們本來有跟 Partner 整合一個功能，做法是類似先 Inject 對方的 js，接著去指定一個 element 讓他生成到對應的頁面位置，因為當初開發的時候大家都是新手 邊做邊學，一開始把 init script 的方法放到 created function，會造成一個問題是 element 都還沒有被掛到 html 上面就先呼叫 init script有可能會無法生成畫面，但是神奇的是 當初寫沒有發現問題，等到有一天可能 Partner 突然有改 JS 的流程，造成我們整個頁面壞掉。所以又再回頭去 review code 才發現應該要放到 mounted
 
 
-解法：WatcherUtil — 用 Delegate 包裝flowchart TB
-    W[WatcherUtil]
-    W --> T1[記錄 startTime]
-    T1 --> BIZ[執行委派 Action 或 Func 業務程式碼不感知外層監控]
-    BIZ --> T2[計算 elapsed]
-    T2 --> L[log Performance]
+&lt;script  async  id=&#x27;__ada&#x27;  data-handle=&#x27;&lt;YOUR-BOT-HANDLE&gt;&#x27;  src=&#x27;https://xxx.xxx.com/embed2.js&#x27;&gt;&lt;/script&gt;
 
-核心實作// WatcherUtil.cspublic class WatcherUtil&#123;    private readonly ISysLog log;    public WatcherUtil(ISysLog outLog)    &#123;        log = outLog;    &#125;    // 同步 void    public void Watch(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        func();        FunctionEnd(source, funcName, startTime);    &#125;    // 非同步 void    public async Task Watch(PerformanceSource source, string funcName, Func&lt;Task&gt; func)    &#123;        DateTime startTime = DateTime.Now;        await func();        FunctionEnd(source, funcName, startTime);    &#125;    // 同步有回傳值    public TResult Watch&lt;TResult&gt;(PerformanceSource source, string funcName, Func&lt;TResult&gt; func)    &#123;        DateTime startTime = DateTime.Now;        TResult t = func();        FunctionEnd(source, funcName, startTime);        return t;    &#125;    // 附例外處理的進階版    public void WatchAdvance(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        try        &#123;            func();            FunctionEnd(source, funcName, startTime);        &#125;        catch (Exception ex)        &#123;            log.Exception($&quot;&#123;funcName&#125; throwing error&quot;, ex.Message);        &#125;    &#125;    private void FunctionEnd(PerformanceSource source, string funcName, DateTime startTime)    &#123;        double timeSpan = (DateTime.Now - startTime).TotalMilliseconds;        log.Performance(source, funcName, timeSpan.ToString(&quot;0&quot;), &quot;&quot;);    &#125;&#125;
+正確就是要放到 mounted 上面
+export default &#123;  created() &#123;    //element not create  &#125;,  mounted() &#123;    //element created  &#125;,&#125;;
 
-PerformanceSource — 分類監控來源public enum PerformanceSource&#123;    REDIS,        // Redis 操作    DLL,          // 內部 DLL 呼叫    NUGETPACKAGE, // NuGet 套件呼叫    REQUEST,      // HTTP 外部請求    KAFKA         // Kafka 訊息發送&#125;
+這裡附上 Kuro Hsu 的 Vue2 vs Vue 3 Life cycle 參考
 
-每筆 Performance log 都會帶上來源分類，讓 log 平台可以按維度聚合分析。
-呼叫方式對比使用前// CacheLayerManager — 每個方法手動埋時間DateTime start = DateTime.Now;cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);double ms = (DateTime.Now - start).TotalMilliseconds;log.Performance(PerformanceSource.REDIS, &quot;FetchFromRedis&quot;, ms.ToString(), &quot;&quot;);
-
-使用後// 業務邏輯完全乾淨，監控是外層關心的事watcher.WatchAdvance(PerformanceSource.REDIS, $&quot;FetchFromRedis_&#123;cacheName&#125;&quot;, () =&gt;&#123;    cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));    result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);&#125;);
-
-實際使用案例flowchart LR
-    subgraph CLM["CacheLayerManager"]
-        A1[Watch REDIS GetDataAsync]
-        A2[WatchAdvance REDIS FetchFromRedis]
-        A3[Watch REDIS RedLockAction]
-    end
-    subgraph ASM["AccountStateManager"]
-        B1[Watch NUGETPACKAGE CreateAccountState]
-        B2[Watch NUGETPACKAGE GenerateToken]
-        B3[Watch NUGETPACKAGE GetAccountState]
-    end
-    subgraph KH["KafkaHelper"]
-        C1[Watch KAFKA SendAsync topic]
-    end
-    subgraph LM["LoginManager"]
-        D1[Watch DLL AuthenticateWithPlatform]
-    end
-    LOG["Performance Log log.Performance"]
-    A1 --> LOG
-    A2 --> LOG
-    A3 --> LOG
-    B1 --> LOG
-    B2 --> LOG
-    B3 --> LOG
-    C1 --> LOG
-    D1 --> LOG
-
-全專案共超過 20+ 個監控點，全部只用同一個 WatcherUtil。
-Watch vs WatchAdvance 差異
-
-
-項目
-Watch
-WatchAdvance
-
-
-
-例外
-直接往外拋，呼叫者處理
-捕捉後 log.Exception，不往外拋
-
-
-適用
-關鍵路徑，必須讓上層知道錯誤
-讀取／可降級場景（例如 cache miss 不影響主流程）
-
-
-行為示意
-例外流向 caller
-例外在工具內記錄後結束
-
-
-這是什麼設計模式？這是 Decorator Pattern 與 AOP（Aspect-Oriented Programming） 的輕量實作：在不修改業務方法本體的前提下，於執行前後加上計時與記錄。
-
-
-
-面向
-傳統 AOP 框架（如 PostSharp）
-WatcherUtil
-
-
-
-寫法
-Attribute + 織入 IL
-watcher.Watch(source, name, () =&gt; &#123; ... &#125;)
-
-
-依賴
-需框架、編譯期或執行期織入
-單一類別 + Action &#x2F; Func
-
-
-彈性
-宣告式，改動需重新編譯／部署策略
-呼叫端明確包一層，易讀易搜
-
-
-不需要任何 AOP 框架，利用 C# Action／Func delegate，就能以較小代價達到類似「橫切關注點」的效果。
-Log 輸出格式[Performance] source=REDIS | method=FetchFromRedis_TradingSession | time=3ms[Performance] source=NUGETPACKAGE | method=SingleSignOnService_GenerateToken | time=12ms[Performance] source=KAFKA | method=SendAsync_AP.FE.MEMBER_LOGIN | time=45ms[Performance] source=DLL | method=AuthenticateWithPlatform | time=230ms
-
-這些 log 可以直接接入 ELK &#x2F; Grafana，按 source、method 做 P95&#x2F;P99 分析。
-小結
-
-
-特性
-說明
-
-
-
-零侵入
-業務邏輯不需要加任何 attribute 或繼承
-
-
-泛型支援
-Watch&lt;TResult&gt; 支援有回傳值的函式
-
-
-async 支援
-Watch(Func&lt;Task&gt;) 原生支援 async&#x2F;await
-
-
-例外策略
-Watch vs WatchAdvance 兩種策略可選
-
-
-可測試
-ISysLog 可輕易 Mock，單元測試友善
-
-
+Reference
 ]]></content>
       <categories>
-        <category>後端架構</category>
+        <category>前端開發</category>
       </categories>
       <tags>
-        <tag>.NET</tag>
-        <tag>Design Pattern</tag>
-        <tag>AOP</tag>
+        <tag>Vue3</tag>
+        <tag>Vue Life Cycle</tag>
       </tags>
   </entry>
   <entry>
@@ -8176,6 +8689,150 @@ regionTheme, logoUrl
       </tags>
   </entry>
   <entry>
+    <title>WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯</title>
+    <url>/2026/04/06/WatcherUtilAopPerformance/</url>
+    <content><![CDATA[問題：效能監控程式碼到處散落一般做法是在每個方法手動埋計時：
+// 到處複製貼上，業務邏輯被監控代碼淹沒var start = DateTime.Now;try &#123;    result = db.GetSomething(key);    var ms = (DateTime.Now - start).TotalMilliseconds;    log.Performance(&quot;REDIS&quot;, &quot;GetSomething&quot;, ms.ToString(), &quot;&quot;);&#125; catch (Exception ex) &#123;    log.Exception(ex);&#125;
+
+這違反了 單一職責原則（SRP），監控邏輯和業務邏輯耦合在一起。
+
+
+解法：WatcherUtil — 用 Delegate 包裝flowchart TB
+    W[WatcherUtil]
+    W --> T1[記錄 startTime]
+    T1 --> BIZ[執行委派 Action 或 Func 業務程式碼不感知外層監控]
+    BIZ --> T2[計算 elapsed]
+    T2 --> L[log Performance]
+
+核心實作// WatcherUtil.cspublic class WatcherUtil&#123;    private readonly ISysLog log;    public WatcherUtil(ISysLog outLog)    &#123;        log = outLog;    &#125;    // 同步 void    public void Watch(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        func();        FunctionEnd(source, funcName, startTime);    &#125;    // 非同步 void    public async Task Watch(PerformanceSource source, string funcName, Func&lt;Task&gt; func)    &#123;        DateTime startTime = DateTime.Now;        await func();        FunctionEnd(source, funcName, startTime);    &#125;    // 同步有回傳值    public TResult Watch&lt;TResult&gt;(PerformanceSource source, string funcName, Func&lt;TResult&gt; func)    &#123;        DateTime startTime = DateTime.Now;        TResult t = func();        FunctionEnd(source, funcName, startTime);        return t;    &#125;    // 附例外處理的進階版    public void WatchAdvance(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        try        &#123;            func();            FunctionEnd(source, funcName, startTime);        &#125;        catch (Exception ex)        &#123;            log.Exception($&quot;&#123;funcName&#125; throwing error&quot;, ex.Message);        &#125;    &#125;    private void FunctionEnd(PerformanceSource source, string funcName, DateTime startTime)    &#123;        double timeSpan = (DateTime.Now - startTime).TotalMilliseconds;        log.Performance(source, funcName, timeSpan.ToString(&quot;0&quot;), &quot;&quot;);    &#125;&#125;
+
+PerformanceSource — 分類監控來源public enum PerformanceSource&#123;    REDIS,        // Redis 操作    DLL,          // 內部 DLL 呼叫    NUGETPACKAGE, // NuGet 套件呼叫    REQUEST,      // HTTP 外部請求    KAFKA         // Kafka 訊息發送&#125;
+
+每筆 Performance log 都會帶上來源分類，讓 log 平台可以按維度聚合分析。
+呼叫方式對比使用前// CacheLayerManager — 每個方法手動埋時間DateTime start = DateTime.Now;cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);double ms = (DateTime.Now - start).TotalMilliseconds;log.Performance(PerformanceSource.REDIS, &quot;FetchFromRedis&quot;, ms.ToString(), &quot;&quot;);
+
+使用後// 業務邏輯完全乾淨，監控是外層關心的事watcher.WatchAdvance(PerformanceSource.REDIS, $&quot;FetchFromRedis_&#123;cacheName&#125;&quot;, () =&gt;&#123;    cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));    result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);&#125;);
+
+實際使用案例flowchart LR
+    subgraph CLM["CacheLayerManager"]
+        A1[Watch REDIS GetDataAsync]
+        A2[WatchAdvance REDIS FetchFromRedis]
+        A3[Watch REDIS RedLockAction]
+    end
+    subgraph ASM["AccountStateManager"]
+        B1[Watch NUGETPACKAGE CreateAccountState]
+        B2[Watch NUGETPACKAGE GenerateToken]
+        B3[Watch NUGETPACKAGE GetAccountState]
+    end
+    subgraph KH["KafkaHelper"]
+        C1[Watch KAFKA SendAsync topic]
+    end
+    subgraph LM["LoginManager"]
+        D1[Watch DLL AuthenticateWithPlatform]
+    end
+    LOG["Performance Log log.Performance"]
+    A1 --> LOG
+    A2 --> LOG
+    A3 --> LOG
+    B1 --> LOG
+    B2 --> LOG
+    B3 --> LOG
+    C1 --> LOG
+    D1 --> LOG
+
+全專案共超過 20+ 個監控點，全部只用同一個 WatcherUtil。
+Watch vs WatchAdvance 差異
+
+
+項目
+Watch
+WatchAdvance
+
+
+
+例外
+直接往外拋，呼叫者處理
+捕捉後 log.Exception，不往外拋
+
+
+適用
+關鍵路徑，必須讓上層知道錯誤
+讀取／可降級場景（例如 cache miss 不影響主流程）
+
+
+行為示意
+例外流向 caller
+例外在工具內記錄後結束
+
+
+這是什麼設計模式？這是 Decorator Pattern 與 AOP（Aspect-Oriented Programming） 的輕量實作：在不修改業務方法本體的前提下，於執行前後加上計時與記錄。
+
+
+
+面向
+傳統 AOP 框架（如 PostSharp）
+WatcherUtil
+
+
+
+寫法
+Attribute + 織入 IL
+watcher.Watch(source, name, () =&gt; &#123; ... &#125;)
+
+
+依賴
+需框架、編譯期或執行期織入
+單一類別 + Action &#x2F; Func
+
+
+彈性
+宣告式，改動需重新編譯／部署策略
+呼叫端明確包一層，易讀易搜
+
+
+不需要任何 AOP 框架，利用 C# Action／Func delegate，就能以較小代價達到類似「橫切關注點」的效果。
+Log 輸出格式[Performance] source=REDIS | method=FetchFromRedis_TradingSession | time=3ms[Performance] source=NUGETPACKAGE | method=SingleSignOnService_GenerateToken | time=12ms[Performance] source=KAFKA | method=SendAsync_AP.FE.MEMBER_LOGIN | time=45ms[Performance] source=DLL | method=AuthenticateWithPlatform | time=230ms
+
+這些 log 可以直接接入 ELK &#x2F; Grafana，按 source、method 做 P95&#x2F;P99 分析。
+小結
+
+
+特性
+說明
+
+
+
+零侵入
+業務邏輯不需要加任何 attribute 或繼承
+
+
+泛型支援
+Watch&lt;TResult&gt; 支援有回傳值的函式
+
+
+async 支援
+Watch(Func&lt;Task&gt;) 原生支援 async&#x2F;await
+
+
+例外策略
+Watch vs WatchAdvance 兩種策略可選
+
+
+可測試
+ISysLog 可輕易 Mock，單元測試友善
+
+
+]]></content>
+      <categories>
+        <category>後端架構</category>
+      </categories>
+      <tags>
+        <tag>.NET</tag>
+        <tag>Design Pattern</tag>
+        <tag>AOP</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Nuxt 3 實戰：用 Composable 封裝集中式請求攔截器</title>
     <url>/2026/04/10/nuxt3-centralized-fetch-interceptor/</url>
     <content><![CDATA[在 Nuxt 3 中，直接使用 useFetch 或 $fetch 發 API 請求雖然方便，但在真實專案中你很快會遇到這些問題：
@@ -8623,10 +9280,10 @@ Basic &#x2F; AD &#x2F; IOWB Token
         <category>後端架構</category>
       </categories>
       <tags>
-        <tag>Nuxt3</tag>
         <tag>Redis</tag>
-        <tag>TypeScript</tag>
         <tag>Session</tag>
+        <tag>Nuxt3</tag>
+        <tag>TypeScript</tag>
         <tag>Authentication</tag>
       </tags>
   </entry>

@@ -74,6 +74,163 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-LazyMemoryCacheRedisTwoTier" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/04/01/LazyMemoryCacheRedisTwoTier/" class="article-date">
+  <time class="dt-published" datetime="2026-04-01T16:00:00.000Z" itemprop="datePublished">2026-04-02</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/04/01/LazyMemoryCacheRedisTwoTier/">雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="為什麼需要雙層快取？"><a href="#為什麼需要雙層快取？" class="headerlink" title="為什麼需要雙層快取？"></a>為什麼需要雙層快取？</h2><h3 id="使用場景"><a href="#使用場景" class="headerlink" title="使用場景"></a>使用場景</h3><p>典型情境是 <strong>多台 App Server 水平擴展</strong>，讀取路徑上會先查本機記憶體、再查 <strong>共用的 Redis（L2）</strong> 當成跨機器的快取來源。業務資料可能在後端更新後寫回 Redis，或依 TTL 在 Redis 上過期；各機的 L1 也會依自己的 TTL 失效。只要出現「<strong>同一時間很多請求都認為快取不可用</strong>」——例如熱點 key 的 TTL 一起到期、部署後快取清空、或 Redis 短暫不可用後恢復——<strong>每一台機、每一條執行緒若都各自回源</strong>，後端與 Redis 會在瞬間承受 <strong>N 台 × 每機併發</strong> 的壓力。</p>
+<p>這套 <strong>L1（LazyCache）+ L2（Redis）</strong> 的組合，目的就是在這種 <strong>多機共享快取、又需要週期或事件驅動更新</strong> 的架構下，把「miss 之後誰負責載入」收斂成 <strong>單機內合併請求</strong>，必要時再在 L2 層用分散式鎖（例如 RedLock，見 CacheLayerManager）避免多機同時把同一個 key 打穿到資料庫。<strong>它不是取代「資料在業務上如何同步」的設計</strong>，而是降低 <strong>快取重建瞬間</strong> 的並發災難。</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/04/01/LazyMemoryCacheRedisTwoTier/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/04/01/LazyMemoryCacheRedisTwoTier/" data-id="cmpb3v2x60017tz4ebx6jeotg" data-title="雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-TriggerEventSpiRabbitMqCache" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/04/01/TriggerEventSpiRabbitMqCache/" class="article-date">
+  <time class="dt-published" datetime="2026-04-01T16:00:00.000Z" itemprop="datePublished">2026-04-02</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/04/01/TriggerEventSpiRabbitMqCache/">Xuenn.Trigger.EventSPI — 透過 RabbitMQ Topic 清除 Cache 資料</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <blockquote>
+<p>本文介紹 <strong>Xuenn.Trigger.EventSPI</strong> 這個早期的 Cache 清除機制：呼叫端（資料修改端）透過傳遞 account id 與 topic，通知此服務對 Redis 中相關的 CacheState key 執行失效處理。</p>
+</blockquote>
+        
+          <p class="article-more-link">
+            <a href="/2026/04/01/TriggerEventSpiRabbitMqCache/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/04/01/TriggerEventSpiRabbitMqCache/" data-id="cmpb3v2xn002rtz4e1zzvcwzh" data-title="Xuenn.Trigger.EventSPI — 透過 RabbitMQ Topic 清除 Cache 資料" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Cache-Invalidation/" rel="tag">Cache Invalidation</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/EventSPI/" rel="tag">EventSPI</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/RabbitMQ/" rel="tag">RabbitMQ</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-DebugManifestDynamicLoading" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/31/DebugManifestDynamicLoading/" class="article-date">
+  <time class="dt-published" datetime="2026-03-31T16:00:00.000Z" itemprop="datePublished">2026-04-01</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/03/31/DebugManifestDynamicLoading/">Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>正式環境下，前端 JS&#x2F;CSS 經 Webpack 打包後會帶 <strong>content hash</strong> 檔名；ASP.NET MVC 的 <code>_Layout.cshtml</code> 必須依 <code>manifest.json</code> 注入正確的 <code>&lt;script&gt;</code> &#x2F; <code>&lt;link&gt;</code>。本篇說明在 <strong>Debug</strong> 時如何 <strong>不必重啟後端</strong> 也能對齊 <strong>Webpack 即時編譯</strong> 的輸出。</p>
+<h2 id="專案型態：前後端未分離的-NET-Framework-MVC"><a href="#專案型態：前後端未分離的-NET-Framework-MVC" class="headerlink" title="專案型態：前後端未分離的 .NET Framework MVC"></a>專案型態：前後端未分離的 .NET Framework MVC</h2><p>我們的專案 <strong>不是</strong>「獨立前端站 + 獨立 API 站」那種典型前後端分離：</p>
+<ul>
+<li><strong>後端</strong>：<strong>.NET Framework</strong> 上的 <strong>ASP.NET MVC</strong>。頁面骨架仍由 <strong>Razor</strong>（例如 <code>_Layout.cshtml</code>）在伺服器端渲染，路由與部分畫面由 MVC 負責。</li>
+<li><strong>前端互動</strong>：實際的 SPA／模組化 UI 由 <strong>Webpack 打包的 JS、CSS</strong> 在瀏覽器端啟動；<strong>正式環境</strong>這些靜態檔會放到 <strong>CDN</strong>，透過 <strong>hash 檔名</strong> 做快取破壞。</li>
+<li><strong>Debug 開發</strong>：本機不強制走「部署到 CDN + 重讀 manifest」那條路，而是啟動 <strong>Webpack Dev Server</strong>（或同等 dev 流程），由它 <strong>動態編譯並提供</strong> 最新的 <code>vendor.js</code>、<code>index.js</code> 等。<code>_Layout</code> 在 <strong>Debug 組態</strong>下改把資源 URL 指到 <strong>本機 dev server</strong>，因此 <strong>重新 build &#x2F; HMR 後只要重新整理頁面</strong>，即可載入新 bundle，<strong>無須為了更新 hash 而去重啟 IIS 或整個 .NET 站台</strong>。</li>
+</ul>
+<p>簡單講：<strong>Release</strong>＝後端讀記憶體裡的 <code>manifest.json</code>，對應 CDN 上帶 hash 的檔；<strong>Debug</strong>＝後端略過 manifest，改連 <strong>dev server 上「當下編譯出來」的固定路徑</strong>（無 hash 或 dev 產物），讓「改前端 → 立刻看到畫面」。</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/03/31/DebugManifestDynamicLoading/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/03/31/DebugManifestDynamicLoading/" data-id="cmpb3v2ws000atz4e812vbyjy" data-title="Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-ChainOfResponsibilityGeneric" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2026/03/30/ChainOfResponsibilityGeneric/" class="article-date">
@@ -125,7 +282,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/30/ChainOfResponsibilityGeneric/" data-id="cmowpajfm0005tq3favv28i0n" data-title="責任鏈模式（Chain of Responsibility）泛型實作 — 遊戲驗證與頁面權限的真實案例" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/30/ChainOfResponsibilityGeneric/" data-id="cmpb3v2wp0006tz4ee0yoh2ui" data-title="責任鏈模式（Chain of Responsibility）泛型實作 — 遊戲驗證與頁面權限的真實案例" class="article-share-link">Share</a>
       
       
       
@@ -210,7 +367,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/27/MfaLoginNewDeviceVerification/" data-id="cmowpajfz0017tq3fbotc97c6" data-title="Login MFA — 新裝置驗證架構設計 " class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/27/MfaLoginNewDeviceVerification/" data-id="cmpb3v2x70019tz4eaxndfwd7" data-title="Login MFA — 新裝置驗證架構設計 " class="article-share-link">Share</a>
       
       
       
@@ -266,7 +423,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/" data-id="cmowpajfo0009tq3f882oexnm" data-title="自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/16/ContentManagementSystem/" data-id="cmpb3v2wr0009tz4e8lj01b2n" data-title="自建簡易 CMS 系統架構 — 用 ASP.NET + MongoDB 打造多語系動態內容管理" class="article-share-link">Share</a>
       
       
       
@@ -316,7 +473,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/" data-id="cmowpajgb002ktq3f1dyl7k7t" data-title="TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/15/VueDialogQueue/" data-id="cmpb3v2xn002utz4edkvf9a93" data-title="TheDialogQueue — 用 Pinia Store 實作全站彈窗佇列機制" class="article-share-link">Share</a>
       
       
       
@@ -366,7 +523,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/12/VueBroadCastImplement/" data-id="cmowpajgc002ntq3f1xvjgpdl" data-title="Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VueBroadCastImplement/" data-id="cmpb3v2xm002ntz4e60yl7a39" data-title="Vue.js BroadcastChannel 跨分頁通訊：從踩坑到 Singleton Event Bus 架構設計" class="article-share-link">Share</a>
       
       
       
@@ -417,7 +574,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/12/VuePartialView/" data-id="cmowpajgg0034tq3fg8b10a5o" data-title="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/12/VuePartialView/" data-id="cmpb3v2yq009qtz4e31a92uwm" data-title="跨框架 Partial View 架構設計 — 用 Vue 3 打造可嵌入任何頁面的 Header/Footer" class="article-share-link">Share</a>
       
       
       
@@ -475,366 +632,11 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmowpajfs000gtq3f9d4scffw" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — 多層事件失敗率與 Error Log 監控實戰" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2026/03/11/ELKWatcher/" data-id="cmpb3v2wv000gtz4eezundc9s" data-title="用 Elasticsearch Watcher 打造生產環境即時告警 — 多層事件失敗率與 Error Log 監控實戰" class="article-share-link">Share</a>
       
       
       
   <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-GitHotfixRevertFlow" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2026/03/10/GitHotfixRevertFlow/" class="article-date">
-  <time class="dt-published" datetime="2026-03-10T16:00:00.000Z" itemprop="datePublished">2026-03-11</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2026/03/10/GitHotfixRevertFlow/">Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在團隊協作中，經常會遇到這種情境：你的功能分支已經 merge 到正式環境的 release branch，但上線前一天被通知要<strong>抽單退版</strong>。這時候如果直接在 release branch 上 <code>git revert</code> 那筆 merge commit，後續想把同一個功能分支重新 merge 回去時，Git 會認為「這些 commit 已經被 merge 過了」而跳過所有變更——導致程式碼根本沒有被帶回來。</p>
-<p>本文記錄這個問題的成因，以及在不遺漏檔案的前提下，如何正確退版並繼續推進功能。</p>
-        
-          <p class="article-more-link">
-            <a href="/2026/03/10/GitHotfixRevertFlow/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/GitHotfixRevertFlow/" data-id="cmowpajfv000ntq3fdzjgck96" data-title="Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-ErrorContentDecoding" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2026/03/10/ErrorContentDecoding/" class="article-date">
-  <time class="dt-published" datetime="2026-03-10T03:02:34.000Z" itemprop="datePublished">2026-03-10</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/Troubleshooting/">Troubleshooting</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2026/03/10/ErrorContentDecoding/">ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>之前在正式環境遇到一個棘手的問題：使用者回報某支 API 回傳 HTTP 200，瀏覽器卻直接噴出 <code>ERR_CONTENT_DECODING_FAILED</code>。當下排查了很久才發現問題出在 Response Header 中多了一個不該出現的 <code>gzip</code>，特別記錄一下整個排查過程。</p>
-<img src="/2026/03/10/ErrorContentDecoding/1.png" class="" title="異常 API 的 Response Headers">
-<img src="/2026/03/10/ErrorContentDecoding/2.png" class="" title="正常 API 的 Response Headers">
-
-<h2 id="問題現象"><a href="#問題現象" class="headerlink" title="問題現象"></a>問題現象</h2><p>打開 DevTools 檢查異常 API 的 Response Headers，可以看到幾個關鍵資訊：</p>
-<ul>
-<li><code>Content-Encoding: gzip</code> — 伺服器宣稱回傳內容經過 gzip 壓縮</li>
-<li><code>Transfer-Encoding: chunked</code> — 資料以分段方式傳輸</li>
-<li><code>X-Powered-By: ASP.NET</code> — 請求可能直接打到後端 .NET 伺服器，或經過了某層 Proxy 轉發</li>
-</ul>
-<h2 id="問題核心：空-Body-gzip-標頭"><a href="#問題核心：空-Body-gzip-標頭" class="headerlink" title="問題核心：空 Body + gzip 標頭"></a>問題核心：空 Body + gzip 標頭</h2><p>瀏覽器收到 <code>Content-Encoding: gzip</code> 後，會自動嘗試用 gzip 解碼器解壓內容。但實際上這支 API 的 Response Body 是空的（長度為 0），解碼器無法處理一個空的壓縮流，因此直接報出 <code>ERR_CONTENT_DECODING_FAILED</code>。</p>
-<p>為什麼 Body 會是空的？根據 Header 中的 <code>X-Powered-By: ASP.NET</code>，可能有兩種原因：</p>
-<ol>
-<li><strong>後端程式異常中斷</strong> — ASP.NET 拋出 Exception 後沒有回傳 500，而是直接結束了 Response，導致 Body 為空。</li>
-<li><strong>查詢超時</strong> — 後端資料庫查詢耗時過久，連線中斷，最終只傳回了 Headers 就結束了。</li>
-</ol>
-<h2 id="關鍵線索：對比正常與異常的-API"><a href="#關鍵線索：對比正常與異常的-API" class="headerlink" title="關鍵線索：對比正常與異常的 API"></a>關鍵線索：對比正常與異常的 API</h2><p>進一步對比同專案中兩支 API 的 Response Headers，差異一目了然：</p>
-<table>
-<thead>
-<tr>
-<th>欄位</th>
-<th>異常 API</th>
-<th>正常 API</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Content-Encoding</td>
-<td>gzip</td>
-<td>(無)</td>
-</tr>
-<tr>
-<td>X-Powered-By</td>
-<td>ASP.NET</td>
-<td>(無)</td>
-</tr>
-<tr>
-<td>X-Aspnet-Version</td>
-<td>4.0.30319</td>
-<td>(無)</td>
-</tr>
-</tbody></table>
-<p>正常的 API 回傳的 Headers 很乾淨，是經過 Nuxt BFF（Node.js）處理後回傳的；而異常的 API 卻直接暴露了 ASP.NET 的資訊。這代表：</p>
-<ul>
-<li><strong>情況 A</strong>：這支 API 繞過了 Nuxt BFF，直接打到了後端 .NET 伺服器。</li>
-<li><strong>情況 B</strong>：後端 .NET 伺服器強制啟動了 gzip 壓縮，但因資料量過大或超時導致傳輸中斷，最終變成「空 Body + gzip 標頭」的組合。</li>
-</ul>
-<h2 id="真相：Nitro-透傳-Response-物件導致-gzip-標頭外洩"><a href="#真相：Nitro-透傳-Response-物件導致-gzip-標頭外洩" class="headerlink" title="真相：Nitro 透傳 Response 物件導致 gzip 標頭外洩"></a>真相：Nitro 透傳 Response 物件導致 gzip 標頭外洩</h2><p>後端伺服器其實<strong>沒有噴錯</strong>，它正常回傳了資料（只是內容為空陣列或空物件）。真正的問題出在 Nuxt Server（Nitro）端的 API Handler 寫法。</p>
-<p>檢查 Server 端程式碼後，發現異常的 API Handler 是這樣寫的：</p>
-<figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> response = <span class="keyword">await</span> api.<span class="title function_">memberGetMemberPriorityHistories</span>(query);</span><br><span class="line"><span class="keyword">return</span> response; <span class="comment">// 直接回傳整個 Response 物件</span></span><br></pre></td></tr></table></figure>
-
-<p>這裡 <code>api.memberGetMemberPriorityHistories()</code> 回傳的是一個繼承自原生 <code>Response</code> 的物件。當直接 <code>return response</code> 時，Nitro 引擎會將其視為<strong>透傳（Proxy）</strong>，把後端的所有原始標頭原封不動地轉發給瀏覽器。</p>
-<p>整個流程是這樣的：</p>
-<ol>
-<li>後端 ASP.NET 回傳帶有 <code>Content-Encoding: gzip</code> 的壓縮內容</li>
-<li>Nuxt Server（Node.js）在接收時<strong>已經自動解壓了 gzip 內容</strong></li>
-<li>但因為直接 <code>return response</code>，Nitro 把後端的原始 Headers（包含 <code>Content-Encoding: gzip</code>）照搬給瀏覽器</li>
-<li>瀏覽器收到 <code>Content-Encoding: gzip</code> 標頭，嘗試解壓 Body —— 但 Body 早就被 Node.js 解壓過了，已經不是 gzip 格式</li>
-<li>解碼失敗，噴出 <code>ERR_CONTENT_DECODING_FAILED</code></li>
-</ol>
-<p>簡單來說：<strong>gzip 被 Nuxt Server Side 解開了一次，但 gzip 標頭卻還在，瀏覽器又試圖解第二次，自然就失敗了。</strong></p>
-<p>這也解釋了為什麼對比表中異常 API 會帶有 <code>X-Powered-By: ASP.NET</code> 和 <code>X-Aspnet-Version</code> — 這些都是後端的原始標頭被透傳出來的結果。</p>
-<h2 id="修正方式"><a href="#修正方式" class="headerlink" title="修正方式"></a>修正方式</h2><p>根因找到後，修正方式很明確：<strong>不要直接回傳整個 Response 物件，改為只回傳 <code>response.data</code>。</strong> 這樣 Nitro 會重新封裝成乾淨的 JSON Response，由 Nuxt 統一處理壓縮，後端的 ASP.NET 標頭就不會外洩。</p>
-<p>修改前：</p>
-<figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">default</span> <span class="title function_">defineLogAndAuthHandler</span>(<span class="title function_">async</span> (event) =&gt; &#123;</span><br><span class="line">  <span class="keyword">const</span> query = <span class="title function_">getQuery</span>(event);</span><br><span class="line">  <span class="keyword">const</span> api = <span class="keyword">new</span> <span class="title class_">GetMemberPriorityHistories</span>();</span><br><span class="line">  <span class="keyword">const</span> response = <span class="keyword">await</span> api.<span class="title function_">memberGetMemberPriorityHistories</span>(query);</span><br><span class="line">  <span class="keyword">return</span> response; <span class="comment">// 透傳整個物件，標頭外洩</span></span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
-
-<p>修改後：</p>
-<figure class="highlight typescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">default</span> <span class="title function_">defineLogAndAuthHandler</span>(<span class="title function_">async</span> (event) =&gt; &#123;</span><br><span class="line">  <span class="keyword">const</span> query = <span class="title function_">getQuery</span>(event);</span><br><span class="line">  <span class="keyword">const</span> api = <span class="keyword">new</span> <span class="title class_">GetMemberPriorityHistories</span>();</span><br><span class="line">  <span class="keyword">const</span> response = <span class="keyword">await</span> api.<span class="title function_">memberGetMemberPriorityHistories</span>(query);</span><br><span class="line">  <span class="keyword">return</span> response.<span class="property">data</span>; <span class="comment">// 只回傳資料，Nitro 重新封裝 JSON</span></span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
-
-<p>這個修正需要<strong>系統性地檢查所有 Server API Handler</strong>，只要有直接 <code>return response</code> 的地方都應該改為 <code>return response.data</code>，避免同樣的問題在其他 API 上重演。</p>
-<h2 id="結論"><a href="#結論" class="headerlink" title="結論"></a>結論</h2><p>這個問題的根因不在後端、也不在前端元件，而是 <strong>Nuxt Server（Nitro）的 API Handler 直接透傳了後端 Response 物件</strong>。Node.js 在接收後端回應時已經解開了 gzip，但透傳卻把原始的 <code>Content-Encoding: gzip</code> 標頭一併帶給瀏覽器，導致瀏覽器嘗試二次解壓而失敗。</p>
-<p>排查這類問題的關鍵：<strong>對比正常與異常 API 的 Response Headers</strong>。當你發現某支 API 突然多了 <code>X-Powered-By: ASP.NET</code> 和 <code>Content-Encoding: gzip</code>，而其他 API 都沒有，很可能就是 Nitro 把後端的原始標頭透傳出來了。回去檢查 Server API Handler 的回傳值，把 <code>return response</code> 改成 <code>return response.data</code> 就能解決。</p>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/10/ErrorContentDecoding/" data-id="cmowpajfr000etq3f6wcy841e" data-title="ERR_CONTENT_DECODING_FAILED — 當 Status 200 卻解碼失敗的踩坑紀錄" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-Nuxt3ApiLoggerHandler" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2026/03/09/Nuxt3ApiLoggerHandler/" class="article-date">
-  <time class="dt-published" datetime="2026-03-09T16:00:00.000Z" itemprop="datePublished">2026-03-10</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2026/03/09/Nuxt3ApiLoggerHandler/">在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>在開發後台管理系統時，我們經常會遇到一個問題：每個 API Handler 都需要處理<strong>認證驗證</strong>、<strong>日誌記錄</strong>、<strong>錯誤捕獲</strong>等重複性邏輯。如果在每個檔案中都寫一遍，不僅冗長，還容易遺漏。<br>本文將介紹如何在 Nuxt 3 的 Server API 中，利用 <strong>Higher-Order Function (高階函式)</strong> 的概念，打造一個統一的 <code>defineLogAndAuthHandler</code>，讓所有 API 自動擁有以下功能：</p>
-<ul>
-<li>✅ Session 認證與過期檢查</li>
-<li>✅ 請求&#x2F;回應日誌記錄</li>
-<li>✅ 敏感資料自動遮蔽</li>
-<li>✅ 效能監控 (API 執行時間)</li>
-<li>✅ 統一錯誤處理與格式化</li>
-</ul>
-<h2 id="核心概念：Higher-Order-Function"><a href="#核心概念：Higher-Order-Function" class="headerlink" title="核心概念：Higher-Order Function"></a>核心概念：Higher-Order Function</h2><p>在 JavaScript&#x2F;TypeScript 中，<strong>高階函式 (HOF)</strong> 是指「接收函式作為參數」或「回傳函式」的函式。我們的設計正是利用這個概念：</p>
-<pre><code class="language-typescript">export const defineLogAndAuthHandler = &lt;T extends EventHandlerRequest&gt;(
-  handler: EventHandler&lt;T&gt;
-): EventHandler&lt;T&gt; =&gt; defineEventHandler&lt;T&gt;(async (event) =&gt; &#123;
-  // 在這裡加入認證、日誌等邏輯
-  const response = await handler(event); // 執行原本的 Handler
-  // 在這裡加入回應處理邏輯
-  return response;
-&#125;);
-這就像是在原本的 API Handler 外面「包一層糖衣」，讓它自動具備額外的能力。
-
-功能拆解
-1. Session 認證與過期檢查
-// 檢查是否已認證
-if (!event.context?.session?.isAuthenticated &amp;&amp; !isPublicRoute) &#123;
-  return createError(&#123;
-    statusCode: 401,
-    statusText: &#39;Session Expired&#39;,
-  &#125;);
-&#125;
-// 檢查 Session 是否已過期
-const currentTime = new Date().getTime();
-const lastLoginTimestamp = event.context?.session?.lastLoginTime;
-const maxTimeDiff = (currentTime - lastLoginTimestamp) / 1000;
-if (maxTimeDiff &gt;= parseInt(maxExpiryInSeconds, 10)) &#123;
-  // 清除 Session 並回傳 401
-  event.context.session.isAuthenticated = false;
-  return createError(&#123; statusCode: 401, statusText: &#39;Session Expired&#39; &#125;);
-&#125;
-設計重點：
-
-白名單機制：登入、登出等 API 不需要認證
-雙重檢查：不只檢查是否登入，還檢查 Session 是否超時
-2. 請求日誌記錄與敏感資料遮蔽
-const ignoreLogParams = [&#39;password&#39;, &#39;newPassword&#39;, &#39;oldPassword&#39;];
-// 遮蔽敏感欄位
-if (typeof body === &#39;object&#39;) &#123;
-  const filterBody = Object.assign(&#123;&#125;, body);
-  for (const key in filterBody) &#123;
-    if (ignoreLogParams.includes(key)) &#123;
-      filterBody[key] = &#39;***mask***&#39;;
-    &#125;
-  &#125;
-  logger.log(&#39;info&#39;, `[POST] $&#123;JSON.stringify(filterBody)&#125;`);
-&#125;
-設計重點：
-
-自動遮蔽密碼等敏感欄位，避免日誌外洩
-支援 GET/POST/PUT/DELETE 不同方法的日誌格式
-3. 效能監控
-const startTime = Date.now();
-const response = await handler(event);
-const endTime = Date.now();
-const duration = endTime - startTime;
-logger.performance.log(&#39;info&#39;, `[$&#123;pathWithoutQueryString&#125;] [$&#123;duration&#125;ms]`);
-設計重點：
-
-記錄每個 API 的執行時間
-方便後續分析效能瓶頸
-4. 回應日誌與大型回應處理
-const byPassLogUrls = [&#39;/api/general/settings&#39;, &#39;/api/promotion/promotions&#39;];
-function truncateString(body: string) &#123;
-  const resultSizeLimit = 1024;
-  const stringSize = Buffer.byteLength(body);
-  
-  if (stringSize &gt; resultSizeLimit) &#123;
-    return `Result size - $&#123;stringSize&#125; bytes`;
-  &#125;
-  return body;
-&#125;
-設計重點：
-
-大型回應只記錄大小，避免日誌檔案爆炸
-特定 API 可跳過輸出日誌（如設定檔、大量資料查詢）
-5. 統一錯誤處理
-catch (error: any) &#123;
-  console.error(&#39;API Error:&#39;, error);
-  
-  logger.error.log(&#39;error&#39;, `URL: $&#123;event.path&#125;, Message: $&#123;error.message&#125;`);
-  
-  return createError(&#123;
-    statusCode: error.statusCode || 500,
-    statusMessage: error.statusMessage || &#39;Internal Server Error&#39;,
-    message: error.message || &#39;An unexpected error occurred&#39;,
-  &#125;);
-&#125;
-設計重點：
-
-所有未捕獲的異常都會被統一處理
-錯誤資訊會被記錄到日誌中，方便追蹤
-使用方式
-使用這個封裝後，原本的 API Handler 變得非常簡潔：
-
-// server/api/member/summary.get.ts
-import &#123; GetMemberSummary &#125; from &#39;@/bospi/GetMemberSummary&#39;;
-export default defineLogAndAuthHandler(async (event) =&gt; &#123;
-  const query = getQuery(event);
-  const api = new GetMemberSummary();
-  const response = await api.getMemberSummary(query);
-  return response.data;
-&#125;);
-只需要專注在業務邏輯，認證、日誌、錯誤處理全部自動搞定！
-
-架構圖
-┌─────────────────────────────────────────────────────────┐
-│                    Frontend (Browser)                    │
-└─────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│              defineLogAndAuthHandler (Wrapper)           │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │ 1. Session 認證檢查                                  ││
-│  │ 2. 請求日誌記錄 (含敏感資料遮蔽)                      ││
-│  │ 3. 效能計時開始                                      ││
-│  └─────────────────────────────────────────────────────┘│
-│                          │                               │
-│                          ▼                               │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │           實際的 API Handler (業務邏輯)              ││
-│  └─────────────────────────────────────────────────────┘│
-│                          │                               │
-│                          ▼                               │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │ 4. 效能計時結束                                      ││
-│  │ 5. 回應日誌記錄                                      ││
-│  │ 6. 錯誤捕獲與格式化                                  ││
-│  └─────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Backend SPI (ASP.NET)                 │
-└─────────────────────────────────────────────────────────┘
-
-
-這個設計模式其實就是 AOP (Aspect-Oriented Programming) 的體現——將「橫切關注點」（如日誌、認證、錯誤處理）從業務邏輯中抽離出來。
-</code></pre>
-
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2026/03/09/Nuxt3ApiLoggerHandler/" data-id="cmowpajg2001jtq3f2mmgdeml" data-title="在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝" class="article-share-link">Share</a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li></ul>
 
     </footer>
   </div>
@@ -859,7 +661,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
   <div class="widget-wrap">
     <h3 class="widget-title">標籤雲</h3>
     <div class="widget tagcloud">
-      <a href="/tags/NET/" style="font-size: 20px;">.NET</a> <a href="/tags/NET-Framework/" style="font-size: 10px;">.NET Framework</a> <a href="/tags/AOP/" style="font-size: 10px;">AOP</a> <a href="/tags/API-Design/" style="font-size: 11.43px;">API Design</a> <a href="/tags/ActionFilter/" style="font-size: 10px;">ActionFilter</a> <a href="/tags/App-Debug/" style="font-size: 10px;">App Debug</a> <a href="/tags/Architecture/" style="font-size: 18.57px;">Architecture</a> <a href="/tags/Asp-net/" style="font-size: 10px;">Asp.net</a> <a href="/tags/Attack/" style="font-size: 10px;">Attack</a> <a href="/tags/Authentication/" style="font-size: 10px;">Authentication</a> <a href="/tags/Axios/" style="font-size: 10px;">Axios</a> <a href="/tags/CMS/" style="font-size: 10px;">CMS</a> <a href="/tags/CSharp/" style="font-size: 11.43px;">CSharp</a> <a href="/tags/Cache/" style="font-size: 12.86px;">Cache</a> <a href="/tags/Clean-Architecture/" style="font-size: 10px;">Clean Architecture</a> <a href="/tags/Composable/" style="font-size: 11.43px;">Composable</a> <a href="/tags/Composition-Api/" style="font-size: 10px;">Composition Api</a> <a href="/tags/Cron/" style="font-size: 10px;">Cron</a> <a href="/tags/Debug/" style="font-size: 12.86px;">Debug</a> <a href="/tags/Debugger/" style="font-size: 10px;">Debugger</a> <a href="/tags/Design-Pattern/" style="font-size: 11.43px;">Design Pattern</a> <a href="/tags/DistributedSystem/" style="font-size: 10px;">DistributedSystem</a> <a href="/tags/DotNet/" style="font-size: 11.43px;">DotNet</a> <a href="/tags/ELK/" style="font-size: 14.29px;">ELK</a> <a href="/tags/ESLint/" style="font-size: 10px;">ESLint</a> <a href="/tags/Elasticsearch/" style="font-size: 11.43px;">Elasticsearch</a> <a href="/tags/Enum/" style="font-size: 10px;">Enum</a> <a href="/tags/Error-Handling/" style="font-size: 11.43px;">Error Handling</a> <a href="/tags/Feature-Flag/" style="font-size: 10px;">Feature Flag</a> <a href="/tags/Fetch/" style="font-size: 10px;">Fetch</a> <a href="/tags/Git/" style="font-size: 11.43px;">Git</a> <a href="/tags/GitFlow/" style="font-size: 11.43px;">GitFlow</a> <a href="/tags/Gzip/" style="font-size: 10px;">Gzip</a> <a href="/tags/Hangfire/" style="font-size: 11.43px;">Hangfire</a> <a href="/tags/Incident/" style="font-size: 10px;">Incident</a> <a href="/tags/Interceptor/" style="font-size: 10px;">Interceptor</a> <a href="/tags/JavaScript/" style="font-size: 10px;">JavaScript</a> <a href="/tags/Kibana/" style="font-size: 10px;">Kibana</a> <a href="/tags/LazyCache/" style="font-size: 10px;">LazyCache</a> <a href="/tags/Logging/" style="font-size: 10px;">Logging</a> <a href="/tags/MFA/" style="font-size: 11.43px;">MFA</a> <a href="/tags/MessageHub/" style="font-size: 10px;">MessageHub</a> <a href="/tags/Micro-Frontend/" style="font-size: 10px;">Micro Frontend</a> <a href="/tags/MobileApp/" style="font-size: 12.86px;">MobileApp</a> <a href="/tags/MongoDB/" style="font-size: 10px;">MongoDB</a> <a href="/tags/Monitoring/" style="font-size: 12.86px;">Monitoring</a> <a href="/tags/Nuxt3/" style="font-size: 14.29px;">Nuxt3</a> <a href="/tags/Performance/" style="font-size: 14.29px;">Performance</a> <a href="/tags/Pinia/" style="font-size: 11.43px;">Pinia</a> <a href="/tags/Pre-Commit/" style="font-size: 10px;">Pre-Commit</a> <a href="/tags/Prerender/" style="font-size: 10px;">Prerender</a> <a href="/tags/QA-Testing/" style="font-size: 10px;">QA Testing</a> <a href="/tags/Queue/" style="font-size: 10px;">Queue</a> <a href="/tags/Rate-Limiting/" style="font-size: 10px;">Rate Limiting</a> <a href="/tags/RateLimit/" style="font-size: 10px;">RateLimit</a> <a href="/tags/Recording/" style="font-size: 10px;">Recording</a> <a href="/tags/Redis/" style="font-size: 15.71px;">Redis</a> <a href="/tags/Responsible-Gambling/" style="font-size: 10px;">Responsible Gambling</a> <a href="/tags/Revert/" style="font-size: 10px;">Revert</a> <a href="/tags/SEO/" style="font-size: 10px;">SEO</a> <a href="/tags/Safari/" style="font-size: 10px;">Safari</a> <a href="/tags/Security/" style="font-size: 14.29px;">Security</a> <a href="/tags/Session/" style="font-size: 10px;">Session</a> <a href="/tags/Tailwind-CSS/" style="font-size: 10px;">Tailwind CSS</a> <a href="/tags/TypeScript/" style="font-size: 15.71px;">TypeScript</a> <a href="/tags/Vite/" style="font-size: 10px;">Vite</a> <a href="/tags/Vue/" style="font-size: 12.86px;">Vue</a> <a href="/tags/Vue-Life-Cycle/" style="font-size: 10px;">Vue Life Cycle</a> <a href="/tags/Vue-Router/" style="font-size: 10px;">Vue Router</a> <a href="/tags/Vue-js/" style="font-size: 14.29px;">Vue.js</a> <a href="/tags/Vue3/" style="font-size: 17.14px;">Vue3</a> <a href="/tags/Web-Debug/" style="font-size: 10px;">Web Debug</a> <a href="/tags/Webpack/" style="font-size: 10px;">Webpack</a> <a href="/tags/Workflow/" style="font-size: 10px;">Workflow</a> <a href="/tags/iOS/" style="font-size: 10px;">iOS</a> <a href="/tags/v-html/" style="font-size: 10px;">v-html</a> <a href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" style="font-size: 10px;">前端架構</a> <a href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" style="font-size: 10px;">身份驗證</a>
+      <a href="/tags/NET/" style="font-size: 20px;">.NET</a> <a href="/tags/NET-Framework/" style="font-size: 10px;">.NET Framework</a> <a href="/tags/AOP/" style="font-size: 10px;">AOP</a> <a href="/tags/API-Design/" style="font-size: 11.11px;">API Design</a> <a href="/tags/ASP-NET/" style="font-size: 11.11px;">ASP.NET</a> <a href="/tags/ActionFilter/" style="font-size: 10px;">ActionFilter</a> <a href="/tags/App-Debug/" style="font-size: 10px;">App Debug</a> <a href="/tags/Architecture/" style="font-size: 18.89px;">Architecture</a> <a href="/tags/Asp-net/" style="font-size: 10px;">Asp.net</a> <a href="/tags/Attack/" style="font-size: 10px;">Attack</a> <a href="/tags/Authentication/" style="font-size: 10px;">Authentication</a> <a href="/tags/Axios/" style="font-size: 10px;">Axios</a> <a href="/tags/CMS/" style="font-size: 10px;">CMS</a> <a href="/tags/CSharp/" style="font-size: 11.11px;">CSharp</a> <a href="/tags/Cache/" style="font-size: 12.22px;">Cache</a> <a href="/tags/Cache-Invalidation/" style="font-size: 10px;">Cache Invalidation</a> <a href="/tags/Clean-Architecture/" style="font-size: 10px;">Clean Architecture</a> <a href="/tags/Composable/" style="font-size: 11.11px;">Composable</a> <a href="/tags/Composition-Api/" style="font-size: 10px;">Composition Api</a> <a href="/tags/Cron/" style="font-size: 10px;">Cron</a> <a href="/tags/Debug/" style="font-size: 12.22px;">Debug</a> <a href="/tags/Debugger/" style="font-size: 10px;">Debugger</a> <a href="/tags/Design-Pattern/" style="font-size: 11.11px;">Design Pattern</a> <a href="/tags/DistributedSystem/" style="font-size: 10px;">DistributedSystem</a> <a href="/tags/DotNet/" style="font-size: 11.11px;">DotNet</a> <a href="/tags/ELK/" style="font-size: 13.33px;">ELK</a> <a href="/tags/ESLint/" style="font-size: 10px;">ESLint</a> <a href="/tags/Elasticsearch/" style="font-size: 11.11px;">Elasticsearch</a> <a href="/tags/Enum/" style="font-size: 10px;">Enum</a> <a href="/tags/Error-Handling/" style="font-size: 11.11px;">Error Handling</a> <a href="/tags/EventSPI/" style="font-size: 10px;">EventSPI</a> <a href="/tags/Feature-Flag/" style="font-size: 10px;">Feature Flag</a> <a href="/tags/Fetch/" style="font-size: 10px;">Fetch</a> <a href="/tags/Git/" style="font-size: 11.11px;">Git</a> <a href="/tags/GitFlow/" style="font-size: 11.11px;">GitFlow</a> <a href="/tags/Gzip/" style="font-size: 10px;">Gzip</a> <a href="/tags/Hangfire/" style="font-size: 11.11px;">Hangfire</a> <a href="/tags/Incident/" style="font-size: 10px;">Incident</a> <a href="/tags/Interceptor/" style="font-size: 10px;">Interceptor</a> <a href="/tags/JavaScript/" style="font-size: 10px;">JavaScript</a> <a href="/tags/Kibana/" style="font-size: 10px;">Kibana</a> <a href="/tags/LazyCache/" style="font-size: 10px;">LazyCache</a> <a href="/tags/Logging/" style="font-size: 10px;">Logging</a> <a href="/tags/MFA/" style="font-size: 11.11px;">MFA</a> <a href="/tags/MessageHub/" style="font-size: 10px;">MessageHub</a> <a href="/tags/Micro-Frontend/" style="font-size: 10px;">Micro Frontend</a> <a href="/tags/MobileApp/" style="font-size: 12.22px;">MobileApp</a> <a href="/tags/MongoDB/" style="font-size: 10px;">MongoDB</a> <a href="/tags/Monitoring/" style="font-size: 12.22px;">Monitoring</a> <a href="/tags/Nuxt3/" style="font-size: 13.33px;">Nuxt3</a> <a href="/tags/Performance/" style="font-size: 13.33px;">Performance</a> <a href="/tags/Pinia/" style="font-size: 11.11px;">Pinia</a> <a href="/tags/Pre-Commit/" style="font-size: 10px;">Pre-Commit</a> <a href="/tags/Prerender/" style="font-size: 10px;">Prerender</a> <a href="/tags/QA-Testing/" style="font-size: 10px;">QA Testing</a> <a href="/tags/Queue/" style="font-size: 10px;">Queue</a> <a href="/tags/RabbitMQ/" style="font-size: 10px;">RabbitMQ</a> <a href="/tags/Rate-Limiting/" style="font-size: 10px;">Rate Limiting</a> <a href="/tags/RateLimit/" style="font-size: 10px;">RateLimit</a> <a href="/tags/Recording/" style="font-size: 10px;">Recording</a> <a href="/tags/Redis/" style="font-size: 17.78px;">Redis</a> <a href="/tags/Responsible-Gambling/" style="font-size: 11.11px;">Responsible Gambling</a> <a href="/tags/Revert/" style="font-size: 10px;">Revert</a> <a href="/tags/SEO/" style="font-size: 10px;">SEO</a> <a href="/tags/SSO/" style="font-size: 10px;">SSO</a> <a href="/tags/Safari/" style="font-size: 10px;">Safari</a> <a href="/tags/Security/" style="font-size: 14.44px;">Security</a> <a href="/tags/Session/" style="font-size: 12.22px;">Session</a> <a href="/tags/Tailwind-CSS/" style="font-size: 10px;">Tailwind CSS</a> <a href="/tags/TypeScript/" style="font-size: 15.56px;">TypeScript</a> <a href="/tags/Vite/" style="font-size: 10px;">Vite</a> <a href="/tags/Vue/" style="font-size: 12.22px;">Vue</a> <a href="/tags/Vue-Life-Cycle/" style="font-size: 10px;">Vue Life Cycle</a> <a href="/tags/Vue-Router/" style="font-size: 10px;">Vue Router</a> <a href="/tags/Vue-js/" style="font-size: 13.33px;">Vue.js</a> <a href="/tags/Vue3/" style="font-size: 16.67px;">Vue3</a> <a href="/tags/Web-Debug/" style="font-size: 10px;">Web Debug</a> <a href="/tags/Webpack/" style="font-size: 10px;">Webpack</a> <a href="/tags/Workflow/" style="font-size: 10px;">Workflow</a> <a href="/tags/iOS/" style="font-size: 10px;">iOS</a> <a href="/tags/v-html/" style="font-size: 10px;">v-html</a> <a href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" style="font-size: 10px;">前端架構</a> <a href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" style="font-size: 10px;">身份驗證</a>
     </div>
   </div>
 
@@ -868,7 +670,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
   <div class="widget-wrap">
     <h3 class="widget-title">彙整</h3>
     <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/08/">八月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">五月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/08/">八月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">五月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
     </div>
   </div>
 
@@ -879,6 +681,14 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
     <h3 class="widget-title">最新文章</h3>
     <div class="widget">
       <ul>
+        
+          <li>
+            <a href="/2026/05/17/AccountStateCrossChannelSession/">ASP.NET AccountState 設計：跨 Channel 登入狀態同步與踢出機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/17/ResponsibleGamblingProtection/">Responsible Gambling 後端防護設計：Self Exclusion / Time Out 不是前端按鈕</a>
+          </li>
         
           <li>
             <a href="/2026/04/21/HashBasedJobStaggering/">用 Job Name Hash 防止 Thundering Herd：30 支排程 Job 的自動錯開機制</a>
@@ -912,14 +722,6 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
             <a href="/2026/04/06/WatcherUtilAopPerformance/">WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯</a>
           </li>
         
-          <li>
-            <a href="/2026/04/01/LazyMemoryCacheRedisTwoTier/">雙層快取架構：LazyCache (L1) + Redis (L2) 防止 Cache Stampede</a>
-          </li>
-        
-          <li>
-            <a href="/2026/03/31/DebugManifestDynamicLoading/">Debug Mode 下動態抓取 manifest.json — _Layout.cshtml 的 JS 版本管理機制</a>
-          </li>
-        
       </ul>
     </div>
   </div>
@@ -939,7 +741,7 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;
   <div class="widget-wrap">
     <h3 class="widget-title">標籤</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Attack/" rel="tag">Attack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CSharp/" rel="tag">CSharp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cron/" rel="tag">Cron</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debugger/" rel="tag">Debugger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DistributedSystem/" rel="tag">DistributedSystem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DotNet/" rel="tag">DotNet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Fetch/" rel="tag">Fetch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hangfire/" rel="tag">Hangfire</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Incident/" rel="tag">Incident</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Interceptor/" rel="tag">Interceptor</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JavaScript/" rel="tag">JavaScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MessageHub/" rel="tag">MessageHub</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MobileApp/" rel="tag">MobileApp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Queue/" rel="tag">Queue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RateLimit/" rel="tag">RateLimit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Session/" rel="tag">Session</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" rel="tag">前端架構</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" rel="tag">身份驗證</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET/" rel="tag">ASP.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Attack/" rel="tag">Attack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CSharp/" rel="tag">CSharp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache-Invalidation/" rel="tag">Cache Invalidation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cron/" rel="tag">Cron</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debugger/" rel="tag">Debugger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DistributedSystem/" rel="tag">DistributedSystem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DotNet/" rel="tag">DotNet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EventSPI/" rel="tag">EventSPI</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Fetch/" rel="tag">Fetch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hangfire/" rel="tag">Hangfire</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Incident/" rel="tag">Incident</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Interceptor/" rel="tag">Interceptor</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JavaScript/" rel="tag">JavaScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MessageHub/" rel="tag">MessageHub</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MobileApp/" rel="tag">MobileApp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Queue/" rel="tag">Queue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RabbitMQ/" rel="tag">RabbitMQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RateLimit/" rel="tag">RateLimit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SSO/" rel="tag">SSO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Session/" rel="tag">Session</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" rel="tag">前端架構</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" rel="tag">身份驗證</a></li></ul>
     </div>
   </div>
 
