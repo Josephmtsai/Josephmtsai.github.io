@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="820" height="480" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', Arial, sans-serif">
+  <!-- Background -->
+  <rect width="820" height="480" fill="#f8f9fa" rx="8"/>
+
+  <!-- Title -->
+  <text x="410" y="36" text-anchor="middle" font-size="17" font-weight="bold" fill="#2c3e50">Xuenn.Trigger.EventSPI — 系統架構總覽</text>
+
+  <!-- ── Caller Service ── -->
+  <rect x="30" y="80" width="160" height="80" rx="10" fill="#3498db" opacity="0.15" stroke="#3498db" stroke-width="2"/>
+  <text x="110" y="115" text-anchor="middle" font-size="13" font-weight="bold" fill="#2980b9">Caller Service</text>
+  <text x="110" y="133" text-anchor="middle" font-size="11" fill="#2980b9">(資料修改端)</text>
+  <text x="110" y="150" text-anchor="middle" font-size="10" fill="#555">POST /api/topic</text>
+
+  <!-- Arrow: Caller → EventSPI -->
+  <line x1="190" y1="120" x2="290" y2="120" stroke="#7f8c8d" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="240" y="112" text-anchor="middle" font-size="10" fill="#555">TopicMessage</text>
+  <text x="240" y="125" text-anchor="middle" font-size="10" fill="#888">(HTTP POST)</text>
+
+  <!-- ── EventSPI ── -->
+  <rect x="290" y="60" width="180" height="120" rx="10" fill="#2ecc71" opacity="0.15" stroke="#27ae60" stroke-width="2"/>
+  <text x="380" y="95" text-anchor="middle" font-size="13" font-weight="bold" fill="#27ae60">Xuenn.Trigger</text>
+  <text x="380" y="113" text-anchor="middle" font-size="13" font-weight="bold" fill="#27ae60">.EventSPI</text>
+  <text x="380" y="133" text-anchor="middle" font-size="10" fill="#555">MessageCentralController</text>
+  <text x="380" y="148" text-anchor="middle" font-size="10" fill="#555">MQService.EmitMessage()</text>
+  <text x="380" y="163" text-anchor="middle" font-size="10" fill="#555">ASP.NET Web API</text>
+
+  <!-- Arrow: EventSPI → RabbitMQ -->
+  <line x1="470" y1="120" x2="570" y2="120" stroke="#7f8c8d" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="520" y="112" text-anchor="middle" font-size="10" fill="#555">Publish</text>
+  <text x="520" y="125" text-anchor="middle" font-size="10" fill="#888">(Topic Exchange)</text>
+
+  <!-- ── RabbitMQ ── -->
+  <rect x="570" y="60" width="200" height="130" rx="10" fill="#e74c3c" opacity="0.12" stroke="#e74c3c" stroke-width="2"/>
+  <text x="670" y="90" text-anchor="middle" font-size="13" font-weight="bold" fill="#c0392b">RabbitMQ</text>
+  <text x="670" y="108" text-anchor="middle" font-size="11" fill="#c0392b">MessageCentralDev</text>
+  <rect x="585" y="115" width="170" height="26" rx="5" fill="#fff" stroke="#e74c3c" stroke-width="1"/>
+  <text x="670" y="133" text-anchor="middle" font-size="10" fill="#555">Exchange: topic type</text>
+  <rect x="585" y="147" width="170" height="26" rx="5" fill="#fff" stroke="#e74c3c" stroke-width="1"/>
+  <text x="670" y="165" text-anchor="middle" font-size="10" fill="#555">BindingKey: *.Account.*</text>
+
+  <!-- Arrow: RabbitMQ → Consumer (down) -->
+  <line x1="670" y1="190" x2="670" y2="255" stroke="#7f8c8d" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="690" y="225" text-anchor="start" font-size="10" fill="#555">Subscribe</text>
+
+  <!-- ── AccountListener Consumer ── -->
+  <rect x="560" y="255" width="220" height="100" rx="10" fill="#9b59b6" opacity="0.12" stroke="#8e44ad" stroke-width="2"/>
+  <text x="670" y="280" text-anchor="middle" font-size="13" font-weight="bold" fill="#8e44ad">AccountListener</text>
+  <text x="670" y="298" text-anchor="middle" font-size="11" fill="#8e44ad">Consumer</text>
+  <text x="670" y="316" text-anchor="middle" font-size="10" fill="#555">RuleService.RuleFilterTrigger()</text>
+  <text x="670" y="332" text-anchor="middle" font-size="10" fill="#555">TopicFilter regex matching</text>
+  <text x="670" y="348" text-anchor="middle" font-size="10" fill="#555">RedLock 分散式鎖</text>
+
+  <!-- Arrow: Consumer → Redis -->
+  <line x1="560" y1="305" x2="430" y2="305" stroke="#7f8c8d" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="495" y="298" text-anchor="middle" font-size="10" fill="#555">ExpireKey</text>
+
+  <!-- ── Redis Cache ── -->
+  <rect x="240" y="260" width="190" height="100" rx="10" fill="#f39c12" opacity="0.15" stroke="#e67e22" stroke-width="2"/>
+  <text x="335" y="290" text-anchor="middle" font-size="13" font-weight="bold" fill="#d35400">Redis Cache</text>
+  <text x="335" y="308" text-anchor="middle" font-size="11" fill="#d35400">AccountCache</text>
+  <text x="335" y="326" text-anchor="middle" font-size="10" fill="#555">Key: {CacheName}:{accountId}</text>
+  <text x="335" y="342" text-anchor="middle" font-size="10" fill="#555">     :CacheState</text>
+  <text x="335" y="358" text-anchor="middle" font-size="10" fill="#555">KeyExpire(key, 0s) → 立即失效</text>
+
+  <!-- Legend -->
+  <rect x="30" y="390" width="760" height="70" rx="8" fill="#ecf0f1" stroke="#bdc3c7" stroke-width="1"/>
+  <text x="50" y="410" font-size="12" font-weight="bold" fill="#2c3e50">流程說明：</text>
+  <text x="50" y="430" font-size="11" fill="#555">1. 資料修改端傳送 TopicMessage（含 account id）至 EventSPI</text>
+  <text x="50" y="448" font-size="11" fill="#555">2. EventSPI 將訊息發佈至 RabbitMQ Topic Exchange（Topic 格式：{EventType}.Account.{accountId}）</text>
+  <text x="50" y="466" font-size="11" fill="#555">3. AccountListener Consumer 依 ConsumerRules 比對 TopicFilter，對對應的 Redis CacheState key 執行 ExpireKey</text>
+
+  <!-- Arrow marker -->
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#7f8c8d"/>
+    </marker>
+  </defs>
+</svg>
