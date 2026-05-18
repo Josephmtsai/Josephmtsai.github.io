@@ -1,14 +1,14 @@
 ---
-title: ASP.NET 會員系統的 AccountState 設計：跨 Channel 登入狀態同步與踢出機制
+title: "ASP.NET AccountState 設計：跨 Channel 登入狀態同步與踢出機制"
 date: 2026-05-18
 tags:
   - ASP.NET
   - Redis
   - SSO
   - Session
-  - Backend Architecture
+  - Architecture
 categories:
-  - Backend
+  - 後端架構
 ---
 
 ## 前言
@@ -19,7 +19,7 @@ categories:
 Session["IsLogin"] = true;
 ```
 
-但大型會員平台不是這樣。使用者可能同時存在於 Desktop Web、Mobile Web、Native App WebView，不同 Channel 都有自己的 session、cookie、cache 與登入 token。
+但大型會員平台通常不會這麼單純。使用者可能同時存在於 Desktop Web、Mobile Web、Native App WebView，不同 Channel 各自有 session、cookie、cache 與登入 token。
 
 這時候問題會變成：
 
@@ -28,7 +28,9 @@ Session["IsLogin"] = true;
 - Self Exclusion / Time Out 後，其他 Channel 是否要強制 reload 或 logout？
 - Redis session 還在，但帳號狀態已失效時怎麼處理？
 
-這個專案用 `AccountStateManager` 建立一層獨立於 ASP.NET Session 的登入狀態控制層，讓 session cache、SSO token、跨 Channel logout 可以被集中處理。
+這個專案透過 `AccountStateManager` 建立一層獨立於 ASP.NET Session 的登入狀態控制層，集中處理 session cache、SSO token 與跨 Channel logout。
+
+<!-- more -->
 
 ## AccountState 不是 Session
 
@@ -153,7 +155,7 @@ var result = new StateResult()
 };
 ```
 
-這個設計是安全導向的：如果 Redis 找不到狀態、`sourceID` 空值、或 SSO service exception，預設都視為失效。
+這個設計偏向 fail closed：只要 Redis 找不到狀態、`sourceID` 為空，或 SSO service 發生 exception，預設都視為失效。
 
 ```csharp
 if (sourceID.IsNullOrEmpty())
@@ -267,7 +269,7 @@ public override void OnActionExecuting(HttpActionContext actionContext)
 - 狀態失效時直接做 logout
 - 只有 Desktop / Mobile Web AppId 走這個 filter
 
-這是典型 cross-cutting concern，放在 ActionFilter 比散落在 Controller 更乾淨。
+這是典型的 cross-cutting concern，放在 ActionFilter 會比散落在各個 Controller 更乾淨。
 
 ## 跨 Channel 清除
 
@@ -353,45 +355,40 @@ HttpContext.Current.Response.Cookies.Add(cookie);
 
 ## 架構流程圖
 
-```text
-Login Success
-    |
-    v
-CreateAccountState(appId, accountId, uniqueId)
-    |
-    v
-Redis AccountState
-    |
-    v
-Every protected API
-    |
-    v
-AccountStateCheckerActionFilter
-    |
-    +-- valid --> SyncRedisToSession
-    |
-    +-- invalid --> DoMemberLogout
+```mermaid
+flowchart TD
+    Login["Login Success"]
+    Create["CreateAccountState<br>appId, accountId, uniqueId"]
+    Redis["Redis AccountState"]
+    Api["Every protected API"]
+    Filter["AccountStateCheckerActionFilter"]
+    Valid["SyncRedisToSession"]
+    Invalid["DoMemberLogout"]
+
+    Login --> Create
+    Create --> Redis
+    Redis --> Api
+    Api --> Filter
+    Filter -->|valid| Valid
+    Filter -->|invalid| Invalid
 ```
 
 跨 Channel：
 
-```text
-Self Exclusion / Time Out / Kickout
-    |
-    v
-ChangeAllChannelAccountState / ClearAccountStateOtherChannelAsync
-    |
-    v
-Redis AccountState updated
-    |
-    v
-Other Channel next request
-    |
-    v
-CheckAccountState failed or Reload
-    |
-    v
-Logout / Refresh session cache
+```mermaid
+flowchart TD
+    Trigger["Self Exclusion / Time Out / Kickout"]
+    Update["ChangeAllChannelAccountState<br>或 ClearAccountStateOtherChannelAsync"]
+    RedisUpdated["Redis AccountState updated"]
+    NextRequest["Other Channel next request"]
+    Check["CheckAccountState<br>failed or Reload"]
+    Action["Logout 或 Refresh session cache"]
+
+    Trigger --> Update
+    Update --> RedisUpdated
+    RedisUpdated --> NextRequest
+    NextRequest --> Check
+    Check --> Action
 ```
 
 ## 小結

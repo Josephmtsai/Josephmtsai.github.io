@@ -1,14 +1,14 @@
 ---
-title: Responsible Gambling 後端防護設計：Self Exclusion / Time Out 不是前端按鈕
+title: "Responsible Gambling 後端防護設計：Self Exclusion / Time Out 不是前端按鈕"
 date: 2026-05-18
 tags:
   - ASP.NET
   - Responsible Gambling
   - Security
   - Session
-  - Backend Architecture
+  - Architecture
 categories:
-  - Backend
+  - 後端架構
 ---
 
 ## 前言
@@ -19,7 +19,7 @@ Responsible Gambling 功能看起來像會員中心裡的一個設定頁：
 - 使用者選擇 Time Out
 - 系統顯示限制期間
 
-但從後端角度看，這不是一般 profile setting。
+但從後端角度看，這不是一般的 profile setting。
 
 它牽涉到：
 
@@ -31,6 +31,8 @@ Responsible Gambling 功能看起來像會員中心裡的一個設定頁：
 - Product / Deposit / Promotion 類頁面的存取限制
 
 因此 Responsible Gambling 不能只靠前端 UI 隱藏，必須由後端狀態與權限管線共同保護。
+
+<!-- more -->
 
 ## 相關檔案
 
@@ -82,13 +84,13 @@ public class SelfExclusionSetting : ResponsibleGamblingBase
 }
 ```
 
-兩者都包含：
+兩者都包含三個核心欄位：
 
 - applied date
 - expired date
 - period
 
-Self Exclusion 另外有 remove request date。
+Self Exclusion 則額外保留 remove request date，用來處理解除申請與到期判斷。
 
 ## 從 DTO 轉成前端設定
 
@@ -151,7 +153,7 @@ public static TimeOutSetting GetTimeOutSettingByDto(
 
 `WebAccountManager.SetSelfExclusion` 做了很多事，不只是呼叫 API。
 
-第一步：如果已在 exclusion 且尚未過期，直接擋掉：
+第一步，如果目前已在 exclusion 且尚未過期，直接擋掉：
 
 ```csharp
 if (trading.SelfExclusion &&
@@ -165,7 +167,7 @@ if (trading.SelfExclusion &&
 }
 ```
 
-第二步：呼叫 Customer SPI：
+第二步，呼叫 Customer SPI：
 
 ```csharp
 var model = new SelfExclusionInternalRequestModel()
@@ -181,7 +183,7 @@ internalResponse = AccountManager.UpdateSelfExclusion(
     trading.AppId);
 ```
 
-第三步：成功後更新目前 session 的 trading 狀態：
+第三步，成功後更新目前 session 的 trading 狀態：
 
 ```csharp
 trading.ExclusionExpiredDate = internalResponse.ResponseData.UpliftedDate;
@@ -192,7 +194,7 @@ trading.IsExcluded = true;
 trading.SessionUpdateTime = DateTime.MinValue;
 ```
 
-第四步：更新 Redis TradingSession cache：
+第四步，更新 Redis TradingSession cache：
 
 ```csharp
 CacheLayerManager.UpdateData<TradingSessionCache>(
@@ -201,7 +203,7 @@ CacheLayerManager.UpdateData<TradingSessionCache>(
     trading);
 ```
 
-第五步：寄信給會員與 risk team：
+第五步，寄信給會員與 risk team：
 
 ```csharp
 MsgHubManager.SendSelfExcludeMessage(
@@ -452,63 +454,56 @@ Time Out 也是同樣模式。
 
 這代表 Responsible Gambling 是一個跨 domain 流程：
 
-```text
-Account SPI
-    +
-Trading Cache
-    +
-AccountState
-    +
-PageGuard
-    +
-MsgHub
+```mermaid
+flowchart LR
+    SPI["Account SPI"]
+    Cache["Trading Cache"]
+    State["AccountState"]
+    Guard["PageGuard"]
+    Msg["MsgHub"]
+
+    SPI --> Cache
+    Cache --> State
+    State --> Guard
+    State --> Msg
 ```
 
 ## 完整流程圖
 
-```text
-User submits Self Exclusion / Time Out
-    |
-    v
-WebAccountManager
-    |
-    v
-AccountManager calls Customer SPI
-    |
-    +-- Success
-    |     |
-    |     v
-    |   Update Trading session fields
-    |     |
-    |     v
-    |   Update TradingSession cache
-    |     |
-    |     v
-    |   ChangeAllChannelAccountState
-    |     |
-    |     v
-    |   Send member + risk messages
-    |
-    +-- GeneralError
-          |
-          v
-        Force cache reload + kick out other platform
+```mermaid
+flowchart TD
+    Submit["User submits<br>Self Exclusion / Time Out"]
+    Web["WebAccountManager"]
+    Spi["AccountManager calls Customer SPI"]
+    UpdateSession["Update Trading session fields"]
+    UpdateCache["Update TradingSession cache"]
+    ChangeState["ChangeAllChannelAccountState"]
+    SendMsg["Send member + risk messages"]
+    Compensate["Force cache reload<br>and kick out other platform"]
+
+    Submit --> Web
+    Web --> Spi
+    Spi -->|Success| UpdateSession
+    UpdateSession --> UpdateCache
+    UpdateCache --> ChangeState
+    ChangeState --> SendMsg
+    Spi -->|GeneralError| Compensate
 ```
 
 頁面防護：
 
-```text
-Next request
-    |
-    v
-PageGuard / ResponsibleGamblingCheckerActionFilter
-    |
-    v
-UserPagePermissionChecker
-    |
-    +-- allowed path --> pass
-    |
-    +-- blocked path --> 403 / redirect forbidden
+```mermaid
+flowchart TD
+    Request["Next request"]
+    Guard["PageGuard / ResponsibleGamblingCheckerActionFilter"]
+    Checker["UserPagePermissionChecker"]
+    Pass["Pass"]
+    Block["403 或 redirect forbidden"]
+
+    Request --> Guard
+    Guard --> Checker
+    Checker -->|allowed path| Pass
+    Checker -->|blocked path| Block
 ```
 
 ## 小結
