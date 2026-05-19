@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-04LWQBG1HE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-04LWQBG1HE');
+</script>
+<!-- End Google Analytics -->
+
+  
+  <title>Vue 3 WebView Native Bridge 設計：同時支援 Android window.App 與 iOS WKWebView | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="前言WebView 專案最容易長歪的地方，是前端到處直接呼叫： 123window.App.nativeRedirect(&#x27;lobby&#x27;);window.App.logout();window.App.webviewRedirect(&#x27;deposit&#x27;, &#x27;&#x27;, &#x27;&#x27;);  短期看起來很快，長期會出現幾個問題：  We">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Vue 3 WebView Native Bridge 設計：同時支援 Android window.App 與 iOS WKWebView">
+<meta property="og:url" content="https://josephmtsai.github.io/2026/05/18/WebViewNativeBridge/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="前言WebView 專案最容易長歪的地方，是前端到處直接呼叫： 123window.App.nativeRedirect(&#x27;lobby&#x27;);window.App.logout();window.App.webviewRedirect(&#x27;deposit&#x27;, &#x27;&#x27;, &#x27;&#x27;);  短期看起來很快，長期會出現幾個問題：  We">
+<meta property="og:locale" content="zh_TW">
+<meta property="article:published_time" content="2026-05-18T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-05-19T03:27:17.951Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Vue3">
+<meta property="article:tag" content="iOS">
+<meta property="article:tag" content="WebView">
+<meta property="article:tag" content="Native Bridge">
+<meta property="article:tag" content="Android">
+<meta name="twitter:card" content="summary">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-WebViewNativeBridge" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/05/18/WebViewNativeBridge/" class="article-date">
+  <time class="dt-published" datetime="2026-05-18T16:00:00.000Z" itemprop="datePublished">2026-05-19</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Vue 3 WebView Native Bridge 設計：同時支援 Android window.App 與 iOS WKWebView
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>WebView 專案最容易長歪的地方，是前端到處直接呼叫：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">nativeRedirect</span>(<span class="string">&#x27;lobby&#x27;</span>);</span><br><span class="line"><span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">logout</span>();</span><br><span class="line"><span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">webviewRedirect</span>(<span class="string">&#x27;deposit&#x27;</span>, <span class="string">&#x27;&#x27;</span>, <span class="string">&#x27;&#x27;</span>);</span><br></pre></td></tr></table></figure>
+
+<p>短期看起來很快，長期會出現幾個問題：</p>
+<ul>
+<li>Web 瀏覽器環境沒有 <code>window.App</code>，直接噴錯</li>
+<li>Android 與 iOS bridge API 不一定長一樣</li>
+<li>有些 native method 是 fire-and-forget，有些會回傳資料</li>
+<li>同一個功能在 RWD 與 WebView 需要不同 fallback</li>
+<li>App team 改 method 或部分版本未支援時，前端會直接壞掉</li>
+</ul>
+<p>這個專案用 <code>webviewUtil.ts</code> 與 <code>nativeBridge.ts</code> 把 native bridge 包成一層 utility，讓呼叫點先檢查能力，再決定走 Native 還是 Web fallback。</p>
+<h2 id="相關檔案"><a href="#相關檔案" class="headerlink" title="相關檔案"></a>相關檔案</h2><figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">client/packages/common/utils/webviewUtil.ts</span><br><span class="line">client/packages/common/utils/nativeBridge.ts</span><br><span class="line">client/packages/common/utils/appEventsHelper.ts</span><br><span class="line">client/packages/common/stores/account-security.ts</span><br><span class="line">client/packages/star4webview/src/pages/NewDeviceVerifyPage.vue</span><br><span class="line">client/packages/star4webview/src/layout/HeaderFooterLayout.vue</span><br></pre></td></tr></table></figure>
+
+<h2 id="第一層：最基本的能力檢查"><a href="#第一層：最基本的能力檢查" class="headerlink" title="第一層：最基本的能力檢查"></a>第一層：最基本的能力檢查</h2><p><code>checkWebviewMethod</code> 是最基礎的保護：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">function</span> <span class="title function_">checkWebviewMethod</span>(<span class="params">methodName</span>) &#123;</span><br><span class="line">  <span class="keyword">return</span> <span class="keyword">typeof</span> <span class="variable language_">window</span>.<span class="property">App</span> !== <span class="string">&#x27;undefined&#x27;</span> &amp;&amp; <span class="keyword">typeof</span> <span class="variable language_">window</span>.<span class="property">App</span>[methodName] !== <span class="string">&#x27;undefined&#x27;</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這個函式看起來很小，但價值很高。</p>
+<p>它避免所有呼叫點直接假設 <code>window.App</code> 一定存在：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (<span class="title function_">checkWebviewMethod</span>(<span class="string">&#x27;logout&#x27;</span>)) &#123;</span><br><span class="line">  <span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">logout</span>();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這對共用 package 很重要，因為同一份 common code 同時會跑在：</p>
+<ul>
+<li>Desktop Web</li>
+<li>Mobile Web</li>
+<li>App WebView</li>
+<li>Storybook &#x2F; test environment</li>
+</ul>
+<p>沒有這層檢查，common code 很容易在非 WebView 環境直接 crash。</p>
+<h2 id="Android-與-iOS-Bridge-差異"><a href="#Android-與-iOS-Bridge-差異" class="headerlink" title="Android 與 iOS Bridge 差異"></a>Android 與 iOS Bridge 差異</h2><p>Android WebView 常見 bridge 形式：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">getDeviceInfo</span>();</span><br><span class="line"><span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">nativeRedirect</span>(<span class="string">&#x27;lobby&#x27;</span>);</span><br></pre></td></tr></table></figure>
+
+<p>iOS WKWebView 常見 bridge 形式：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">window</span>.<span class="property">webkit</span>.<span class="property">messageHandlers</span>.<span class="property">getDeviceInfo</span>.<span class="title function_">postMessage</span>(&#123;&#125;);</span><br></pre></td></tr></table></figure>
+
+<p>因此 <code>nativeBridge.ts</code> 把「檢查 method」分成兩種。</p>
+<p>有回傳資料的 method：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">function</span> <span class="title function_">checkWebviewMethodWithResponseData</span>(<span class="params"></span></span><br><span class="line"><span class="params">  <span class="attr">methodName</span>: <span class="built_in">string</span>,</span></span><br><span class="line"><span class="params">  <span class="attr">iosHandlerName</span>?: <span class="built_in">string</span>,</span></span><br><span class="line"><span class="params"></span>): <span class="built_in">boolean</span> &#123;</span><br><span class="line">  <span class="keyword">const</span> userAgent = navigator.<span class="property">userAgent</span>;</span><br><span class="line">  <span class="keyword">const</span> iosHandler = iosHandlerName || methodName;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (<span class="title function_">isIOS</span>(userAgent)) &#123;</span><br><span class="line">    <span class="keyword">return</span> !!<span class="variable language_">window</span>.<span class="property">webkit</span>?.<span class="property">messageHandlers</span>?.[iosHandler];</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (<span class="title function_">isAndroid</span>(userAgent)) &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="title function_">checkWebviewMethod</span>(methodName);</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這個函式的重點是：<strong>iOS 不查 <code>window.App</code>，而是查 <code>window.webkit.messageHandlers</code></strong>。</p>
+<p>同一個功能在不同平台可能不是同一個 bridge 入口，這也是 WebView utility 需要存在的原因。</p>
+<h2 id="統一呼叫入口：callNativeMethod"><a href="#統一呼叫入口：callNativeMethod" class="headerlink" title="統一呼叫入口：callNativeMethod"></a>統一呼叫入口：callNativeMethod</h2><p><code>callNativeMethod</code> 把 iOS 與 Android 的呼叫方式包起來：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">async</span> <span class="keyword">function</span> callNativeMethod&lt;T&gt;(</span><br><span class="line">  <span class="attr">methodName</span>: <span class="built_in">string</span>,</span><br><span class="line">  <span class="attr">params</span>?: <span class="built_in">unknown</span>,</span><br><span class="line">  <span class="attr">iosHandlerName</span>?: <span class="built_in">string</span>,</span><br><span class="line">): <span class="title class_">Promise</span>&lt;T | <span class="literal">null</span>&gt; &#123;</span><br><span class="line">  <span class="keyword">const</span> userAgent = navigator.<span class="property">userAgent</span>;</span><br><span class="line">  <span class="keyword">const</span> iosHandler = iosHandlerName || methodName;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (<span class="title function_">isIOS</span>(userAgent) &amp;&amp; <span class="variable language_">window</span>.<span class="property">webkit</span>?.<span class="property">messageHandlers</span>?.[iosHandler]) &#123;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">      <span class="keyword">const</span> result = <span class="keyword">await</span> <span class="variable language_">window</span>.<span class="property">webkit</span>.<span class="property">messageHandlers</span>[iosHandler].<span class="title function_">postMessage</span>(params ?? &#123;&#125;);</span><br><span class="line">      <span class="keyword">return</span> result <span class="keyword">as</span> T;</span><br><span class="line">    &#125; <span class="keyword">catch</span> (error) &#123;</span><br><span class="line">      <span class="variable language_">console</span>.<span class="title function_">warn</span>(<span class="string">`Failed to call iOS native method <span class="subst">$&#123;iosHandler&#125;</span>:`</span>, error);</span><br><span class="line">      <span class="keyword">return</span> <span class="literal">null</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (<span class="title function_">isAndroid</span>(userAgent) &amp;&amp; <span class="title function_">checkWebviewMethod</span>(methodName)) &#123;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">      <span class="keyword">const</span> result =</span><br><span class="line">        params !== <span class="literal">undefined</span> ? <span class="variable language_">window</span>.<span class="property">App</span>[methodName](params) : <span class="variable language_">window</span>.<span class="property">App</span>[methodName]();</span><br><span class="line">      <span class="keyword">return</span> result <span class="keyword">as</span> T;</span><br><span class="line">    &#125; <span class="keyword">catch</span> (error) &#123;</span><br><span class="line">      <span class="variable language_">console</span>.<span class="title function_">warn</span>(<span class="string">`Failed to call Android native method <span class="subst">$&#123;methodName&#125;</span>:`</span>, error);</span><br><span class="line">      <span class="keyword">return</span> <span class="literal">null</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> <span class="literal">null</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這裡有幾個設計重點：</p>
+<ul>
+<li>回傳 <code>Promise&lt;T | null&gt;</code>，呼叫方一定要處理 method 不存在</li>
+<li>iOS 與 Android 都用 try&#x2F;catch 包住</li>
+<li>iOS handler name 可以和 Android method name 不同</li>
+<li>不支援的平台回傳 null，而不是 throw</li>
+</ul>
+<p>這樣可以讓上層流程寫得比較乾淨：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> result = <span class="keyword">await</span> callNativeMethod&lt;<span class="built_in">boolean</span>&gt;(<span class="string">&#x27;checkAppSchemeAction&#x27;</span>, &#123;</span><br><span class="line">  <span class="attr">scheme</span>: appSchemeName,</span><br><span class="line">&#125;);</span><br><span class="line"></span><br><span class="line"><span class="keyword">return</span> result ?? <span class="literal">false</span>;</span><br></pre></td></tr></table></figure>
+
+<h2 id="Case-1：取得-Native-Device-Info"><a href="#Case-1：取得-Native-Device-Info" class="headerlink" title="Case 1：取得 Native Device Info"></a>Case 1：取得 Native Device Info</h2><p>Trusted Device 功能需要取得裝置資訊：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">async</span> <span class="keyword">function</span> <span class="title function_">getDeviceInfo</span>(<span class="params"></span>): <span class="title class_">Promise</span>&lt;<span class="title class_">WebviewDeviceInfo</span> | <span class="literal">null</span>&gt; &#123;</span><br><span class="line">  <span class="keyword">const</span> result = <span class="keyword">await</span> callNativeMethod&lt;<span class="built_in">string</span> | <span class="title class_">WebviewDeviceInfo</span>&gt;(<span class="string">&#x27;getDeviceInfo&#x27;</span>);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (!result) <span class="keyword">return</span> <span class="literal">null</span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (<span class="keyword">typeof</span> result === <span class="string">&#x27;string&#x27;</span>) &#123;</span><br><span class="line">    <span class="keyword">try</span> &#123;</span><br><span class="line">      <span class="keyword">return</span> <span class="title class_">JSON</span>.<span class="title function_">parse</span>(result) <span class="keyword">as</span> <span class="title class_">WebviewDeviceInfo</span>;</span><br><span class="line">    &#125; <span class="keyword">catch</span> &#123;</span><br><span class="line">      <span class="variable language_">console</span>.<span class="title function_">warn</span>(<span class="string">&#x27;Failed to parse device info JSON&#x27;</span>);</span><br><span class="line">      <span class="keyword">return</span> <span class="literal">null</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> result <span class="keyword">as</span> <span class="title class_">WebviewDeviceInfo</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這段處理了 App bridge 常見的資料格式不一致：</p>
+<ul>
+<li>有些 native 版本直接回 object</li>
+<li>有些 native 版本回 JSON string</li>
+</ul>
+<p>前端不把這個差異丟給 feature code，而是在 bridge utility 裡做 parse 與 fallback。</p>
+<p>在 <code>account-security.ts</code> 中使用：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (<span class="title function_">checkWebviewMethodWithResponseData</span>(<span class="string">&#x27;getDeviceInfo&#x27;</span>)) &#123;</span><br><span class="line">  <span class="keyword">const</span> webviewDeviceInfo = <span class="keyword">await</span> <span class="title function_">getDeviceInfo</span>();</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (webviewDeviceInfo) &#123;</span><br><span class="line">    fingerPrintId = webviewDeviceInfo.<span class="property">fingerPrintId</span> || fingerPrintId;</span><br><span class="line">    deviceModel = webviewDeviceInfo.<span class="property">deviceModel</span> || deviceModel;</span><br><span class="line">    screenResolution = webviewDeviceInfo.<span class="property">screenResolution</span> || screenResolution;</span><br><span class="line">    deviceLanguage = webviewDeviceInfo.<span class="property">deviceLanguage</span> || deviceLanguage;</span><br><span class="line">    countryCode = webviewDeviceInfo.<span class="property">countryCode</span> || countryCode;</span><br><span class="line">    deviceType = webviewDeviceInfo.<span class="property">deviceType</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這裡的 fallback 很關鍵：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">deviceModel = webviewDeviceInfo.<span class="property">deviceModel</span> || deviceModel;</span><br></pre></td></tr></table></figure>
+
+<p>如果 App 沒回某個欄位，仍然保留 Web 環境原本可取得的資料，不會把 request 組壞。</p>
+<h2 id="Case-2：WebView-Redirect-與-Web-Fallback"><a href="#Case-2：WebView-Redirect-與-Web-Fallback" class="headerlink" title="Case 2：WebView Redirect 與 Web Fallback"></a>Case 2：WebView Redirect 與 Web Fallback</h2><p><code>redirectWrapper</code> 把 WebView 與一般 Web 導頁合併：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">export</span> <span class="keyword">function</span> <span class="title function_">redirectWrapper</span>(<span class="params">router, path, openWindow = <span class="literal">false</span>, <span class="keyword">type</span> = <span class="string">&#x27;Star&#x27;</span>, referUrl = <span class="string">&#x27;&#x27;</span></span>) &#123;</span><br><span class="line">  <span class="keyword">if</span> (<span class="title function_">checkWebviewMethod</span>(<span class="string">&#x27;webviewRedirect&#x27;</span>)) &#123;</span><br><span class="line">    <span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">webviewRedirect</span>(<span class="keyword">type</span>, path, referUrl);</span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="keyword">if</span> (openWindow) &#123;</span><br><span class="line">      <span class="variable language_">window</span>.<span class="title function_">open</span>(<span class="string">`/<span class="subst">$&#123;<span class="variable language_">window</span>.gv.lan&#125;</span>/<span class="subst">$&#123;path&#125;</span>`</span>);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">      router.<span class="title function_">push</span>(<span class="string">`/<span class="subst">$&#123;<span class="variable language_">window</span>.gv.lan&#125;</span>/<span class="subst">$&#123;path&#125;</span>`</span>);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在 WebView：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">webviewRedirect</span>(<span class="keyword">type</span>, path, referUrl);</span><br></pre></td></tr></table></figure>
+
+<p>在一般 Web：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">router.<span class="title function_">push</span>(<span class="string">`/<span class="subst">$&#123;<span class="variable language_">window</span>.gv.lan&#125;</span>/<span class="subst">$&#123;path&#125;</span>`</span>);</span><br></pre></td></tr></table></figure>
+
+<p>這種寫法避免 feature component 裡到處寫：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (isWebView) &#123;</span><br><span class="line">  <span class="comment">// native</span></span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">  <span class="comment">// router</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="webviewRedirect-的語意不是單一路徑"><a href="#webviewRedirect-的語意不是單一路徑" class="headerlink" title="webviewRedirect 的語意不是單一路徑"></a>webviewRedirect 的語意不是單一路徑</h2><p><code>webviewUtil.ts</code> 裡的註解其實很有價值，因為它說明 <code>webviewRedirect</code> 不是單純 router path，而是 App 與 Web 約定好的 command：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">App.webviewRedirect(&#x27;Browser&#x27;, path, &#x27;&#x27;, &#x27;&#x27;)</span><br><span class="line">App.webviewRedirect(&#x27;Star&#x27;, path, referUrl)</span><br><span class="line">App.webviewRedirect(&#x27;PCH&#x27;, path, referUrl)</span><br><span class="line">App.webviewRedirect(&#x27;profileVerification&#x27;, &#x27;&#x27;, &#x27;&#x27;)</span><br><span class="line">App.webviewRedirect(&#x27;faq&#x27;, &#x27;&#x27;, &#x27;&#x27;)</span><br><span class="line">App.webviewRedirect(&#x27;deposit&#x27;, &#x27;&#x27;, &#x27;&#x27;)</span><br><span class="line">App.webviewRedirect(&#x27;withdrawal&#x27;, &#x27;&#x27;, &#x27;&#x27;)</span><br><span class="line">App.webviewRedirect(&#x27;termsConditions&#x27;, &#x27;&#x27;, &#x27;&#x27;)</span><br><span class="line">App.webviewRedirect(&#x27;responsibleGambling&#x27;, &#x27;&#x27;, &#x27;&#x27;)</span><br><span class="line">App.webviewRedirect(&#x27;profile&#x27;, &#x27;&#x27;, &#x27;&#x27;)</span><br><span class="line">App.webviewRedirect(&#x27;withdrawalTransHistory&#x27;, &#x27;&#x27;, &#x27;&#x27;)</span><br></pre></td></tr></table></figure>
+
+<p>這代表 bridge API 的第一個參數其實有 routing command 的味道。</p>
+<p>如果把這些呼叫散落在 component，很快就會變成 App&#x2F;Web 約定難以追蹤。集中放在 utility 或封裝成 domain function 會更安全。</p>
+<h2 id="Case-3：New-Device-Verify-成功後通知-App"><a href="#Case-3：New-Device-Verify-成功後通知-App" class="headerlink" title="Case 3：New Device Verify 成功後通知 App"></a>Case 3：New Device Verify 成功後通知 App</h2><p>在 New Device 驗證流程中，WebView 完成 MFA 後會拿到 <code>grantId</code>：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">handleVerified</span>(<span class="params"><span class="attr">result</span>: &#123;</span></span><br><span class="line"><span class="params">  success: <span class="built_in">boolean</span>;</span></span><br><span class="line"><span class="params">  passport: <span class="built_in">string</span>;</span></span><br><span class="line"><span class="params">  recDomain: <span class="built_in">Array</span>&lt;&#123; domain: <span class="built_in">string</span> &#125;&gt;;</span></span><br><span class="line"><span class="params">  grantId?: <span class="built_in">string</span>;</span></span><br><span class="line"><span class="params">  reachLimitTrustedDevice?: <span class="built_in">boolean</span>;</span></span><br><span class="line"><span class="params">&#125;</span>) &#123;</span><br><span class="line">  <span class="keyword">if</span> (result.<span class="property">grantId</span> &amp;&amp; <span class="title function_">checkWebviewMethod</span>(<span class="string">&#x27;verifyNewDeviceSuccess&#x27;</span>)) &#123;</span><br><span class="line">    <span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">verifyNewDeviceSuccess</span>(result.<span class="property">grantId</span>, result.<span class="property">reachLimitTrustedDevice</span>);</span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="variable language_">window</span>.<span class="property">location</span>.<span class="property">href</span> = <span class="string">`<span class="subst">$&#123;rootStore.gv.appScheme&#125;</span><span class="subst">$&#123;AppSchemePath.Login&#125;</span>`</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這段的設計邏輯是：</p>
+<ol>
+<li>WebView 完成驗證</li>
+<li>後端回 <code>grantId</code></li>
+<li>如果 App 支援 <code>verifyNewDeviceSuccess</code>，把 grantId 交給 App</li>
+<li>App 再用 grantId 兌換完整 login response</li>
+<li>如果 method 不存在，fallback 到 app scheme login</li>
+</ol>
+<p>這是前後端與 Native App 三方協作的典型場景。</p>
+<p>Web 不直接拿完整 session，而是把短效 grant 交回 App，讓 App 走原本的登入完成流程。</p>
+<h2 id="Case-4：WebView-Header-Title"><a href="#Case-4：WebView-Header-Title" class="headerlink" title="Case 4：WebView Header Title"></a>Case 4：WebView Header Title</h2><p><code>HeaderFooterLayout.vue</code> 會把頁面 title 傳給 App：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (<span class="title function_">checkWebviewMethod</span>(<span class="string">&#x27;webViewTitle&#x27;</span>)) &#123;</span><br><span class="line">  <span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">webViewTitle</span>(title);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這類 method 屬於 UI sync：</p>
+<ul>
+<li>Web 決定目前頁面 title</li>
+<li>App native shell 負責顯示 header</li>
+<li>Web 只在 method 存在時通知 App</li>
+</ul>
+<p>這種小同步很多，但如果沒有統一能力檢查，也很容易在瀏覽器測試時炸掉。</p>
+<h2 id="Case-5：Native-Redirect"><a href="#Case-5：Native-Redirect" class="headerlink" title="Case 5：Native Redirect"></a>Case 5：Native Redirect</h2><p>在 WebView router 或 Sports direct launch 中：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (<span class="title function_">checkWebviewMethod</span>(<span class="string">&#x27;nativeRedirect&#x27;</span>)) &#123;</span><br><span class="line">  <span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">nativeRedirect</span>(<span class="string">&#x27;lobby&#x27;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>或：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">nativeRedirect</span>(<span class="string">&#x27;sbk&#x27;</span>);</span><br></pre></td></tr></table></figure>
+
+<p><code>nativeRedirect</code> 通常不是普通 URL，而是 App 底部 tab 或 native module 的 navigation command。</p>
+<p>這類行為不能用 web router 模擬，所以最安全的策略是：</p>
+<ul>
+<li>有 native method 就交給 App</li>
+<li>沒有 native method 就不做 native redirect，改走 Web fallback 或結束流程</li>
+</ul>
+<h2 id="Bridge-設計原則"><a href="#Bridge-設計原則" class="headerlink" title="Bridge 設計原則"></a>Bridge 設計原則</h2><p>從這個專案可以整理出幾個原則：</p>
+<h3 id="1-任何-window-App-呼叫前都要-check"><a href="#1-任何-window-App-呼叫前都要-check" class="headerlink" title="1. 任何 window.App 呼叫前都要 check"></a>1. 任何 <code>window.App</code> 呼叫前都要 check</h3><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (<span class="title function_">checkWebviewMethod</span>(<span class="string">&#x27;logout&#x27;</span>)) &#123;</span><br><span class="line">  <span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">logout</span>();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這是最低限度的保護。</p>
+<h3 id="2-Android-與-iOS-bridge-要分開抽象"><a href="#2-Android-與-iOS-bridge-要分開抽象" class="headerlink" title="2. Android 與 iOS bridge 要分開抽象"></a>2. Android 與 iOS bridge 要分開抽象</h3><p>Android：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">window</span>.<span class="property">App</span>[methodName](params)</span><br></pre></td></tr></table></figure>
+
+<p>iOS：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">window</span>.<span class="property">webkit</span>.<span class="property">messageHandlers</span>[handlerName].<span class="title function_">postMessage</span>(params)</span><br></pre></td></tr></table></figure>
+
+<p>如果只封裝 Android，iOS 後續會長出一堆特殊 case。</p>
+<h3 id="3-回傳值要允許-null"><a href="#3-回傳值要允許-null" class="headerlink" title="3. 回傳值要允許 null"></a>3. 回傳值要允許 null</h3><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title class_">Promise</span>&lt;T | <span class="literal">null</span>&gt;</span><br></pre></td></tr></table></figure>
+
+<p>Native method 可能不存在、失敗、版本太舊、回傳格式錯誤。前端應該把這些都當成正常分支。</p>
+<h3 id="4-Feature-code-不應該理解所有-native-細節"><a href="#4-Feature-code-不應該理解所有-native-細節" class="headerlink" title="4. Feature code 不應該理解所有 native 細節"></a>4. Feature code 不應該理解所有 native 細節</h3><p>Feature code 應該像這樣：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> webviewDeviceInfo = <span class="keyword">await</span> <span class="title function_">getDeviceInfo</span>();</span><br></pre></td></tr></table></figure>
+
+<p>而不是：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (isIOS) &#123;</span><br><span class="line">  <span class="variable language_">window</span>.<span class="property">webkit</span>...</span><br><span class="line">&#125; <span class="keyword">else</span> <span class="keyword">if</span> (isAndroid) &#123;</span><br><span class="line">  <span class="variable language_">window</span>.<span class="property">App</span>...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>平台差異應該收斂在 bridge utility。</p>
+<h3 id="5-Web-fallback-要明確"><a href="#5-Web-fallback-要明確" class="headerlink" title="5. Web fallback 要明確"></a>5. Web fallback 要明確</h3><p>例如：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (<span class="title function_">checkWebviewMethod</span>(<span class="string">&#x27;webviewRedirect&#x27;</span>)) &#123;</span><br><span class="line">  <span class="variable language_">window</span>.<span class="property">App</span>.<span class="title function_">webviewRedirect</span>(<span class="keyword">type</span>, path, referUrl);</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">  router.<span class="title function_">push</span>(<span class="string">`/<span class="subst">$&#123;<span class="variable language_">window</span>.gv.lan&#125;</span>/<span class="subst">$&#123;path&#125;</span>`</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>不是所有 native method 都能 fallback，但能 fallback 的應該在 utility 層處理。</p>
+<h2 id="整體架構圖"><a href="#整體架構圖" class="headerlink" title="整體架構圖"></a>整體架構圖</h2><pre class="mermaid">graph TD
+    A["Feature code<br/>component / store / page"] --> B{"需要呼叫 Native 嗎？"}
+    B -->|一般導頁| C["redirectWrapper"]
+    B -->|需要回傳資料| D["nativeBridge.callNativeMethod<T>"]
+    B -->|單純通知 App| E["checkWebviewMethod + window.App.method"]
+
+    C --> F{"webviewRedirect exists?"}
+    F -->|Yes| G["window.App.webviewRedirect(type, path, referUrl)"]
+    F -->|No| H["router.push / window.open"]
+
+    D --> I{"Platform"}
+    I -->|iOS| J["window.webkit.messageHandlers[handler].postMessage(params)"]
+    I -->|Android| K["window.App[methodName](params)"]
+    I -->|Browser / unsupported| L["return null"]
+
+    E --> M{"method exists?"}
+    M -->|Yes| N["window.App.method(...)"]
+    M -->|No| O["skip or fallback"]</pre>
+
+<p>這張圖可以把整篇文章的核心濃縮成一句話：<strong>feature code 不直接理解平台差異，而是把平台差異交給 bridge layer</strong>。</p>
+<h2 id="iOS-Android-呼叫序列圖"><a href="#iOS-Android-呼叫序列圖" class="headerlink" title="iOS &#x2F; Android 呼叫序列圖"></a>iOS &#x2F; Android 呼叫序列圖</h2><pre class="mermaid">sequenceDiagram
+    participant Feature as Feature Code
+    participant Bridge as nativeBridge.ts
+    participant UA as UserAgent Check
+    participant IOS as iOS WKWebView
+    participant Android as Android window.App
+
+    Feature->>Bridge: callNativeMethod("getDeviceInfo")
+    Bridge->>UA: isIOS / isAndroid
+    alt iOS
+        Bridge->>IOS: messageHandlers.getDeviceInfo.postMessage({})
+        IOS-->>Bridge: device info / JSON string
+    else Android
+        Bridge->>Android: window.App.getDeviceInfo()
+        Android-->>Bridge: device info / JSON string
+    else Unsupported
+        Bridge-->>Feature: null
+    end
+    Bridge-->>Feature: WebviewDeviceInfo | null</pre>
+
+<p>這個設計讓 feature code 可以只處理資料結果：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> deviceInfo = <span class="keyword">await</span> <span class="title function_">getDeviceInfo</span>();</span><br></pre></td></tr></table></figure>
+
+<p>不用在每個 feature 裡重複寫 <code>isIOS</code>、<code>isAndroid</code>、<code>window.webkit</code>、<code>window.App</code>。</p>
+<h2 id="New-Device-Verify-三方流程"><a href="#New-Device-Verify-三方流程" class="headerlink" title="New Device Verify 三方流程"></a>New Device Verify 三方流程</h2><p>New Device Verify 是這套 Bridge 最典型的場景，因為它不是單純 Web 導頁，而是 Web、後端、Native App 三方協作。</p>
+<pre class="mermaid">sequenceDiagram
+    participant App as Native App
+    participant WebView as WebView Page
+    participant API as Web MFA API
+    participant SPI as App Login SPI
+
+    App->>WebView: Open new-device-verify with verificationId/accountId
+    WebView->>WebView: parse query params
+    WebView->>API: trigger / verify MFA
+    API-->>WebView: grantId + reachLimitTrustedDevice
+    alt App supports verifyNewDeviceSuccess
+        WebView->>App: window.App.verifyNewDeviceSuccess(grantId, reachLimitTrustedDevice)
+        App->>SPI: exchange login grant
+        SPI-->>App: LoginResponse(token/session/profile)
+    else method unavailable
+        WebView->>App: redirect by app scheme login
+    end</pre>
+
+<p>這裡最關鍵的是 <code>grantId</code> 的責任邊界：</p>
+<ul>
+<li>WebView 負責完成 MFA</li>
+<li>Web API 負責簽發短效 grant</li>
+<li>Native App 負責把 grant 兌換成正式 login session</li>
+</ul>
+<p>WebView 不直接保存完整 login session，這樣可以維持 App 原本的登入主控權，也能降低 WebView token 外洩的風險。</p>
+<h2 id="Bridge-Method-分類"><a href="#Bridge-Method-分類" class="headerlink" title="Bridge Method 分類"></a>Bridge Method 分類</h2><p>這個專案裡的 native method 大致可以分成幾類：</p>
+<table>
+<thead>
+<tr>
+<th>類型</th>
+<th>範例</th>
+<th>特性</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Navigation</td>
+<td><code>nativeRedirect</code>, <code>webviewRedirect</code>, <code>externalBrowser</code></td>
+<td>多半沒有回傳值，語意像 command</td>
+</tr>
+<tr>
+<td>UI Sync</td>
+<td><code>webViewTitle</code>, <code>updateUI</code>, <code>showSnackBar</code></td>
+<td>Web 通知 App shell 更新 UI</td>
+</tr>
+<tr>
+<td>Auth &#x2F; Session</td>
+<td><code>logout</code>, <code>verifyNewDeviceSuccess</code></td>
+<td>會影響登入狀態，需要非常保守</td>
+</tr>
+<tr>
+<td>Device Data</td>
+<td><code>getDeviceInfo</code>, <code>checkAppSchemeAction</code></td>
+<td>需要回傳值，iOS &#x2F; Android 差異最大</td>
+</tr>
+<tr>
+<td>Feature Entry</td>
+<td><code>startChatbotWithParam</code>, <code>chatNowEvent</code>, <code>jumioLostEmail</code></td>
+<td>通常綁特定產品功能</td>
+</tr>
+</tbody></table>
+<p>分類後會更清楚：不是所有 native method 都該用同一種呼叫策略。</p>
+<ul>
+<li>command 型 method 可以用 <code>checkWebviewMethod</code></li>
+<li>data 型 method 應該用 <code>callNativeMethod&lt;T&gt;</code></li>
+<li>redirect 型 method 應該提供 Web fallback</li>
+<li>auth 型 method 必須檢查存在且避免重複呼叫</li>
+</ul>
+<h2 id="失敗情境與處理策略"><a href="#失敗情境與處理策略" class="headerlink" title="失敗情境與處理策略"></a>失敗情境與處理策略</h2><h3 id="Method-不存在"><a href="#Method-不存在" class="headerlink" title="Method 不存在"></a>Method 不存在</h3><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (!<span class="title function_">checkWebviewMethod</span>(<span class="string">&#x27;webviewRedirect&#x27;</span>)) &#123;</span><br><span class="line">  router.<span class="title function_">push</span>(<span class="string">`/<span class="subst">$&#123;<span class="variable language_">window</span>.gv.lan&#125;</span>/<span class="subst">$&#123;path&#125;</span>`</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這通常發生在：</p>
+<ul>
+<li>使用者用瀏覽器開啟</li>
+<li>App 版本太舊</li>
+<li>Android &#x2F; iOS method 名稱不一致</li>
+<li>測試環境沒有注入 bridge</li>
+</ul>
+<p>策略是：能 fallback 就 fallback，不能 fallback 就靜默跳過或導向安全頁。</p>
+<h3 id="Native-回傳格式不一致"><a href="#Native-回傳格式不一致" class="headerlink" title="Native 回傳格式不一致"></a>Native 回傳格式不一致</h3><p><code>getDeviceInfo</code> 同時支援 object 與 JSON string：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (<span class="keyword">typeof</span> result === <span class="string">&#x27;string&#x27;</span>) &#123;</span><br><span class="line">  <span class="keyword">return</span> <span class="title class_">JSON</span>.<span class="title function_">parse</span>(result) <span class="keyword">as</span> <span class="title class_">WebviewDeviceInfo</span>;</span><br><span class="line">&#125;</span><br><span class="line"><span class="keyword">return</span> result <span class="keyword">as</span> <span class="title class_">WebviewDeviceInfo</span>;</span><br></pre></td></tr></table></figure>
+
+<p>這是 WebView 常見現實：不同 App 版本或平台可能回傳不同型別。Bridge layer 應該吸收這個差異，而不是讓每個 feature 自己 parse。</p>
+<h3 id="Native-method-throw-exception"><a href="#Native-method-throw-exception" class="headerlink" title="Native method throw exception"></a>Native method throw exception</h3><p><code>callNativeMethod</code> 用 try&#x2F;catch 包住：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">try</span> &#123;</span><br><span class="line">  <span class="keyword">const</span> result = <span class="variable language_">window</span>.<span class="property">App</span>[methodName](params);</span><br><span class="line">  <span class="keyword">return</span> result <span class="keyword">as</span> T;</span><br><span class="line">&#125; <span class="keyword">catch</span> (error) &#123;</span><br><span class="line">  <span class="variable language_">console</span>.<span class="title function_">warn</span>(...);</span><br><span class="line">  <span class="keyword">return</span> <span class="literal">null</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>回傳 null 比 throw 更適合 bridge layer，因為 Native method 失敗通常是環境能力問題，不應讓整個 Vue app crash。</p>
+<h2 id="可以再演進的方向"><a href="#可以再演進的方向" class="headerlink" title="可以再演進的方向"></a>可以再演進的方向</h2><p>目前 <code>checkWebviewMethod</code> 回傳 boolean，但 method payload 與 response type 還是靠呼叫方記得。若後續 bridge method 越來越多，可以再演進成 registry：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> <span class="title class_">NativeBridgeMethodMap</span> = &#123;</span><br><span class="line">  <span class="attr">getDeviceInfo</span>: &#123;</span><br><span class="line">    <span class="attr">params</span>: <span class="built_in">void</span>;</span><br><span class="line">    <span class="attr">response</span>: <span class="title class_">WebviewDeviceInfo</span>;</span><br><span class="line">  &#125;;</span><br><span class="line">  <span class="attr">checkAppSchemeAction</span>: &#123;</span><br><span class="line">    <span class="attr">params</span>: &#123; <span class="attr">scheme</span>: <span class="built_in">string</span> &#125;;</span><br><span class="line">    <span class="attr">response</span>: <span class="built_in">boolean</span>;</span><br><span class="line">  &#125;;</span><br><span class="line">  <span class="attr">verifyNewDeviceSuccess</span>: &#123;</span><br><span class="line">    <span class="attr">params</span>: &#123; <span class="attr">grantId</span>: <span class="built_in">string</span>; <span class="attr">reachLimitTrustedDevice</span>?: <span class="built_in">boolean</span> &#125;;</span><br><span class="line">    <span class="attr">response</span>: <span class="built_in">void</span>;</span><br><span class="line">  &#125;;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>再包一層 typed caller：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">callNative&lt;<span class="string">&#x27;getDeviceInfo&#x27;</span>&gt;(<span class="string">&#x27;getDeviceInfo&#x27;</span>);</span><br></pre></td></tr></table></figure>
+
+<p>這樣可以把「method name、params、response」都收斂成型別契約，減少 App&#x2F;Web 協作時的口頭約定。</p>
+<h2 id="小結"><a href="#小結" class="headerlink" title="小結"></a>小結</h2><p>這套 WebView Native Bridge 的價值不在於某個函式很複雜，而在於它建立了一個邊界：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">Feature Component / Store</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">webviewUtil / nativeBridge</span><br><span class="line">    |</span><br><span class="line">    +-- Android window.App</span><br><span class="line">    |</span><br><span class="line">    +-- iOS window.webkit.messageHandlers</span><br><span class="line">    |</span><br><span class="line">    +-- Web fallback</span><br></pre></td></tr></table></figure>
+
+<p>幾個值得借鑑的點：</p>
+<ul>
+<li><code>checkWebviewMethod</code> 防止非 WebView crash</li>
+<li><code>checkWebviewMethodWithResponseData</code> 處理 iOS &#x2F; Android 差異</li>
+<li><code>callNativeMethod&lt;T&gt;</code> 統一回傳型別與錯誤處理</li>
+<li><code>getDeviceInfo</code> 處理 object &#x2F; JSON string 兩種回傳</li>
+<li><code>redirectWrapper</code> 把 native redirect 與 web router fallback 放在同一層</li>
+<li>New Device Verify 用 <code>grantId</code> 回傳 App，保留 App 登入流程主控權</li>
+</ul>
+<p>WebView 架構最怕「到處直接呼叫 native」。一旦專案長大，Bridge utility 不是選配，而是前端與 App 協作的防火牆。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/05/18/WebViewNativeBridge/" data-id="cmpc2o2fs00alsu4eczmu2vwm" data-title="Vue 3 WebView Native Bridge 設計：同時支援 Android window.App 與 iOS WKWebView" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Android/" rel="tag">Android</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Native-Bridge/" rel="tag">Native Bridge</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/WebView/" rel="tag">WebView</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/05/18/AfterLoginAction/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          Vue 3 After Login Action 設計：未登入導頁後如何恢復原本動作
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/05/17/AccountStateCrossChannelSession/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">ASP.NET AccountState 設計：跨 Channel 登入狀態同步與踢出機制</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤雲</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/NET/" style="font-size: 20px;">.NET</a> <a href="/tags/NET-Framework/" style="font-size: 10px;">.NET Framework</a> <a href="/tags/AOP/" style="font-size: 10px;">AOP</a> <a href="/tags/API-Design/" style="font-size: 11.11px;">API Design</a> <a href="/tags/ASP-NET/" style="font-size: 11.11px;">ASP.NET</a> <a href="/tags/ASP-NET-MVC/" style="font-size: 10px;">ASP.NET MVC</a> <a href="/tags/ActionFilter/" style="font-size: 11.11px;">ActionFilter</a> <a href="/tags/Android/" style="font-size: 10px;">Android</a> <a href="/tags/App-Debug/" style="font-size: 10px;">App Debug</a> <a href="/tags/Architecture/" style="font-size: 18.89px;">Architecture</a> <a href="/tags/Asp-net/" style="font-size: 10px;">Asp.net</a> <a href="/tags/Attack/" style="font-size: 10px;">Attack</a> <a href="/tags/Authentication/" style="font-size: 10px;">Authentication</a> <a href="/tags/Authorization/" style="font-size: 10px;">Authorization</a> <a href="/tags/Axios/" style="font-size: 10px;">Axios</a> <a href="/tags/CMS/" style="font-size: 10px;">CMS</a> <a href="/tags/CSharp/" style="font-size: 11.11px;">CSharp</a> <a href="/tags/Cache/" style="font-size: 12.22px;">Cache</a> <a href="/tags/Cache-Invalidation/" style="font-size: 10px;">Cache Invalidation</a> <a href="/tags/Clean-Architecture/" style="font-size: 10px;">Clean Architecture</a> <a href="/tags/Composable/" style="font-size: 12.22px;">Composable</a> <a href="/tags/Composition-Api/" style="font-size: 10px;">Composition Api</a> <a href="/tags/Cron/" style="font-size: 10px;">Cron</a> <a href="/tags/Debug/" style="font-size: 12.22px;">Debug</a> <a href="/tags/Debugger/" style="font-size: 10px;">Debugger</a> <a href="/tags/Design-Pattern/" style="font-size: 11.11px;">Design Pattern</a> <a href="/tags/DistributedSystem/" style="font-size: 10px;">DistributedSystem</a> <a href="/tags/DotNet/" style="font-size: 11.11px;">DotNet</a> <a href="/tags/ELK/" style="font-size: 13.33px;">ELK</a> <a href="/tags/ESLint/" style="font-size: 10px;">ESLint</a> <a href="/tags/Elasticsearch/" style="font-size: 11.11px;">Elasticsearch</a> <a href="/tags/Enum/" style="font-size: 10px;">Enum</a> <a href="/tags/Error-Handling/" style="font-size: 11.11px;">Error Handling</a> <a href="/tags/EventSPI/" style="font-size: 10px;">EventSPI</a> <a href="/tags/Feature-Flag/" style="font-size: 10px;">Feature Flag</a> <a href="/tags/Fetch/" style="font-size: 10px;">Fetch</a> <a href="/tags/Frontend-Architecture/" style="font-size: 10px;">Frontend Architecture</a> <a href="/tags/Git/" style="font-size: 11.11px;">Git</a> <a href="/tags/GitFlow/" style="font-size: 11.11px;">GitFlow</a> <a href="/tags/Gzip/" style="font-size: 10px;">Gzip</a> <a href="/tags/Hangfire/" style="font-size: 11.11px;">Hangfire</a> <a href="/tags/Incident/" style="font-size: 10px;">Incident</a> <a href="/tags/Interceptor/" style="font-size: 10px;">Interceptor</a> <a href="/tags/JavaScript/" style="font-size: 10px;">JavaScript</a> <a href="/tags/Kibana/" style="font-size: 10px;">Kibana</a> <a href="/tags/LazyCache/" style="font-size: 10px;">LazyCache</a> <a href="/tags/Logging/" style="font-size: 10px;">Logging</a> <a href="/tags/Login-Flow/" style="font-size: 10px;">Login Flow</a> <a href="/tags/MFA/" style="font-size: 11.11px;">MFA</a> <a href="/tags/MessageHub/" style="font-size: 10px;">MessageHub</a> <a href="/tags/Micro-Frontend/" style="font-size: 10px;">Micro Frontend</a> <a href="/tags/MobileApp/" style="font-size: 12.22px;">MobileApp</a> <a href="/tags/MongoDB/" style="font-size: 10px;">MongoDB</a> <a href="/tags/Monitoring/" style="font-size: 12.22px;">Monitoring</a> <a href="/tags/Native-Bridge/" style="font-size: 10px;">Native Bridge</a> <a href="/tags/Nuxt3/" style="font-size: 13.33px;">Nuxt3</a> <a href="/tags/Performance/" style="font-size: 13.33px;">Performance</a> <a href="/tags/Pinia/" style="font-size: 11.11px;">Pinia</a> <a href="/tags/Pre-Commit/" style="font-size: 10px;">Pre-Commit</a> <a href="/tags/Prerender/" style="font-size: 10px;">Prerender</a> <a href="/tags/QA-Testing/" style="font-size: 10px;">QA Testing</a> <a href="/tags/Queue/" style="font-size: 10px;">Queue</a> <a href="/tags/RabbitMQ/" style="font-size: 10px;">RabbitMQ</a> <a href="/tags/Rate-Limiting/" style="font-size: 10px;">Rate Limiting</a> <a href="/tags/RateLimit/" style="font-size: 10px;">RateLimit</a> <a href="/tags/Recording/" style="font-size: 10px;">Recording</a> <a href="/tags/Redis/" style="font-size: 16.67px;">Redis</a> <a href="/tags/Responsible-Gambling/" style="font-size: 11.11px;">Responsible Gambling</a> <a href="/tags/Revert/" style="font-size: 10px;">Revert</a> <a href="/tags/RouteConstraint/" style="font-size: 10px;">RouteConstraint</a> <a href="/tags/SEO/" style="font-size: 10px;">SEO</a> <a href="/tags/SSO/" style="font-size: 10px;">SSO</a> <a href="/tags/Safari/" style="font-size: 10px;">Safari</a> <a href="/tags/Security/" style="font-size: 14.44px;">Security</a> <a href="/tags/Session/" style="font-size: 12.22px;">Session</a> <a href="/tags/SessionStorage/" style="font-size: 10px;">SessionStorage</a> <a href="/tags/Tailwind-CSS/" style="font-size: 10px;">Tailwind CSS</a> <a href="/tags/TypeScript/" style="font-size: 15.56px;">TypeScript</a> <a href="/tags/Vite/" style="font-size: 10px;">Vite</a> <a href="/tags/Vue/" style="font-size: 12.22px;">Vue</a> <a href="/tags/Vue-Life-Cycle/" style="font-size: 10px;">Vue Life Cycle</a> <a href="/tags/Vue-Router/" style="font-size: 10px;">Vue Router</a> <a href="/tags/Vue-js/" style="font-size: 13.33px;">Vue.js</a> <a href="/tags/Vue3/" style="font-size: 17.78px;">Vue3</a> <a href="/tags/Web-API/" style="font-size: 10px;">Web API</a> <a href="/tags/Web-Debug/" style="font-size: 10px;">Web Debug</a> <a href="/tags/WebView/" style="font-size: 10px;">WebView</a> <a href="/tags/Webpack/" style="font-size: 10px;">Webpack</a> <a href="/tags/Workflow/" style="font-size: 10px;">Workflow</a> <a href="/tags/iOS/" style="font-size: 11.11px;">iOS</a> <a href="/tags/v-html/" style="font-size: 10px;">v-html</a> <a href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" style="font-size: 10px;">前端架構</a> <a href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" style="font-size: 10px;">身份驗證</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/08/">八月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">五月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/05/18/AfterLoginAction/">Vue 3 After Login Action 設計：未登入導頁後如何恢復原本動作</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/18/WebViewNativeBridge/">Vue 3 WebView Native Bridge 設計：同時支援 Android window.App 與 iOS WKWebView</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/17/AccountStateCrossChannelSession/">ASP.NET AccountState 設計：跨 Channel 登入狀態同步與踢出機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/17/PageGuardRouteConstraintPermission/">ASP.NET MVC PageGuard 與 RouteConstraint：動態頁面權限管線設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/17/ResponsibleGamblingProtection/">Responsible Gambling 後端防護設計：Self Exclusion / Time Out 不是前端按鈕</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/HashBasedJobStaggering/">用 Job Name Hash 防止 Thundering Herd：30 支排程 Job 的自動錯開機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/MultiQueueResourceIsolation/">Hangfire Multi-Queue 資源隔離：讓重量級 Job 不拖垮整個排程系統</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/VueMfaVerificationFlow/">Vue 3 新裝置 MFA 驗證架構：從登入攔截到 WebView 完成驗證的完整設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/14/ELKSharing/">ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/10/nuxt3-centralized-fetch-interceptor/">Nuxt 3 實戰：用 Composable 封裝集中式請求攔截器</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Debug/">Debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Troubleshooting/">Troubleshooting</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%88%E8%83%BD%E8%AA%BF%E6%A0%A1/">效能調校</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E8%B3%87%E5%AE%89%E4%BA%8B%E4%BB%B6/">資安事件</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET/" rel="tag">ASP.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Android/" rel="tag">Android</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Attack/" rel="tag">Attack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authorization/" rel="tag">Authorization</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CSharp/" rel="tag">CSharp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache-Invalidation/" rel="tag">Cache Invalidation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cron/" rel="tag">Cron</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debugger/" rel="tag">Debugger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DistributedSystem/" rel="tag">DistributedSystem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DotNet/" rel="tag">DotNet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EventSPI/" rel="tag">EventSPI</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Fetch/" rel="tag">Fetch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Frontend-Architecture/" rel="tag">Frontend Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hangfire/" rel="tag">Hangfire</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Incident/" rel="tag">Incident</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Interceptor/" rel="tag">Interceptor</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JavaScript/" rel="tag">JavaScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Login-Flow/" rel="tag">Login Flow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MessageHub/" rel="tag">MessageHub</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MobileApp/" rel="tag">MobileApp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Native-Bridge/" rel="tag">Native Bridge</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Queue/" rel="tag">Queue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RabbitMQ/" rel="tag">RabbitMQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RateLimit/" rel="tag">RateLimit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RouteConstraint/" rel="tag">RouteConstraint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SSO/" rel="tag">SSO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Session/" rel="tag">Session</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SessionStorage/" rel="tag">SessionStorage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-API/" rel="tag">Web API</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/WebView/" rel="tag">WebView</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" rel="tag">前端架構</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" rel="tag">身份驗證</a></li></ul>
+    </div>
+  </div>
+
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+  <script src='https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({startOnLoad: true, theme: 'default'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-04LWQBG1HE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-04LWQBG1HE');
+</script>
+<!-- End Google Analytics -->
+
+  
+  <title>ASP.NET MVC PageGuard 與 RouteConstraint：動態頁面權限管線設計 | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="前言大型網站通常不是只有「登入」與「未登入」兩種頁面。 真實平台會有更多分類：  Public Page：首頁、註冊、FAQ Private Page：我的帳戶、Inbox、裝置確認 Product Page：Sports、Casino、Lotto 等遊戲頁 NoBlock Page：Live Chat、Pre Chat DepositOnly &#x2F; 特殊狀態頁  再加上維護狀態、產品地區">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ASP.NET MVC PageGuard 與 RouteConstraint：動態頁面權限管線設計">
+<meta property="og:url" content="https://josephmtsai.github.io/2026/05/17/PageGuardRouteConstraintPermission/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="前言大型網站通常不是只有「登入」與「未登入」兩種頁面。 真實平台會有更多分類：  Public Page：首頁、註冊、FAQ Private Page：我的帳戶、Inbox、裝置確認 Product Page：Sports、Casino、Lotto 等遊戲頁 NoBlock Page：Live Chat、Pre Chat DepositOnly &#x2F; 特殊狀態頁  再加上維護狀態、產品地區">
+<meta property="og:locale" content="zh_TW">
+<meta property="article:published_time" content="2026-05-17T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-05-19T03:27:17.937Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="ASP.NET MVC">
+<meta property="article:tag" content="Web API">
+<meta property="article:tag" content="ActionFilter">
+<meta property="article:tag" content="RouteConstraint">
+<meta property="article:tag" content="Authorization">
+<meta name="twitter:card" content="summary">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-PageGuardRouteConstraintPermission" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/05/17/PageGuardRouteConstraintPermission/" class="article-date">
+  <time class="dt-published" datetime="2026-05-17T16:00:00.000Z" itemprop="datePublished">2026-05-18</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      ASP.NET MVC PageGuard 與 RouteConstraint：動態頁面權限管線設計
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>大型網站通常不是只有「登入」與「未登入」兩種頁面。</p>
+<p>真實平台會有更多分類：</p>
+<ul>
+<li>Public Page：首頁、註冊、FAQ</li>
+<li>Private Page：我的帳戶、Inbox、裝置確認</li>
+<li>Product Page：Sports、Casino、Lotto 等遊戲頁</li>
+<li>NoBlock Page：Live Chat、Pre Chat</li>
+<li>DepositOnly &#x2F; 特殊狀態頁</li>
+</ul>
+<p>再加上維護狀態、產品地區限制、Responsible Gambling 限制，頁面權限就不能只靠一個 <code>[Authorize]</code> 解決。</p>
+<p>這個專案用 <code>PagePermissionDetector</code>、<code>RouteConstraint</code>、<code>PageGuardActionFilter</code> 與 <code>ResponsibleChain</code> 組成一條後端頁面權限管線。</p>
+<h2 id="相關檔案"><a href="#相關檔案" class="headerlink" title="相關檔案"></a>相關檔案</h2><figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">src/AgileBet.Cash.Portal.Web/Utilities/PagePermissionDetector.cs</span><br><span class="line">src/AgileBet.Cash.Portal.Web/Routing/PublicPageRouteConstraint.cs</span><br><span class="line">src/AgileBet.Cash.Portal.Web/Routing/PrivatePageRouteConstraint.cs</span><br><span class="line">src/AgileBet.Cash.Portal.Web/Routing/ProductRouteConstraint.cs</span><br><span class="line">src/AgileBet.Cash.Portal.Web/HttpActionFilter/PageGuardActionFilter.cs</span><br><span class="line">src/AgileBet.Cash.Portal.Web/Helper/PageCheckHelper.cs</span><br><span class="line">src/AgileBet.Cash.Portal.Web/Utilities/UserPagePermissionChecker.cs</span><br></pre></td></tr></table></figure>
+
+<h2 id="第一層：PagePermissionDetector"><a href="#第一層：PagePermissionDetector" class="headerlink" title="第一層：PagePermissionDetector"></a>第一層：PagePermissionDetector</h2><p><code>PagePermissionDetector</code> 負責把 URL page 判斷成權限類型：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> PagePermission <span class="title">DetectPagePermission</span>(<span class="params"><span class="built_in">string</span> page, <span class="built_in">string</span> path</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span> (<span class="built_in">string</span>.IsNullOrEmpty(page))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> PagePermission.Public;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (Check(privatePageRules, page, path))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> PagePermission.Private;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (Check(publicPageRules, page, path))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> PagePermission.Public;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (IsProductPage(page))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> PagePermission.Product;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (Check(noBlockPageRules, page, path))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> PagePermission.NoBlock;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> PagePermission.None;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這裡不是用 route name 判斷，而是用 page&#x2F;path 對應規則。</p>
+<p>例如 private page：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">private</span> <span class="keyword">static</span> <span class="keyword">readonly</span> List&lt;PageRoutingModel&gt; privatePageRules =</span><br><span class="line">    <span class="keyword">new</span> List&lt;PageRoutingModel&gt;()</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">new</span> PageRoutingModel()</span><br><span class="line">    &#123;</span><br><span class="line">        PageName = <span class="string">&quot;my-account&quot;</span>,</span><br><span class="line">        IgnorePath = <span class="keyword">new</span> List&lt;<span class="built_in">string</span>&gt;() &#123; <span class="string">&quot;sports&quot;</span> &#125;</span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="keyword">new</span> PageRoutingModel() &#123; PageName = <span class="string">&quot;inbox&quot;</span> &#125;,</span><br><span class="line">    <span class="keyword">new</span> PageRoutingModel() &#123; PageName = <span class="string">&quot;privilege-club&quot;</span> &#125;,</span><br><span class="line">    <span class="keyword">new</span> PageRoutingModel() &#123; PageName = <span class="string">&quot;device-confirmation&quot;</span> &#125;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>Public page：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">new</span> PageRoutingModel() &#123; PageName = <span class="string">&quot;home&quot;</span> &#125;,</span><br><span class="line"><span class="keyword">new</span> PageRoutingModel() &#123; PageName = <span class="string">&quot;user&quot;</span> &#125;,</span><br><span class="line"><span class="keyword">new</span> PageRoutingModel() &#123; PageName = <span class="string">&quot;faqs&quot;</span> &#125;,</span><br><span class="line"><span class="keyword">new</span> PageRoutingModel() &#123; PageName = <span class="string">&quot;support&quot;</span> &#125;,</span><br><span class="line"><span class="keyword">new</span> PageRoutingModel() &#123; PageName = <span class="string">&quot;sign-up&quot;</span> &#125;,</span><br><span class="line"><span class="keyword">new</span> PageRoutingModel() &#123; PageName = <span class="string">&quot;new-device-verify&quot;</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>IgnorePath</code> 是這裡很實用的細節。像 <code>my-account</code> 通常是 private，但某些 path 包含 <code>sports</code> 時要排除，避免過度攔截。</p>
+<h2 id="Product-Page-由設定驅動"><a href="#Product-Page-由設定驅動" class="headerlink" title="Product Page 由設定驅動"></a>Product Page 由設定驅動</h2><p>Product page 不是 hardcode list，而是從 <code>AppConfigManager.RegionProducts</code> 判斷：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="built_in">bool</span> <span class="title">IsProductPage</span>(<span class="params"><span class="built_in">string</span> page</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">var</span> prodSetting = AppConfigManager.RegionProducts</span><br><span class="line">        .FirstOrDefault(x =&gt;</span><br><span class="line">            x.Name.Equals(page) ||</span><br><span class="line">            (<span class="built_in">string</span>.IsNullOrEmpty(x.RegexPath) ? <span class="literal">false</span> :</span><br><span class="line">                Regex.IsMatch(page, <span class="string">$&quot;<span class="subst">&#123;x.RegexPath.Replace(<span class="string">&quot;|&quot;</span>, <span class="string">&quot;$|&quot;</span>)&#125;</span>$&quot;</span>,</span><br><span class="line">                    RegexOptions.IgnoreCase))</span><br><span class="line">        );</span><br><span class="line">    <span class="keyword">return</span> prodSetting != <span class="literal">null</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這代表新增產品或 region product mapping 時，不一定要改 route 程式碼，而是可以透過 config 擴充。</p>
+<h2 id="第二層：RouteConstraint"><a href="#第二層：RouteConstraint" class="headerlink" title="第二層：RouteConstraint"></a>第二層：RouteConstraint</h2><p>MVC route 用 <code>IRouteConstraint</code> 決定該 URL 是否符合某種頁面類型。</p>
+<p>Public route：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> <span class="built_in">bool</span> <span class="title">Match</span>(<span class="params"></span></span></span><br><span class="line"><span class="params"><span class="function">    HttpContextBase httpContext,</span></span></span><br><span class="line"><span class="params"><span class="function">    Route route,</span></span></span><br><span class="line"><span class="params"><span class="function">    <span class="built_in">string</span> parameterName,</span></span></span><br><span class="line"><span class="params"><span class="function">    RouteValueDictionary values,</span></span></span><br><span class="line"><span class="params"><span class="function">    RouteDirection routeDirection</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">var</span> page = values[parameterName]?.ToString();</span><br><span class="line">    <span class="keyword">if</span> (page == <span class="literal">null</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (values.ContainsKey(<span class="string">&quot;path&quot;</span>))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">var</span> path = values[<span class="string">&quot;path&quot;</span>]?.ToString();</span><br><span class="line">        <span class="keyword">return</span> Detector.DetectPagePermission(page, path) == PagePermission.Public;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Private route 特別排除 logout：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (page == <span class="literal">null</span> || page == <span class="string">&quot;logout&quot;</span>)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Product route 排除 sports 和 lobby：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (page == <span class="string">&quot;sports&quot;</span>)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> (path != <span class="literal">null</span> &amp;&amp; path.Contains(<span class="string">&quot;lobby&quot;</span>))</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">return</span> Detector.DetectPagePermission(page, path) == PagePermission.Product;</span><br></pre></td></tr></table></figure>
+
+<p>這些小規則看起來零碎，但正是大型站點 routing 的真實樣貌：不是所有頁面都能用一條泛用 route 吃掉。</p>
+<h2 id="第三層：PageGuardActionFilter"><a href="#第三層：PageGuardActionFilter" class="headerlink" title="第三層：PageGuardActionFilter"></a>第三層：PageGuardActionFilter</h2><p>前面 RouteConstraint 解決的是 MVC route matching；API 或前端導頁時，仍需要後端檢查目標頁是否可進入。</p>
+<p><code>PageGuardActionFilter</code> 會讀 <code>x-destination-path</code>：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> Tuple&lt;<span class="built_in">string</span>, <span class="built_in">string</span>&gt; <span class="title">GetPageAndPath</span>(<span class="params">HttpActionContext actionContext</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span> (actionContext.Request.Headers.TryGetValues(<span class="string">&quot;x-destination-path&quot;</span>,</span><br><span class="line">        <span class="keyword">out</span> <span class="keyword">var</span> destinationPathValues))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">var</span> destinationPath = destinationPathValues.FirstOrDefault();</span><br><span class="line">        <span class="keyword">var</span> page = destinationPath != <span class="literal">null</span></span><br><span class="line">            ? destinationPath.ToString().Split(<span class="string">&#x27;/&#x27;</span>).Skip(<span class="number">2</span>).FirstOrDefault()</span><br><span class="line">            : <span class="string">&quot;&quot;</span>;</span><br><span class="line">        <span class="keyword">return</span> Tuple.Create(page, destinationPath);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> Tuple.Create(<span class="built_in">string</span>.Empty, <span class="built_in">string</span>.Empty);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>也就是說前端可以在 API request 帶上即將前往的 path，後端再根據該 path 判斷是否允許。</p>
+<h2 id="Access-Gate：先判斷是否允許進站"><a href="#Access-Gate：先判斷是否允許進站" class="headerlink" title="Access Gate：先判斷是否允許進站"></a>Access Gate：先判斷是否允許進站</h2><p>第一道關卡：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> isAllowToAccess = trading.IsAllowedToAccess.HasValue</span><br><span class="line">    ? trading.IsAllowedToAccess.Value</span><br><span class="line">    : <span class="literal">false</span>;</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> ((isAllowToAccess || trading.IsCrawler) == <span class="literal">false</span>)</span><br><span class="line">&#123;</span><br><span class="line">    actionContext.Response =</span><br><span class="line">        actionContext.Request.CreateErrorResponse(HttpStatusCode.Forbidden,</span><br><span class="line">            <span class="keyword">new</span> HttpError());</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這裡允許兩種身份：</p>
+<ul>
+<li>正常可訪問使用者</li>
+<li>crawler</li>
+</ul>
+<p>如果兩者都不是，直接 403。</p>
+<h2 id="權限類型對應不同-Checker"><a href="#權限類型對應不同-Checker" class="headerlink" title="權限類型對應不同 Checker"></a>權限類型對應不同 Checker</h2><figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> permission = detector.DetectPagePermission(page, path);</span><br><span class="line"></span><br><span class="line"><span class="keyword">switch</span> (permission)</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">case</span> PagePermission.Private:</span><br><span class="line">        <span class="keyword">var</span> privateChecker =</span><br><span class="line">            <span class="keyword">new</span> PrivatePageChecker(<span class="keyword">new</span> ResponsibleGamblingChecker(<span class="literal">null</span>));</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">case</span> PagePermission.Public:</span><br><span class="line">        <span class="keyword">var</span> publicChecker =</span><br><span class="line">            <span class="keyword">new</span> PublicPageChecker(<span class="keyword">new</span> ResponsibleGamblingChecker(<span class="literal">null</span>));</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">case</span> PagePermission.Product:</span><br><span class="line">        <span class="keyword">var</span> productChecker =</span><br><span class="line">            <span class="keyword">new</span> ProductPageChecker(<span class="keyword">new</span> ResponsibleGamblingChecker(<span class="literal">null</span>));</span><br><span class="line">        <span class="keyword">break</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>每種頁面先跑自己的 checker，再接 Responsible Gambling checker。</p>
+<p>這是一個 Chain of Responsibility：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">PrivatePageChecker</span><br><span class="line">    -&gt; ResponsibleGamblingChecker</span><br><span class="line"></span><br><span class="line">PublicPageChecker</span><br><span class="line">    -&gt; ResponsibleGamblingChecker</span><br><span class="line"></span><br><span class="line">ProductPageChecker</span><br><span class="line">    -&gt; ResponsibleGamblingChecker</span><br></pre></td></tr></table></figure>
+
+<h2 id="PageCheckHelper：實際權限檢查"><a href="#PageCheckHelper：實際權限檢查" class="headerlink" title="PageCheckHelper：實際權限檢查"></a>PageCheckHelper：實際權限檢查</h2><p>Private page：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> Tuple&lt;HttpStatusCode, <span class="built_in">string</span>&gt; <span class="title">CheckPrivatePage</span>(<span class="params">SessionData session</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">var</span> trading = session.Trading;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (checker.IsMaintenance(session))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> Tuple.Create(HttpStatusCode.ServiceUnavailable, <span class="string">&quot;&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!trading.IsAuthenticated || trading.ChangePasswordFlag)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> Tuple.Create(HttpStatusCode.Unauthorized,</span><br><span class="line">            <span class="string">&quot;please login to continue&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">var</span> (isValid, remark) = checker.IsAccountValidate(session);</span><br><span class="line">    <span class="keyword">if</span> (isValid == <span class="literal">false</span>)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> Tuple.Create(HttpStatusCode.Unauthorized,</span><br><span class="line">            ((<span class="built_in">int</span>)remark).ToString());</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> Tuple.Create(HttpStatusCode.OK, <span class="string">&quot;&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Product page：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> Tuple&lt;HttpStatusCode, <span class="built_in">string</span>&gt; <span class="title">CheckProductPage</span>(<span class="params"></span></span></span><br><span class="line"><span class="params"><span class="function">    SessionData session,</span></span></span><br><span class="line"><span class="params"><span class="function">    <span class="built_in">string</span> prod</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span> (checker.IsMaintenance(session))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> Tuple.Create(HttpStatusCode.ServiceUnavailable, <span class="string">&quot;&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (checker.IsProdForbidden(session, prod))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> Tuple.Create(HttpStatusCode.Forbidden,</span><br><span class="line">            <span class="string">$&quot;prodforbidden=<span class="subst">&#123;prod&#125;</span>&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> Tuple.Create(HttpStatusCode.OK, <span class="string">&quot;&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>Public page 只檢查 maintenance：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">public</span> Tuple&lt;HttpStatusCode, <span class="built_in">string</span>&gt; <span class="title">CheckPublicPage</span>(<span class="params">SessionData session</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span> (checker.IsMaintenance(session))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> Tuple.Create(HttpStatusCode.ServiceUnavailable, <span class="string">&quot;&quot;</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> Tuple.Create(HttpStatusCode.OK, <span class="string">&quot;&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="Responsible-Gambling-作為最後一層"><a href="#Responsible-Gambling-作為最後一層" class="headerlink" title="Responsible Gambling 作為最後一層"></a>Responsible Gambling 作為最後一層</h2><p><code>ResponsibleGamblingChecker</code> 不關心頁面是 Public、Private 還是 Product，只關心這個使用者狀態是否允許進入目標 path：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (permissionChecker.IsInDisallowPath(</span><br><span class="line">    setting.Session,</span><br><span class="line">    setting.DisAllowRgStatus,</span><br><span class="line">    setting.DestinationPath,</span><br><span class="line">    setting.ByPassPathChecker))</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="keyword">new</span> Tuple&lt;HttpStatusCode, <span class="built_in">string</span>&gt;(</span><br><span class="line">        HttpStatusCode.Forbidden,</span><br><span class="line">        LimitHttpStatus.LimitAccess.ToString().ToLower());</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這個設計的好處是 Responsible Gambling 不需要散落到各種 checker 裡，它是一個獨立的最後關卡。</p>
+<h2 id="if-else-可以怎麼收斂"><a href="#if-else-可以怎麼收斂" class="headerlink" title="if&#x2F;else 可以怎麼收斂"></a>if&#x2F;else 可以怎麼收斂</h2><p>這套設計的方向是對的，但目前有幾個地方容易隨規則增加而變成 if&#x2F;else 堆疊：</p>
+<ul>
+<li><code>PagePermissionDetector</code> 用固定順序判斷 private &#x2F; public &#x2F; product &#x2F; no block</li>
+<li><code>RouteConstraint</code> 各自處理 page&#x2F;path 解析與特例</li>
+<li><code>PageGuardActionFilter</code> 用 <code>switch</code> 建立不同 checker chain</li>
+<li><code>PageCheckHelper</code> 裡面有很多 guard clause</li>
+</ul>
+<p>我會保留 <code>PageCheckHelper</code> 的 guard clause。maintenance、login、account validate 都是線性關卡，直接 return 反而清楚。真正值得收斂的是「會隨規則新增而一直長大」的分派邏輯。</p>
+<h3 id="1-PagePermissionDetector-改成規則列"><a href="#1-PagePermissionDetector-改成規則列" class="headerlink" title="1. PagePermissionDetector 改成規則列"></a>1. PagePermissionDetector 改成規則列</h3><p>目前寫法是程式碼控制順序：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (Check(privatePageRules, page, path)) <span class="keyword">return</span> PagePermission.Private;</span><br><span class="line"><span class="keyword">if</span> (Check(publicPageRules, page, path)) <span class="keyword">return</span> PagePermission.Public;</span><br><span class="line"><span class="keyword">if</span> (IsProductPage(page)) <span class="keyword">return</span> PagePermission.Product;</span><br><span class="line"><span class="keyword">if</span> (Check(noBlockPageRules, page, path)) <span class="keyword">return</span> PagePermission.NoBlock;</span><br></pre></td></tr></table></figure>
+
+<p>可以改成 ordered rule list，讓順序與判斷集中在一個資料結構：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">private</span> <span class="keyword">readonly</span> IReadOnlyList&lt;PagePermissionRule&gt; rules = <span class="keyword">new</span>[]</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">new</span> PagePermissionRule(PagePermission.Private,</span><br><span class="line">        (page, path) =&gt; Check(privatePageRules, page, path)),</span><br><span class="line">    <span class="keyword">new</span> PagePermissionRule(PagePermission.Public,</span><br><span class="line">        (page, path) =&gt; Check(publicPageRules, page, path)),</span><br><span class="line">    <span class="keyword">new</span> PagePermissionRule(PagePermission.Product,</span><br><span class="line">        (page, path) =&gt; IsProductPage(page)),</span><br><span class="line">    <span class="keyword">new</span> PagePermissionRule(PagePermission.NoBlock,</span><br><span class="line">        (page, path) =&gt; Check(noBlockPageRules, page, path)),</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> PagePermission <span class="title">DetectPagePermission</span>(<span class="params"><span class="built_in">string</span> page, <span class="built_in">string</span> path</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span> (<span class="built_in">string</span>.IsNullOrEmpty(page))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> PagePermission.Public;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> rules.FirstOrDefault(rule =&gt; rule.IsMatch(page, path))?.Permission</span><br><span class="line">        ?? PagePermission.None;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這樣新增 <code>DepositOnly</code> 或特殊 page type 時，主要是加 rule，不是在 method 裡繼續加 <code>if</code>。</p>
+<h3 id="2-Permission-到-checker-chain-改成-factory-map"><a href="#2-Permission-到-checker-chain-改成-factory-map" class="headerlink" title="2. Permission 到 checker chain 改成 factory map"></a>2. Permission 到 checker chain 改成 factory map</h3><p><code>PageGuardActionFilter</code> 的 <code>switch</code> 可以改成 dictionary，把「PagePermission 對應哪條 chain」變成配置：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">private</span> <span class="keyword">readonly</span> IReadOnlyDictionary&lt;PagePermission, Func&lt;IPageChecker&gt;&gt; checkerFactories =</span><br><span class="line">    <span class="keyword">new</span> Dictionary&lt;PagePermission, Func&lt;IPageChecker&gt;&gt;</span><br><span class="line">&#123;</span><br><span class="line">    [<span class="meta">PagePermission.Private</span>] = () =&gt;</span><br><span class="line">        <span class="keyword">new</span> PrivatePageChecker(<span class="keyword">new</span> ResponsibleGamblingChecker(<span class="literal">null</span>)),</span><br><span class="line">    [<span class="meta">PagePermission.Public</span>] = () =&gt;</span><br><span class="line">        <span class="keyword">new</span> PublicPageChecker(<span class="keyword">new</span> ResponsibleGamblingChecker(<span class="literal">null</span>)),</span><br><span class="line">    [<span class="meta">PagePermission.Product</span>] = () =&gt;</span><br><span class="line">        <span class="keyword">new</span> ProductPageChecker(<span class="keyword">new</span> ResponsibleGamblingChecker(<span class="literal">null</span>)),</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> (!checkerFactories.TryGetValue(permission, <span class="keyword">out</span> <span class="keyword">var</span> createChecker))</span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> Allow();</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">var</span> checker = createChecker();</span><br><span class="line"><span class="keyword">var</span> result = checker.Check(context);</span><br></pre></td></tr></table></figure>
+
+<p>如果頁面類型越來越多，這個 map 還可以抽到 <code>PageCheckerFactory</code>，讓 action filter 只負責管線，不負責組裝細節。</p>
+<h3 id="3-RouteConstraint-抽出共用-base"><a href="#3-RouteConstraint-抽出共用-base" class="headerlink" title="3. RouteConstraint 抽出共用 base"></a>3. RouteConstraint 抽出共用 base</h3><p>Public &#x2F; Private &#x2F; Product route 都在做相似的事：解 page、解 path、套特例、呼叫 detector。可以留下各自的特例，但把重複流程收到 base class：</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">protected</span> <span class="keyword">abstract</span> PagePermission TargetPermission &#123; <span class="keyword">get</span>; &#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">protected</span> <span class="keyword">virtual</span> <span class="built_in">bool</span> <span class="title">ShouldSkip</span>(<span class="params"><span class="built_in">string</span> page, <span class="built_in">string</span> path</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="built_in">bool</span> <span class="title">Match</span>(<span class="params">...</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">var</span> routePage = GetPage(values, parameterName);</span><br><span class="line">    <span class="keyword">var</span> routePath = GetPath(values);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (<span class="built_in">string</span>.IsNullOrEmpty(routePage) || ShouldSkip(routePage, routePath))</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> Detector.DetectPagePermission(routePage, routePath) == TargetPermission;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>ProductRouteConstraint</code> 只要 override <code>ShouldSkip</code> 處理 sports &#x2F; lobby，主流程不用重複寫。</p>
+<h2 id="完整流程"><a href="#完整流程" class="headerlink" title="完整流程"></a>完整流程</h2><pre class="mermaid">graph TD
+    A["Request with x-destination-path"] --> B["PageGuardActionFilter"]
+    B --> C["PagePermissionDetector"]
+    C --> D{"PagePermission"}
+    D -->|Public| E["PublicPageChecker"]
+    D -->|Private| F["PrivatePageChecker"]
+    D -->|Product| G["ProductPageChecker"]
+    D -->|NoBlock / DepositOnly| H["Pass"]
+    E --> I["ResponsibleGamblingChecker"]
+    F --> I
+    G --> I
+    I --> J{"Allowed?"}
+    J -->|Yes| K["Continue request"]
+    J -->|No| L["Return 401 / 403 / 503"]</pre>
+
+<h2 id="小結"><a href="#小結" class="headerlink" title="小結"></a>小結</h2><p>這套設計的核心不是單一技術，而是責任拆分：</p>
+<ul>
+<li><code>PagePermissionDetector</code>：判斷頁面類型</li>
+<li><code>RouteConstraint</code>：讓 MVC route 選對 controller</li>
+<li><code>PageGuardActionFilter</code>：API 層集中做頁面權限檢查</li>
+<li><code>PageCheckHelper</code>：封裝 maintenance &#x2F; login &#x2F; product forbidden</li>
+<li><code>ResponsibleGamblingChecker</code>：補上法規與風控限制</li>
+</ul>
+<p>如果只用 <code>[Authorize]</code>，這些邏輯最後會全部塞進 Controller 或前端 router guard。這個專案把它們拆成後端管線，讓頁面權限可以被測試、被擴充，也能在前端繞過時仍然生效。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/05/17/PageGuardRouteConstraintPermission/" data-id="cmpc2o2ec001usu4e1kn0fc9x" data-title="ASP.NET MVC PageGuard 與 RouteConstraint：動態頁面權限管線設計" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Authorization/" rel="tag">Authorization</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/RouteConstraint/" rel="tag">RouteConstraint</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Web-API/" rel="tag">Web API</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/05/17/AccountStateCrossChannelSession/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          ASP.NET AccountState 設計：跨 Channel 登入狀態同步與踢出機制
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/05/17/ResponsibleGamblingProtection/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">Responsible Gambling 後端防護設計：Self Exclusion / Time Out 不是前端按鈕</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤雲</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/NET/" style="font-size: 20px;">.NET</a> <a href="/tags/NET-Framework/" style="font-size: 10px;">.NET Framework</a> <a href="/tags/AOP/" style="font-size: 10px;">AOP</a> <a href="/tags/API-Design/" style="font-size: 11.11px;">API Design</a> <a href="/tags/ASP-NET/" style="font-size: 11.11px;">ASP.NET</a> <a href="/tags/ASP-NET-MVC/" style="font-size: 10px;">ASP.NET MVC</a> <a href="/tags/ActionFilter/" style="font-size: 11.11px;">ActionFilter</a> <a href="/tags/Android/" style="font-size: 10px;">Android</a> <a href="/tags/App-Debug/" style="font-size: 10px;">App Debug</a> <a href="/tags/Architecture/" style="font-size: 18.89px;">Architecture</a> <a href="/tags/Asp-net/" style="font-size: 10px;">Asp.net</a> <a href="/tags/Attack/" style="font-size: 10px;">Attack</a> <a href="/tags/Authentication/" style="font-size: 10px;">Authentication</a> <a href="/tags/Authorization/" style="font-size: 10px;">Authorization</a> <a href="/tags/Axios/" style="font-size: 10px;">Axios</a> <a href="/tags/CMS/" style="font-size: 10px;">CMS</a> <a href="/tags/CSharp/" style="font-size: 11.11px;">CSharp</a> <a href="/tags/Cache/" style="font-size: 12.22px;">Cache</a> <a href="/tags/Cache-Invalidation/" style="font-size: 10px;">Cache Invalidation</a> <a href="/tags/Clean-Architecture/" style="font-size: 10px;">Clean Architecture</a> <a href="/tags/Composable/" style="font-size: 12.22px;">Composable</a> <a href="/tags/Composition-Api/" style="font-size: 10px;">Composition Api</a> <a href="/tags/Cron/" style="font-size: 10px;">Cron</a> <a href="/tags/Debug/" style="font-size: 12.22px;">Debug</a> <a href="/tags/Debugger/" style="font-size: 10px;">Debugger</a> <a href="/tags/Design-Pattern/" style="font-size: 11.11px;">Design Pattern</a> <a href="/tags/DistributedSystem/" style="font-size: 10px;">DistributedSystem</a> <a href="/tags/DotNet/" style="font-size: 11.11px;">DotNet</a> <a href="/tags/ELK/" style="font-size: 13.33px;">ELK</a> <a href="/tags/ESLint/" style="font-size: 10px;">ESLint</a> <a href="/tags/Elasticsearch/" style="font-size: 11.11px;">Elasticsearch</a> <a href="/tags/Enum/" style="font-size: 10px;">Enum</a> <a href="/tags/Error-Handling/" style="font-size: 11.11px;">Error Handling</a> <a href="/tags/EventSPI/" style="font-size: 10px;">EventSPI</a> <a href="/tags/Feature-Flag/" style="font-size: 10px;">Feature Flag</a> <a href="/tags/Fetch/" style="font-size: 10px;">Fetch</a> <a href="/tags/Frontend-Architecture/" style="font-size: 10px;">Frontend Architecture</a> <a href="/tags/Git/" style="font-size: 11.11px;">Git</a> <a href="/tags/GitFlow/" style="font-size: 11.11px;">GitFlow</a> <a href="/tags/Gzip/" style="font-size: 10px;">Gzip</a> <a href="/tags/Hangfire/" style="font-size: 11.11px;">Hangfire</a> <a href="/tags/Incident/" style="font-size: 10px;">Incident</a> <a href="/tags/Interceptor/" style="font-size: 10px;">Interceptor</a> <a href="/tags/JavaScript/" style="font-size: 10px;">JavaScript</a> <a href="/tags/Kibana/" style="font-size: 10px;">Kibana</a> <a href="/tags/LazyCache/" style="font-size: 10px;">LazyCache</a> <a href="/tags/Logging/" style="font-size: 10px;">Logging</a> <a href="/tags/Login-Flow/" style="font-size: 10px;">Login Flow</a> <a href="/tags/MFA/" style="font-size: 11.11px;">MFA</a> <a href="/tags/MessageHub/" style="font-size: 10px;">MessageHub</a> <a href="/tags/Micro-Frontend/" style="font-size: 10px;">Micro Frontend</a> <a href="/tags/MobileApp/" style="font-size: 12.22px;">MobileApp</a> <a href="/tags/MongoDB/" style="font-size: 10px;">MongoDB</a> <a href="/tags/Monitoring/" style="font-size: 12.22px;">Monitoring</a> <a href="/tags/Native-Bridge/" style="font-size: 10px;">Native Bridge</a> <a href="/tags/Nuxt3/" style="font-size: 13.33px;">Nuxt3</a> <a href="/tags/Performance/" style="font-size: 13.33px;">Performance</a> <a href="/tags/Pinia/" style="font-size: 11.11px;">Pinia</a> <a href="/tags/Pre-Commit/" style="font-size: 10px;">Pre-Commit</a> <a href="/tags/Prerender/" style="font-size: 10px;">Prerender</a> <a href="/tags/QA-Testing/" style="font-size: 10px;">QA Testing</a> <a href="/tags/Queue/" style="font-size: 10px;">Queue</a> <a href="/tags/RabbitMQ/" style="font-size: 10px;">RabbitMQ</a> <a href="/tags/Rate-Limiting/" style="font-size: 10px;">Rate Limiting</a> <a href="/tags/RateLimit/" style="font-size: 10px;">RateLimit</a> <a href="/tags/Recording/" style="font-size: 10px;">Recording</a> <a href="/tags/Redis/" style="font-size: 16.67px;">Redis</a> <a href="/tags/Responsible-Gambling/" style="font-size: 11.11px;">Responsible Gambling</a> <a href="/tags/Revert/" style="font-size: 10px;">Revert</a> <a href="/tags/RouteConstraint/" style="font-size: 10px;">RouteConstraint</a> <a href="/tags/SEO/" style="font-size: 10px;">SEO</a> <a href="/tags/SSO/" style="font-size: 10px;">SSO</a> <a href="/tags/Safari/" style="font-size: 10px;">Safari</a> <a href="/tags/Security/" style="font-size: 14.44px;">Security</a> <a href="/tags/Session/" style="font-size: 12.22px;">Session</a> <a href="/tags/SessionStorage/" style="font-size: 10px;">SessionStorage</a> <a href="/tags/Tailwind-CSS/" style="font-size: 10px;">Tailwind CSS</a> <a href="/tags/TypeScript/" style="font-size: 15.56px;">TypeScript</a> <a href="/tags/Vite/" style="font-size: 10px;">Vite</a> <a href="/tags/Vue/" style="font-size: 12.22px;">Vue</a> <a href="/tags/Vue-Life-Cycle/" style="font-size: 10px;">Vue Life Cycle</a> <a href="/tags/Vue-Router/" style="font-size: 10px;">Vue Router</a> <a href="/tags/Vue-js/" style="font-size: 13.33px;">Vue.js</a> <a href="/tags/Vue3/" style="font-size: 17.78px;">Vue3</a> <a href="/tags/Web-API/" style="font-size: 10px;">Web API</a> <a href="/tags/Web-Debug/" style="font-size: 10px;">Web Debug</a> <a href="/tags/WebView/" style="font-size: 10px;">WebView</a> <a href="/tags/Webpack/" style="font-size: 10px;">Webpack</a> <a href="/tags/Workflow/" style="font-size: 10px;">Workflow</a> <a href="/tags/iOS/" style="font-size: 11.11px;">iOS</a> <a href="/tags/v-html/" style="font-size: 10px;">v-html</a> <a href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" style="font-size: 10px;">前端架構</a> <a href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" style="font-size: 10px;">身份驗證</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/08/">八月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">五月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/05/18/AfterLoginAction/">Vue 3 After Login Action 設計：未登入導頁後如何恢復原本動作</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/18/WebViewNativeBridge/">Vue 3 WebView Native Bridge 設計：同時支援 Android window.App 與 iOS WKWebView</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/17/AccountStateCrossChannelSession/">ASP.NET AccountState 設計：跨 Channel 登入狀態同步與踢出機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/17/PageGuardRouteConstraintPermission/">ASP.NET MVC PageGuard 與 RouteConstraint：動態頁面權限管線設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/17/ResponsibleGamblingProtection/">Responsible Gambling 後端防護設計：Self Exclusion / Time Out 不是前端按鈕</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/HashBasedJobStaggering/">用 Job Name Hash 防止 Thundering Herd：30 支排程 Job 的自動錯開機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/MultiQueueResourceIsolation/">Hangfire Multi-Queue 資源隔離：讓重量級 Job 不拖垮整個排程系統</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/VueMfaVerificationFlow/">Vue 3 新裝置 MFA 驗證架構：從登入攔截到 WebView 完成驗證的完整設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/14/ELKSharing/">ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/10/nuxt3-centralized-fetch-interceptor/">Nuxt 3 實戰：用 Composable 封裝集中式請求攔截器</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Debug/">Debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Troubleshooting/">Troubleshooting</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%88%E8%83%BD%E8%AA%BF%E6%A0%A1/">效能調校</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E8%B3%87%E5%AE%89%E4%BA%8B%E4%BB%B6/">資安事件</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET/" rel="tag">ASP.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Android/" rel="tag">Android</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Attack/" rel="tag">Attack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authorization/" rel="tag">Authorization</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CSharp/" rel="tag">CSharp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache-Invalidation/" rel="tag">Cache Invalidation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cron/" rel="tag">Cron</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debugger/" rel="tag">Debugger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DistributedSystem/" rel="tag">DistributedSystem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DotNet/" rel="tag">DotNet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EventSPI/" rel="tag">EventSPI</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Fetch/" rel="tag">Fetch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Frontend-Architecture/" rel="tag">Frontend Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hangfire/" rel="tag">Hangfire</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Incident/" rel="tag">Incident</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Interceptor/" rel="tag">Interceptor</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JavaScript/" rel="tag">JavaScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Login-Flow/" rel="tag">Login Flow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MessageHub/" rel="tag">MessageHub</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MobileApp/" rel="tag">MobileApp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Native-Bridge/" rel="tag">Native Bridge</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Queue/" rel="tag">Queue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RabbitMQ/" rel="tag">RabbitMQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RateLimit/" rel="tag">RateLimit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RouteConstraint/" rel="tag">RouteConstraint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SSO/" rel="tag">SSO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Session/" rel="tag">Session</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SessionStorage/" rel="tag">SessionStorage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-API/" rel="tag">Web API</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/WebView/" rel="tag">WebView</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" rel="tag">前端架構</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" rel="tag">身份驗證</a></li></ul>
+    </div>
+  </div>
+
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+  <script src='https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({startOnLoad: true, theme: 'default'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>

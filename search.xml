@@ -693,6 +693,337 @@ flowchart TD
       </tags>
   </entry>
   <entry>
+    <title>Vue 3 After Login Action 設計：未登入導頁後如何恢復原本動作</title>
+    <url>/2026/05/18/AfterLoginAction/</url>
+    <content><![CDATA[前言很多產品流程都有這種情境：
+
+使用者還沒登入
+使用者點了一個需要登入的操作
+系統要求登入
+登入成功後，使用者期待「剛剛那個動作」繼續執行
+
+例如：
+
+未登入時點遊戲，登入後直接啟動該遊戲
+未登入時點促銷 CTA，登入後回到該促銷
+未登入時點收藏，登入後完成收藏
+
+如果沒有統一設計，常見做法會變成每個頁面自己處理：
+if (!isLogin) &#123;  openLoginDialog();  // TODO: login 後要回來做什麼？&#125;
+
+這很快會失控。
+這個專案用 useAfterLoginAction 把「登入後恢復動作」封裝成 composable，目前主要應用在 game launch。
+相關檔案client/packages/common/composables/useAfterLoginAction.tsclient/packages/common/utils/gameLaunchCheck.tsclient/packages/common/stores/root.tsclient/packages/common/composables/useProduct.ts
+
+核心概念After Login Action 的核心是：
+Before Login    |    vSave intended action to sessionStorage    |    vOpen login dialog    |    vLogin success    |    vRoot store checks login status    |    vReplay saved action
+
+這讓原本中斷的使用者行為可以在登入後接續。
+Action Name 設計目前 composable 裡定義：
+enum ActionNameEnum &#123;  LaunchGame = &#x27;launchGame&#x27;,&#125;
+
+現在只有 LaunchGame，但這個 enum 預留了擴充空間。
+未來如果要支援其他行為，可以加入：
+enum ActionNameEnum &#123;  LaunchGame = &#x27;launchGame&#x27;,  ClaimPromotion = &#x27;claimPromotion&#x27;,  AddFavorite = &#x27;addFavorite&#x27;,&#125;
+
+重點是 action name 不應該散落成 magic string，而是集中在 composable。
+保存動作：openLoginToContinueDialog使用者未登入時，呼叫：
+function openLoginToContinueDialog(actionName, data) &#123;  if (isLogin) &#123;    return;  &#125;  eventBus.emit(&#x27;triggerLogin&#x27;, &#x27;loginToContinue&#x27;);  const expirationTime = new Date().getTime() + 5 * 60 * 1000;  sessionStorage.setItem(    &#x27;afterLoginActionData&#x27;,    JSON.stringify(&#123; actionName, data, expirationTime &#125;),  );&#125;
+
+這裡做了三件事：
+
+如果已登入，直接 return
+用 event bus 開啟 login dialog
+把 action payload 存到 sessionStorage
+
+存起來的資料長這樣：
+&#123;  &quot;actionName&quot;: &quot;launchGame&quot;,  &quot;data&quot;: &#123;    &quot;prod&quot;: &quot;casino&quot;,    &quot;launchKey&quot;: &quot;xxx&quot;  &#125;,  &quot;expirationTime&quot;: 1716000000000&#125;
+
+為什麼用 sessionStorage這裡選 sessionStorage，不是 localStorage。
+理由很清楚：
+
+after-login action 只屬於目前這個 tab
+使用者關掉 tab 後不應該保留
+不應跨 tab 共享，避免 A tab 點遊戲，B tab 登入後啟動錯誤遊戲
+比 memory state 更能承受 login dialog &#x2F; route change 造成的 component unmount
+
+這是介於 memory state 與 long-lived storage 之間剛好的選擇。
+5 分鐘過期時間const expirationTime = new Date().getTime() + 5 * 60 * 1000;
+
+這個 timeout 很重要。
+如果沒有過期時間，使用者可能：
+
+點遊戲
+打開 login dialog
+放著不登入
+幾十分鐘後登入
+系統突然啟動很久以前點過的遊戲
+
+這會讓使用者很困惑。
+5 分鐘代表：這是一個短期 intent，不是永久任務。
+讀取資料：computed + sessionStorageconst afterLoginActionData = computed(() =&gt; &#123;  const afterLoginActionStorage = sessionStorage.getItem(&#x27;afterLoginActionData&#x27;);  return afterLoginActionStorage ? JSON.parse(afterLoginActionStorage) : null;&#125;);
+
+這裡每次讀取 computed 都會從 sessionStorage parse 最新資料。
+因為 action 可能在不同 component &#x2F; store 裡被寫入，直接從 storage 讀可以避免 composable instance 之間狀態不同步。
+清除資料function removeAfterLoginActionData() &#123;  sessionStorage.removeItem(&#x27;afterLoginActionData&#x27;);&#125;
+
+並且在 component unmount 時清掉：
+onBeforeUnmount(() =&gt; &#123;  removeAfterLoginActionData();&#125;);
+
+這代表這個 composable 的生命週期偏保守：如果所在頁面被銷毀，就不保留 pending action。
+LoginForm 也會使用它：
+// if not login, remove afterLoginActionData in sessionStorageuseAfterLoginAction();
+
+這確保 login form mount&#x2F;unmount 時會帶到清理邏輯。
+檢查是否可以執行function checkAfterLoginStatus() &#123;  if (!afterLoginActionData.value) &#123;    return false;  &#125;  const currentTime = new Date().getTime();  if (!isLogin || dialogQueue.length || currentTime &gt; afterLoginActionData.value.expirationTime) &#123;    removeAfterLoginActionData();    return false;  &#125;  return true;&#125;
+
+這裡有三個 gate：
+1. 必須已登入!isLogin
+
+登入沒完成就不能 replay。
+2. 系統 Dialog Queue 必須為空dialogQueue.length
+
+如果登入後還有 Change Password、Terms、Verify Email 這些 system dialog，不能立刻啟動遊戲。
+這個細節非常重要。
+登入成功不代表使用者已經可以自由操作，系統級流程要先完成。
+3. 不能過期currentTime &gt; afterLoginActionData.value.expirationTime
+
+過期就移除，避免舊 intent 被執行。
+執行動作：doActionAfterLoginfunction doActionAfterLogin() &#123;  if (!checkAfterLoginStatus()) &#123;    return;  &#125;  switch (afterLoginActionData.value.actionName) &#123;    case ActionNameEnum.LaunchGame: &#123;      const params = afterLoginActionData.value.data;      const &#123; launchGameByProd &#125; = useProduct(params.prod);      launchGameByProd(params);      removeAfterLoginActionData();      break;    &#125;  &#125;&#125;
+
+目前唯一實作的是 LaunchGame：
+
+取出保存的 params
+根據 params.prod 建立 useProduct
+呼叫 launchGameByProd(params)
+清除 storage
+
+這裡的清除時機也很重要：成功進入 action 分支後就清掉，避免使用者重整或 login status 再檢查時重複啟動。
+與 GameLaunchCheck 的整合在 gameLaunchCheck.ts 中，遊戲啟動前會檢查登入狀態：
+if (!store.uv.sessionD.login) &#123;  const &#123; fullGameData &#125; = this.options;  openLoginToContinueDialog(ActionNameEnum.LaunchGame, fullGameData);&#125;
+
+完整行為是：
+User clicks game    |    vGameLaunchCheck.GeneralCheck    |    +-- not login          |          v        save fullGameData to sessionStorage          |          v        eventBus.emit(&#x27;triggerLogin&#x27;, &#x27;loginToContinue&#x27;)
+
+登入後，root.ts 會呼叫：
+async checkLoginStatus() &#123;  const &#123; doActionAfterLogin, removeAfterLoginActionData &#125; = useAfterLoginAction();  if (!this.uv.sessionD.loginId) &#123;    removeAfterLoginActionData();    return;  &#125;  if (!param) &#123;    await this.checkLoginSystemDialogDisplay();    doActionAfterLogin();    return;  &#125;&#125;
+
+這裡的順序是：
+
+如果沒有 loginId，清掉 pending action
+如果沒有 _a error param
+先檢查登入後系統 dialog
+再執行 after-login action
+
+這個順序避免「登入後需要改密碼，但遊戲先啟動」的問題。
+為什麼透過 root store 執行doActionAfterLogin 註解寫得很直接：
+// doActionAfterLoginGlobally, only usage in roots store
+
+原因是 after-login action 屬於全局流程，不應綁死在某個頁面：
+
+Login dialog 可能從任何頁面打開
+登入成功後可能 route 沒變，也可能 route 已變
+系統 dialog 狀態在 root &#x2F; global store 才看得到
+game launch 需要 global user variables
+
+所以把 replay 放在 root store 比放在原本點擊的 component 更穩。
+Event Bus 開 Login DialogeventBus.emit(&#x27;triggerLogin&#x27;, &#x27;loginToContinue&#x27;);
+
+這表示 useAfterLoginAction 不直接 import LoginDialog，也不直接改 login store 的 UI state。
+它只發出事件：
+I need login to continue
+
+由外層 UI 決定如何顯示 login dialog。
+這種做法讓 composable 保持在「流程層」，避免和具體 UI component 耦合。
+擴充其他 Action 的方式目前註解中保留了一個 page-level API：
+// function doActionAfterLoginOnPage(//   actionName: string,//   action?: (data: any) =&gt; void,//   params?: any,// )
+
+如果未來要擴充，例如 claim promotion，可以走兩種設計。
+方案一：全局 action適合任何頁面都能觸發的動作：
+enum ActionNameEnum &#123;  LaunchGame = &#x27;launchGame&#x27;,  ClaimPromotion = &#x27;claimPromotion&#x27;,&#125;
+
+在 doActionAfterLogin 加 case：
+case ActionNameEnum.ClaimPromotion:  claimPromotion(afterLoginActionData.value.data);  removeAfterLoginActionData();  break;
+
+方案二：頁面 action適合只有特定頁面知道怎麼執行的動作：
+doActionAfterLoginOnPage(&#x27;claimPromotion&#x27;, claimPromo, params);
+
+不過這種方式要小心 route change 後 component 是否還存在。
+邊界情境使用者打開 login dialog 後取消資料會暫時留在 sessionStorage，但 5 分鐘後過期。
+如果 LoginForm unmount，也會清除。
+使用者登入失敗root.checkLoginStatus 如果沒有 loginId：
+removeAfterLoginActionData();return;
+
+不會 replay。
+登入後有系統 DialogdialogQueue.length
+
+如果有 dialog，action 會被清掉並不執行。
+這是保守策略：避免在尚未完成必要登入後流程時啟動遊戲。
+使用者跨 tab 登入因為使用 sessionStorage，pending action 不會跨 tab 共享。
+這是正確行為。A tab 的「點遊戲」不應該讓 B tab 登入後啟動遊戲。
+可以優化的地方目前 openLoginToContinueDialog 裡使用：
+const &#123; isLogin &#125; = rootStore;const &#123; dialogQueue &#125; = systemDialogQueueStore;
+
+這是在 composable 初始化時解構出來的值。如果 store state 後續更新，這種解構在某些情境下可能不是 reactive ref。
+更穩的寫法可以用 storeToRefs 或直接讀 store：
+if (rootStore.isLogin) &#123;  return;&#125;
+
+以及：
+if (!rootStore.isLogin || systemDialogQueueStore.dialogQueue.length || expired) &#123;  ...&#125;
+
+不過目前實際主要由 root store 在登入狀態更新後呼叫，所以未必會立即出問題。若未來 after-login action 擴充到更多頁面，這點值得整理。
+完整流程圖graph TD
+    A["User clicks protected actione.g. launch game"] --> B["GameLaunchCheck.GeneralCheck"]
+    B --> C{"Is user logged in?"}
+    C -->|Yes| D["Continue normal launch checks"]
+    C -->|No| E["openLoginToContinueDialog"]
+    E --> F["eventBus.emit('triggerLogin', 'loginToContinue')"]
+    E --> G["sessionStorage.setItem('afterLoginActionData')"]
+    F --> H["Login dialog opens"]
+    H --> I{"Login success?"}
+    I -->|No| J["root.checkLoginStatus removes pending action"]
+    I -->|Yes| K["root.checkLoginStatus"]
+    K --> L["checkLoginSystemDialogDisplay"]
+    L --> M["doActionAfterLogin"]
+    M --> N{"Valid pending action?"}
+    N -->|No| O["Remove / skip"]
+    N -->|Yes| P["switch actionName"]
+    P --> Q["LaunchGame: useProduct(prod).launchGameByProd(params)"]
+    Q --> R["removeAfterLoginActionData"]
+
+這個流程最重要的是兩個檢查點：
+
+未登入時只保存 intent，不直接執行 action
+登入後也不是馬上執行，而是先確認系統 Dialog、登入狀態、過期時間
+
+Sequence Diagram：從點遊戲到登入後啟動sequenceDiagram
+    participant User as User
+    participant Game as GameLaunchCheck
+    participant ALA as useAfterLoginAction
+    participant Bus as eventBus
+    participant Login as Login Dialog
+    participant Root as root store
+    participant Product as useProduct
+
+    User->>Game: Click game
+    Game->>Game: Check login state
+    alt Not logged in
+        Game->>ALA: openLoginToContinueDialog("launchGame", fullGameData)
+        ALA->>Bus: emit("triggerLogin", "loginToContinue")
+        ALA->>ALA: sessionStorage.setItem(afterLoginActionData)
+        Bus->>Login: Open login dialog
+        User->>Login: Submit credentials
+        Login-->>Root: Login status updated
+        Root->>Root: checkLoginSystemDialogDisplay()
+        Root->>ALA: doActionAfterLogin()
+        ALA->>ALA: checkAfterLoginStatus()
+        ALA->>Product: launchGameByProd(savedParams)
+        ALA->>ALA: removeAfterLoginActionData()
+    else Logged in
+        Game->>Product: Continue launch flow
+    end
+
+這張圖可以放在文章中段，幫讀者理解為什麼 replay action 不放在原本的 component，而是放在 root store。
+State Machine：Pending Action 的生命週期stateDiagram-v2
+    [*] --> Empty
+    Empty --> Pending: save action to sessionStorage
+    Pending --> Expired: currentTime > expirationTime
+    Pending --> Cancelled: login failed / loginId missing
+    Pending --> Blocked: system dialog queue not empty
+    Pending --> Executed: login success + no dialog + not expired
+    Executed --> Empty: removeAfterLoginActionData
+    Expired --> Empty: removeAfterLoginActionData
+    Cancelled --> Empty: removeAfterLoginActionData
+    Blocked --> Empty: removeAfterLoginActionData
+
+這個 state machine 補上了文章前面比較隱性的設計：pending action 不是一直存在，它只有很短的生命週期。
+afterLoginActionData Schema目前 storage 裡的資料可以視為這個 schema：
+interface AfterLoginActionData&lt;T = unknown&gt; &#123;  actionName: ActionNameEnum;  data: T;  expirationTime: number;&#125;interface LaunchGameActionData &#123;  prod: string;  launchKey?: string;  fullGameData?: unknown;  [key: string]: unknown;&#125;
+
+實際保存：
+sessionStorage.setItem(  &#x27;afterLoginActionData&#x27;,  JSON.stringify(&#123; actionName, data, expirationTime &#125;),);
+
+如果未來 action 變多，建議讓不同 action 對應不同 payload 型別：
+type AfterLoginActionPayloadMap = &#123;  launchGame: LaunchGameActionData;  claimPromotion: ClaimPromotionActionData;  addFavorite: AddFavoriteActionData;&#125;;
+
+這樣 doActionAfterLogin 裡的 switch case 可以更安全。
+為什麼要等 System Dialog Queue登入成功後不代表使用者可以馬上回到原本動作。系統可能還需要顯示：
+
+Change Password
+Terms and Conditions
+Verify Email
+Idle Logout recovery
+Welcome dialog
+
+因此 checkAfterLoginStatus 檢查：
+if (!isLogin || dialogQueue.length || currentTime &gt; afterLoginActionData.value.expirationTime) &#123;  removeAfterLoginActionData();  return false;&#125;
+
+這個設計是保守的：只要有 system dialog，就清掉 pending action。
+另一種策略是保留 pending action，等 dialog 全部結束後再 replay。但那會讓流程更複雜，因為要監聽 queue 變化，也要避免使用者在 dialog 中改變狀態。以遊戲啟動這種高風險動作來說，直接清掉是比較穩的選擇。
+和 Route Redirect 的差異很多人會用 URL query 做 after-login redirect：
+/login?redirect=/casino/game/abc
+
+但這個專案使用 storage action，而不是單純 redirect URL，原因是「啟動遊戲」不一定等於導頁。
+啟動遊戲可能包含：
+
+product launch check
+responsible gambling check
+partner launch key
+window.open &#x2F; iframe &#x2F; native launch
+event tracking
+maintenance dialog
+
+所以保存的是 action payload，而不是 URL。
+&#123;  &quot;actionName&quot;: &quot;launchGame&quot;,  &quot;data&quot;: &#123;    &quot;prod&quot;: &quot;casino&quot;,    &quot;launchKey&quot;: &quot;gameName&quot;,    &quot;fullGameData&quot;: &#123;&#125;  &#125;&#125;
+
+這就是 deferred action 和 redirect URL 最大的差異。
+Error Handling 與資料安全目前 computed 直接 parse：
+return afterLoginActionStorage ? JSON.parse(afterLoginActionStorage) : null;
+
+如果 storage 被手動改壞，JSON.parse 可能 throw。未來可補強成：
+const afterLoginActionData = computed(() =&gt; &#123;  const raw = sessionStorage.getItem(&#x27;afterLoginActionData&#x27;);  if (!raw) return null;  try &#123;    return JSON.parse(raw);  &#125; catch &#123;    removeAfterLoginActionData();    return null;  &#125;&#125;);
+
+這不是目前必要 bug，但如果要把 after-login action 擴大成通用機制，這種保護會更穩。
+擴充流程圖：多 Action Dispatchgraph TD
+    A["doActionAfterLogin"] --> B{"checkAfterLoginStatus"}
+    B -->|false| C["return"]
+    B -->|true| D{"actionName"}
+    D -->|launchGame| E["useProduct(params.prod).launchGameByProd(params)"]
+    D -->|claimPromotion| F["promoStore.claimPromotion(params)"]
+    D -->|addFavorite| G["gameCollectionStore.add(params)"]
+    D -->|unknown| H["remove invalid action"]
+    E --> I["removeAfterLoginActionData"]
+    F --> I
+    G --> I
+    H --> I
+
+目前只有 launchGame，但這張圖可以說明未來怎麼擴充，而不會讓 login flow 被各頁面各自發明。
+小結After Login Action 的本質是保存使用者 intent：
+User intent    -&gt; temporary storage    -&gt; login    -&gt; validate state    -&gt; replay
+
+這套設計值得借鑑的地方：
+
+用 sessionStorage 保存 tab-scoped intent
+用 expiration time 避免舊動作被意外執行
+用 Event Bus 打開 login dialog，避免 composable 綁 UI
+登入後由 root store 全局 replay
+replay 前檢查 login state、system dialog queue、expiration
+目前先支援 LaunchGame，保留後續 action 擴充點
+
+好的 after-login flow 會讓使用者覺得「登入只是流程的一部分」，而不是「我剛剛想做的事情被打斷了」。
+]]></content>
+      <categories>
+        <category>前端架構</category>
+      </categories>
+      <tags>
+        <tag>Vue3</tag>
+        <tag>Composable</tag>
+        <tag>SessionStorage</tag>
+        <tag>Login Flow</tag>
+        <tag>Frontend Architecture</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Feature Version Control — APP 版本功能控管架構</title>
     <url>/2026/02/03/ApiFeatureVersionControl/</url>
     <content><![CDATA[前言Mobile APP 與 Web 不同，使用者不一定會即時更新到最新版本。當後端上線新功能時，舊版 APP 可能尚未支援該功能的 UI 或邏輯。若後端直接回傳新功能相關的資料，可能導致：
@@ -3522,6 +3853,54 @@ export default defineLogAndAuthHandler(async (event) =&gt; &#123;  const query =
       </tags>
   </entry>
   <entry>
+    <title>Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程</title>
+    <url>/2026/03/10/GitHotfixRevertFlow/</url>
+    <content><![CDATA[前言在團隊協作中，經常會遇到這種情境：你的功能分支已經 merge 到正式環境的 release branch，但上線前一天被通知要抽單退版。這時候如果直接在 release branch 上 git revert 那筆 merge commit，後續想把同一個功能分支重新 merge 回去時，Git 會認為「這些 commit 已經被 merge 過了」而跳過所有變更——導致程式碼根本沒有被帶回來。
+本文記錄這個問題的成因，以及在不遺漏檔案的前提下，如何正確退版並繼續推進功能。
+
+
+問題場景假設流程如下：
+
+你在 CC1-XXX 功能分支上完成修改
+將 CC1-XXX merge 到正式環境前的 release branch（例如 release/prod）
+上線前被通知要抽單，需要從 release/prod 退掉你的變更
+但功能本身還需要繼續修改，修完後要重新上線
+
+如果此時直接在 release/prod 上 revert 你的 merge commit，之後再次從 CC1-XXX merge 回去，Git 會判定這些 commit 已經存在於歷史中，不會帶入任何變更。
+為什麼會這樣？Git 的 merge 判斷基於 commit history，而非檔案差異。當你 revert 一筆 merge commit 時：
+
+Revert 只是新增一筆「反向操作」的 commit，原本的 merge commit 仍然留在歷史中
+下次再 merge 同一個分支時，Git 看到那些 commit 已經在歷史裡了，就不會再 merge 一次
+結果就是：你以為 merge 成功了，但實際上什麼都沒帶進去
+
+正確的退版與重新上線流程Step 1：在 release branch 上 revert merge commit先在 release/prod 上 revert 掉 CC1-XXX 的 merge commit，讓 release branch 回到乾淨的狀態。
+git checkout release/prodgit revert -m 1 &lt;merge-commit-hash&gt;
+
+Step 2：將 release branch 同步回你的功能分支把最新的 release/prod（包含 revert commit）sync 回你的 CC1-XXX 分支，確保兩邊歷史一致。
+git checkout CC1-XXXgit merge release/prod
+
+Step 3：在功能分支上 revert 那筆 revert在 CC1-XXX 上，cherry-pick 或 revert 掉 Step 1 產生的 revert commit。這會讓你的變更重新出現在功能分支上。
+git revert &lt;revert-commit-hash&gt;
+
+Step 4：繼續修改並重新 merge此時 CC1-XXX 上已經有了「revert of revert」，等於你的原始變更被還原回來了。繼續修改完畢後，正常 merge 回 release/prod 即可，Git 這次會正確帶入所有變更。
+流程示意圖
+
+重點整理
+直接 revert merge commit 後，不能再次 merge 同一個分支——Git 會認為已經 merge 過而跳過
+解法是「revert the revert」——在功能分支上反轉那筆退版 commit，讓變更重新生效
+務必先將 release branch 同步回功能分支，確保歷史一致後再操作，避免遺漏檔案
+
+]]></content>
+      <categories>
+        <category>工程實踐</category>
+      </categories>
+      <tags>
+        <tag>Git</tag>
+        <tag>GitFlow</tag>
+        <tag>Revert</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>GitFlow</title>
     <url>/2023/04/12/GitFlow/</url>
     <content><![CDATA[突然有感而發 想寫下部門之前用了很多年的 GitFlow 以及它們會遇到的問題，以及他們解決什麼問題
@@ -3672,54 +4051,6 @@ Solution:
         <tag>Git</tag>
         <tag>GitFlow</tag>
         <tag>Workflow</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Git Revert 後再次 Merge 失效？正式環境退版後的正確處理流程</title>
-    <url>/2026/03/10/GitHotfixRevertFlow/</url>
-    <content><![CDATA[前言在團隊協作中，經常會遇到這種情境：你的功能分支已經 merge 到正式環境的 release branch，但上線前一天被通知要抽單退版。這時候如果直接在 release branch 上 git revert 那筆 merge commit，後續想把同一個功能分支重新 merge 回去時，Git 會認為「這些 commit 已經被 merge 過了」而跳過所有變更——導致程式碼根本沒有被帶回來。
-本文記錄這個問題的成因，以及在不遺漏檔案的前提下，如何正確退版並繼續推進功能。
-
-
-問題場景假設流程如下：
-
-你在 CC1-XXX 功能分支上完成修改
-將 CC1-XXX merge 到正式環境前的 release branch（例如 release/prod）
-上線前被通知要抽單，需要從 release/prod 退掉你的變更
-但功能本身還需要繼續修改，修完後要重新上線
-
-如果此時直接在 release/prod 上 revert 你的 merge commit，之後再次從 CC1-XXX merge 回去，Git 會判定這些 commit 已經存在於歷史中，不會帶入任何變更。
-為什麼會這樣？Git 的 merge 判斷基於 commit history，而非檔案差異。當你 revert 一筆 merge commit 時：
-
-Revert 只是新增一筆「反向操作」的 commit，原本的 merge commit 仍然留在歷史中
-下次再 merge 同一個分支時，Git 看到那些 commit 已經在歷史裡了，就不會再 merge 一次
-結果就是：你以為 merge 成功了，但實際上什麼都沒帶進去
-
-正確的退版與重新上線流程Step 1：在 release branch 上 revert merge commit先在 release/prod 上 revert 掉 CC1-XXX 的 merge commit，讓 release branch 回到乾淨的狀態。
-git checkout release/prodgit revert -m 1 &lt;merge-commit-hash&gt;
-
-Step 2：將 release branch 同步回你的功能分支把最新的 release/prod（包含 revert commit）sync 回你的 CC1-XXX 分支，確保兩邊歷史一致。
-git checkout CC1-XXXgit merge release/prod
-
-Step 3：在功能分支上 revert 那筆 revert在 CC1-XXX 上，cherry-pick 或 revert 掉 Step 1 產生的 revert commit。這會讓你的變更重新出現在功能分支上。
-git revert &lt;revert-commit-hash&gt;
-
-Step 4：繼續修改並重新 merge此時 CC1-XXX 上已經有了「revert of revert」，等於你的原始變更被還原回來了。繼續修改完畢後，正常 merge 回 release/prod 即可，Git 這次會正確帶入所有變更。
-流程示意圖
-
-重點整理
-直接 revert merge commit 後，不能再次 merge 同一個分支——Git 會認為已經 merge 過而跳過
-解法是「revert the revert」——在功能分支上反轉那筆退版 commit，讓變更重新生效
-務必先將 release branch 同步回功能分支，確保歷史一致後再操作，避免遺漏檔案
-
-]]></content>
-      <categories>
-        <category>工程實踐</category>
-      </categories>
-      <tags>
-        <tag>Git</tag>
-        <tag>GitFlow</tag>
-        <tag>Revert</tag>
       </tags>
   </entry>
   <entry>
@@ -3942,30 +4273,6 @@ Help&#x3D;&gt; Local IP Address確定自己的 IP
       </tags>
   </entry>
   <entry>
-    <title>JamWebDebugger</title>
-    <url>/2023/10/07/JamWebDebugger/</url>
-    <content><![CDATA[前幾天同事介紹一個好用的工具,最主要是它可以錄製網頁的 Network ,Console 資訊
-因為大家也知道 QA 很常反應問題 一般 IT 還需要重現這個問題. 如果 QA 能夠提供更多的資訊
-我們就可以減少 Debugger 的時候.而且這個軟體還是免費而且也整合了 jira 等等的套件
-JAM
-我們以 myfunnow 這個旅遊網站當例子
-Demo
-可以看到 他在幾秒的時候 Console 有出現 401 的錯誤 並且在 Network 的 tab 當下有記錄每一個 request 的相關資訊
-這些可以幫助 IT 跟 QA 更快反應問題
-
-
-
-]]></content>
-      <categories>
-        <category>Debug</category>
-      </categories>
-      <tags>
-        <tag>Debugger</tag>
-        <tag>Recording</tag>
-        <tag>QA Testing</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>LazyCache 踩坑紀錄：直接傳入 TimeSpan 預設是 SlidingExpiration，高流量下永遠不會過期</title>
     <url>/2026/03/07/LazyCacheIssue/</url>
     <content><![CDATA[前言這是一個只在正式環境才暴露的問題。我們使用 LazyCache + Redis 搭建了一個兩層快取架構：MemoryCache 作為 L1 熱快取，Redis 作為 L2 資料來源。在 Dev、QAT、UAT 環境一切正常，但上了 Production 後發現 Redis 資料更新了，應用卻永遠拿到舊值。
@@ -4135,6 +4442,30 @@ SlidingExpiration 本身沒有 Bug，它就是設計來做這件事的——讓�
         <tag>.NET</tag>
         <tag>Performance</tag>
         <tag>LazyCache</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>JamWebDebugger</title>
+    <url>/2023/10/07/JamWebDebugger/</url>
+    <content><![CDATA[前幾天同事介紹一個好用的工具,最主要是它可以錄製網頁的 Network ,Console 資訊
+因為大家也知道 QA 很常反應問題 一般 IT 還需要重現這個問題. 如果 QA 能夠提供更多的資訊
+我們就可以減少 Debugger 的時候.而且這個軟體還是免費而且也整合了 jira 等等的套件
+JAM
+我們以 myfunnow 這個旅遊網站當例子
+Demo
+可以看到 他在幾秒的時候 Console 有出現 401 的錯誤 並且在 Network 的 tab 當下有記錄每一個 request 的相關資訊
+這些可以幫助 IT 跟 QA 更快反應問題
+
+
+
+]]></content>
+      <categories>
+        <category>Debug</category>
+      </categories>
+      <tags>
+        <tag>Debugger</tag>
+        <tag>Recording</tag>
+        <tag>QA Testing</tag>
       </tags>
   </entry>
   <entry>
@@ -5014,261 +5345,6 @@ Cache 保護（API 端） — Redis 攔截高頻低變動資料，保護 DB
       </tags>
   </entry>
   <entry>
-    <title>在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</title>
-    <url>/2026/03/09/Nuxt3ApiLoggerHandler/</url>
-    <content><![CDATA[前言在開發後台管理系統時，我們經常會遇到一個問題：每個 API Handler 都需要處理認證驗證、日誌記錄、錯誤捕獲等重複性邏輯。如果在每個檔案中都寫一遍，不僅冗長，還容易遺漏。本文將介紹如何在 Nuxt 3 的 Server API 中，利用 Higher-Order Function (高階函式) 的概念，打造一個統一的 defineLogAndAuthHandler，讓所有 API 自動擁有以下功能：
-
-✅ Session 認證與過期檢查
-✅ 請求&#x2F;回應日誌記錄
-✅ 敏感資料自動遮蔽
-✅ 效能監控 (API 執行時間)
-✅ 統一錯誤處理與格式化
-
-核心概念：Higher-Order Function在 JavaScript&#x2F;TypeScript 中，高階函式 (HOF) 是指「接收函式作為參數」或「回傳函式」的函式。我們的設計正是利用這個概念：
-export const defineLogAndAuthHandler = &lt;T extends EventHandlerRequest&gt;(
-  handler: EventHandler&lt;T&gt;
-): EventHandler&lt;T&gt; =&gt; defineEventHandler&lt;T&gt;(async (event) =&gt; &#123;
-  // 在這裡加入認證、日誌等邏輯
-  const response = await handler(event); // 執行原本的 Handler
-  // 在這裡加入回應處理邏輯
-  return response;
-&#125;);
-這就像是在原本的 API Handler 外面「包一層糖衣」，讓它自動具備額外的能力。
-
-功能拆解
-1. Session 認證與過期檢查
-// 檢查是否已認證
-if (!event.context?.session?.isAuthenticated &amp;&amp; !isPublicRoute) &#123;
-  return createError(&#123;
-    statusCode: 401,
-    statusText: &#39;Session Expired&#39;,
-  &#125;);
-&#125;
-// 檢查 Session 是否已過期
-const currentTime = new Date().getTime();
-const lastLoginTimestamp = event.context?.session?.lastLoginTime;
-const maxTimeDiff = (currentTime - lastLoginTimestamp) / 1000;
-if (maxTimeDiff &gt;= parseInt(maxExpiryInSeconds, 10)) &#123;
-  // 清除 Session 並回傳 401
-  event.context.session.isAuthenticated = false;
-  return createError(&#123; statusCode: 401, statusText: &#39;Session Expired&#39; &#125;);
-&#125;
-設計重點：
-
-白名單機制：登入、登出等 API 不需要認證
-雙重檢查：不只檢查是否登入，還檢查 Session 是否超時
-2. 請求日誌記錄與敏感資料遮蔽
-const ignoreLogParams = [&#39;password&#39;, &#39;newPassword&#39;, &#39;oldPassword&#39;];
-// 遮蔽敏感欄位
-if (typeof body === &#39;object&#39;) &#123;
-  const filterBody = Object.assign(&#123;&#125;, body);
-  for (const key in filterBody) &#123;
-    if (ignoreLogParams.includes(key)) &#123;
-      filterBody[key] = &#39;***mask***&#39;;
-    &#125;
-  &#125;
-  logger.log(&#39;info&#39;, `[POST] $&#123;JSON.stringify(filterBody)&#125;`);
-&#125;
-設計重點：
-
-自動遮蔽密碼等敏感欄位，避免日誌外洩
-支援 GET/POST/PUT/DELETE 不同方法的日誌格式
-3. 效能監控
-const startTime = Date.now();
-const response = await handler(event);
-const endTime = Date.now();
-const duration = endTime - startTime;
-logger.performance.log(&#39;info&#39;, `[$&#123;pathWithoutQueryString&#125;] [$&#123;duration&#125;ms]`);
-設計重點：
-
-記錄每個 API 的執行時間
-方便後續分析效能瓶頸
-4. 回應日誌與大型回應處理
-const byPassLogUrls = [&#39;/api/general/settings&#39;, &#39;/api/promotion/promotions&#39;];
-function truncateString(body: string) &#123;
-  const resultSizeLimit = 1024;
-  const stringSize = Buffer.byteLength(body);
-  
-  if (stringSize &gt; resultSizeLimit) &#123;
-    return `Result size - $&#123;stringSize&#125; bytes`;
-  &#125;
-  return body;
-&#125;
-設計重點：
-
-大型回應只記錄大小，避免日誌檔案爆炸
-特定 API 可跳過輸出日誌（如設定檔、大量資料查詢）
-5. 統一錯誤處理
-catch (error: any) &#123;
-  console.error(&#39;API Error:&#39;, error);
-  
-  logger.error.log(&#39;error&#39;, `URL: $&#123;event.path&#125;, Message: $&#123;error.message&#125;`);
-  
-  return createError(&#123;
-    statusCode: error.statusCode || 500,
-    statusMessage: error.statusMessage || &#39;Internal Server Error&#39;,
-    message: error.message || &#39;An unexpected error occurred&#39;,
-  &#125;);
-&#125;
-設計重點：
-
-所有未捕獲的異常都會被統一處理
-錯誤資訊會被記錄到日誌中，方便追蹤
-使用方式
-使用這個封裝後，原本的 API Handler 變得非常簡潔：
-
-// server/api/member/summary.get.ts
-import &#123; GetMemberSummary &#125; from &#39;@/bospi/GetMemberSummary&#39;;
-export default defineLogAndAuthHandler(async (event) =&gt; &#123;
-  const query = getQuery(event);
-  const api = new GetMemberSummary();
-  const response = await api.getMemberSummary(query);
-  return response.data;
-&#125;);
-只需要專注在業務邏輯，認證、日誌、錯誤處理全部自動搞定！
-
-架構圖
-┌─────────────────────────────────────────────────────────┐
-│                    Frontend (Browser)                    │
-└─────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│              defineLogAndAuthHandler (Wrapper)           │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │ 1. Session 認證檢查                                  ││
-│  │ 2. 請求日誌記錄 (含敏感資料遮蔽)                      ││
-│  │ 3. 效能計時開始                                      ││
-│  └─────────────────────────────────────────────────────┘│
-│                          │                               │
-│                          ▼                               │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │           實際的 API Handler (業務邏輯)              ││
-│  └─────────────────────────────────────────────────────┘│
-│                          │                               │
-│                          ▼                               │
-│  ┌─────────────────────────────────────────────────────┐│
-│  │ 4. 效能計時結束                                      ││
-│  │ 5. 回應日誌記錄                                      ││
-│  │ 6. 錯誤捕獲與格式化                                  ││
-│  └─────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Backend SPI (ASP.NET)                 │
-└─────────────────────────────────────────────────────────┘
-
-
-這個設計模式其實就是 AOP (Aspect-Oriented Programming) 的體現——將「橫切關注點」（如日誌、認證、錯誤處理）從業務邏輯中抽離出來。
-
-]]></content>
-      <categories>
-        <category>前端架構</category>
-      </categories>
-      <tags>
-        <tag>API Design</tag>
-        <tag>Nuxt3</tag>
-        <tag>TypeScript</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Pinia Writing Hint in Composition Api</title>
-    <url>/2022/12/25/PiniaWritingHint/</url>
-    <content><![CDATA[在 Composition Api 使用 Pinia 做狀態管理的時候,官方網站上面有寫說
-
-
-寫一陣子後才想到有遇過幾個問題
-怎麼樣算是沒有 refs or reactive , 並且怎樣寫才是正確的呢?
-先看一下我們定義的 State
-以 number , array ,object 為例子來講解一下我們使用的方法
-import &#123; defineStore &#125; from &#x27;pinia&#x27;;export const useCounter = defineStore(&#123;  id: &#x27;counter&#x27;,  state: () =&gt; (&#123;    n: 2,    decrementedTimes: 0,    numbers: [],    data: &#123;      user: &#x27;joseph&#x27;,      age: 13,      profile: &#123;        role: &#x27;aaa&#x27;,      &#125;,    &#125;,  &#125;),  getters: &#123;    double: (state) =&gt; state.n * 2,  &#125;,  actions: &#123;    increment(amount = 1) &#123;      this.n += amount;    &#125;,    setupUser(userName, profile) &#123;      this.data.user = userName;      this.data.profile.role = profile;    &#125;,    pushNumber(number) &#123;      this.numbers.push(number);    &#125;,  &#125;,&#125;);
-
-Sample我們用三個層面來探討
-
-Counter Store 建立實體
-
-import &#123; useCounter &#125; from &#x27;./stores/counter&#x27;;const counter = useCounter();
-
-
-Counter Store 解構方式取出 (錯誤方法)
-
-const &#123;  n: unRefCounts,  numbers: unRefNumbers,  data: unRefData,  double: unRefDouble,&#125; = useCounter();
-
-
-Counter Store 解構方式取出 (StoreToRefs)
-
-const &#123; n, numbers, data, double &#125; = storeToRefs(counter);
-
-Counter Store 建立實體這個最不需要討論 因為建立實體後 可以調用所有的 method 屬性跟 Getter 都會是雙向綁定的只是缺點是 每次使用都要 counter.xxx counter.xxx 有點麻煩
-import &#123; useCounter &#125; from &#x27;./stores/counter&#x27;;const counter = useCounter();
-
-
-
-Counter Store 解構方式取出 (錯誤方法)因為在 ES6 上面建立的解構的方法 所以一開始大家都會想要用這種方法片段的取出值
-const &#123;  n: unRefCounts,  numbers: unRefNumbers,  data: unRefData,  double: unRefDouble,&#125; = useCounter();
-
-
-
-大家可以看到 標黑色的部分 因為單純的 number or string 這些都是 call by value 所以透過解構的方法並不會雙向綁定但是物件跟陣列是會的
-為了避免混用 我們還是少用這種方法
-Counter Store 解構方式取出 (StoreToRefs)這是官方推薦的方法
-const &#123; n, numbers, data, double &#125; = storeToRefs(counter);
-
-這樣就可以把 n 直接做雙向綁定 只要操作的時候使用 n.value ++就可以
-但是要注意一件事情. storeToRefs 出來的值 如果再將其中的子屬性 assign 出去也不會有 two way binding 的效果
-const userName = data.value.user;
-
-
-
-那如果我們還是希望可以有子屬性有 two way binding 的效果可以參考以下範例
-ex: 使用者的資料
-data: &#123;        UpdateTime: 0,        Name: &quot;&quot;,        Status: &quot;Active&quot;,        Profile: &#123; Email: &quot;&quot;, Phone: 0 &#125;    &#125;
-
-因為有可能不是每次都要把所有使用者資料撈出來，會遇到一些寫法問題 請參考範例
-Code Sample
-
-Pinia 存取的結構:
-
-
-這裡有發現有幾種寫法就算 Pinia 狀態有改變，畫面上面的值沒有跟著連動
-Not Working Sample
-
-rootStore.data.Status直接把 rootStore 的屬性取出是無法做 reactive
-
-data.value.Profile.Phone透過 storeToRefs 拉出的屬性值注意只有屬性值不會 reactive
-
-rootStore.phoneNumber直接把 rootStore 的 Getter 取出是無法做 reactive
-
-
-為什麼會這樣呢?後面有回頭去看 Vue 3 reactive 用法
-其實 reactive 是使用 proxy 做的
-其實他文件上面有提到兩點很重要的
-
-When you assign or destructure a reactive object’s property to a local variable, the reactivity is “disconnected” because access to the local variable no longer triggers the get &#x2F; set proxy traps.意思是當你把 reactiv object 的屬性值單獨取出他就會 disconnected 因為 value update 不會被 proxy 的 get set 觸發到這就是對應到剛剛的問題 1 2 3
-The returned proxy from reactive(), although behaving just like the original, has a different identity if we compare it to the original using the &#x3D;&#x3D;&#x3D; operator.當你重新把 reactive object 在 assign 出去 他會視為是不同的物件
-
-reactive work in vue
-How to Fix It?
-使用 getter method 透過 storeToRefs 取出單一的屬性值Getters are exactly the equivalent of computed values for the state of a Store.Reference
-單獨把屬性值透過 computed 包裝起來
-使用 watchEffect
-
-以下是 working 的 sample
-const &#123; data, phoneNumber &#125; = storeToRefs(rootStore);const computedTime = computed(() =&gt; &#123;  return data.value.UpdateTime;&#125;);
-
-為什麼要特地說明這個呢? 因為在 vue 3 中 會很常使用 composition api, 並且把一些共用的邏輯抽成 composeble 的 code相對 Pinia 也是 可能會需要單獨取某一些值出來，所以特地記錄這塊
-]]></content>
-      <categories>
-        <category>前端開發</category>
-      </categories>
-      <tags>
-        <tag>Pinia</tag>
-        <tag>Vue3</tag>
-        <tag>Composition Api</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>Hangfire Multi-Queue 資源隔離：讓重量級 Job 不拖垮整個排程系統</title>
     <url>/2026/04/21/MultiQueueResourceIsolation/</url>
     <content><![CDATA[問題：重量級 Job 拖垮輕量 Job所有 Hangfire Job 都跑在同一個 Worker Pool 時，有一個隱藏的資源競爭問題。
@@ -5483,6 +5559,395 @@ Dashboard 可見度
         <tag>Hangfire</tag>
         <tag>Performance</tag>
         <tag>Queue</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>在 Nuxt 3 中打造統一的 API Handler：認證、日誌與錯誤處理的優雅封裝</title>
+    <url>/2026/03/09/Nuxt3ApiLoggerHandler/</url>
+    <content><![CDATA[前言在開發後台管理系統時，我們經常會遇到一個問題：每個 API Handler 都需要處理認證驗證、日誌記錄、錯誤捕獲等重複性邏輯。如果在每個檔案中都寫一遍，不僅冗長，還容易遺漏。本文將介紹如何在 Nuxt 3 的 Server API 中，利用 Higher-Order Function (高階函式) 的概念，打造一個統一的 defineLogAndAuthHandler，讓所有 API 自動擁有以下功能：
+
+✅ Session 認證與過期檢查
+✅ 請求&#x2F;回應日誌記錄
+✅ 敏感資料自動遮蔽
+✅ 效能監控 (API 執行時間)
+✅ 統一錯誤處理與格式化
+
+核心概念：Higher-Order Function在 JavaScript&#x2F;TypeScript 中，高階函式 (HOF) 是指「接收函式作為參數」或「回傳函式」的函式。我們的設計正是利用這個概念：
+export const defineLogAndAuthHandler = &lt;T extends EventHandlerRequest&gt;(
+  handler: EventHandler&lt;T&gt;
+): EventHandler&lt;T&gt; =&gt; defineEventHandler&lt;T&gt;(async (event) =&gt; &#123;
+  // 在這裡加入認證、日誌等邏輯
+  const response = await handler(event); // 執行原本的 Handler
+  // 在這裡加入回應處理邏輯
+  return response;
+&#125;);
+這就像是在原本的 API Handler 外面「包一層糖衣」，讓它自動具備額外的能力。
+
+功能拆解
+1. Session 認證與過期檢查
+// 檢查是否已認證
+if (!event.context?.session?.isAuthenticated &amp;&amp; !isPublicRoute) &#123;
+  return createError(&#123;
+    statusCode: 401,
+    statusText: &#39;Session Expired&#39;,
+  &#125;);
+&#125;
+// 檢查 Session 是否已過期
+const currentTime = new Date().getTime();
+const lastLoginTimestamp = event.context?.session?.lastLoginTime;
+const maxTimeDiff = (currentTime - lastLoginTimestamp) / 1000;
+if (maxTimeDiff &gt;= parseInt(maxExpiryInSeconds, 10)) &#123;
+  // 清除 Session 並回傳 401
+  event.context.session.isAuthenticated = false;
+  return createError(&#123; statusCode: 401, statusText: &#39;Session Expired&#39; &#125;);
+&#125;
+設計重點：
+
+白名單機制：登入、登出等 API 不需要認證
+雙重檢查：不只檢查是否登入，還檢查 Session 是否超時
+2. 請求日誌記錄與敏感資料遮蔽
+const ignoreLogParams = [&#39;password&#39;, &#39;newPassword&#39;, &#39;oldPassword&#39;];
+// 遮蔽敏感欄位
+if (typeof body === &#39;object&#39;) &#123;
+  const filterBody = Object.assign(&#123;&#125;, body);
+  for (const key in filterBody) &#123;
+    if (ignoreLogParams.includes(key)) &#123;
+      filterBody[key] = &#39;***mask***&#39;;
+    &#125;
+  &#125;
+  logger.log(&#39;info&#39;, `[POST] $&#123;JSON.stringify(filterBody)&#125;`);
+&#125;
+設計重點：
+
+自動遮蔽密碼等敏感欄位，避免日誌外洩
+支援 GET/POST/PUT/DELETE 不同方法的日誌格式
+3. 效能監控
+const startTime = Date.now();
+const response = await handler(event);
+const endTime = Date.now();
+const duration = endTime - startTime;
+logger.performance.log(&#39;info&#39;, `[$&#123;pathWithoutQueryString&#125;] [$&#123;duration&#125;ms]`);
+設計重點：
+
+記錄每個 API 的執行時間
+方便後續分析效能瓶頸
+4. 回應日誌與大型回應處理
+const byPassLogUrls = [&#39;/api/general/settings&#39;, &#39;/api/promotion/promotions&#39;];
+function truncateString(body: string) &#123;
+  const resultSizeLimit = 1024;
+  const stringSize = Buffer.byteLength(body);
+  
+  if (stringSize &gt; resultSizeLimit) &#123;
+    return `Result size - $&#123;stringSize&#125; bytes`;
+  &#125;
+  return body;
+&#125;
+設計重點：
+
+大型回應只記錄大小，避免日誌檔案爆炸
+特定 API 可跳過輸出日誌（如設定檔、大量資料查詢）
+5. 統一錯誤處理
+catch (error: any) &#123;
+  console.error(&#39;API Error:&#39;, error);
+  
+  logger.error.log(&#39;error&#39;, `URL: $&#123;event.path&#125;, Message: $&#123;error.message&#125;`);
+  
+  return createError(&#123;
+    statusCode: error.statusCode || 500,
+    statusMessage: error.statusMessage || &#39;Internal Server Error&#39;,
+    message: error.message || &#39;An unexpected error occurred&#39;,
+  &#125;);
+&#125;
+設計重點：
+
+所有未捕獲的異常都會被統一處理
+錯誤資訊會被記錄到日誌中，方便追蹤
+使用方式
+使用這個封裝後，原本的 API Handler 變得非常簡潔：
+
+// server/api/member/summary.get.ts
+import &#123; GetMemberSummary &#125; from &#39;@/bospi/GetMemberSummary&#39;;
+export default defineLogAndAuthHandler(async (event) =&gt; &#123;
+  const query = getQuery(event);
+  const api = new GetMemberSummary();
+  const response = await api.getMemberSummary(query);
+  return response.data;
+&#125;);
+只需要專注在業務邏輯，認證、日誌、錯誤處理全部自動搞定！
+
+架構圖
+┌─────────────────────────────────────────────────────────┐
+│                    Frontend (Browser)                    │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│              defineLogAndAuthHandler (Wrapper)           │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │ 1. Session 認證檢查                                  ││
+│  │ 2. 請求日誌記錄 (含敏感資料遮蔽)                      ││
+│  │ 3. 效能計時開始                                      ││
+│  └─────────────────────────────────────────────────────┘│
+│                          │                               │
+│                          ▼                               │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │           實際的 API Handler (業務邏輯)              ││
+│  └─────────────────────────────────────────────────────┘│
+│                          │                               │
+│                          ▼                               │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │ 4. 效能計時結束                                      ││
+│  │ 5. 回應日誌記錄                                      ││
+│  │ 6. 錯誤捕獲與格式化                                  ││
+│  └─────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Backend SPI (ASP.NET)                 │
+└─────────────────────────────────────────────────────────┘
+
+
+這個設計模式其實就是 AOP (Aspect-Oriented Programming) 的體現——將「橫切關注點」（如日誌、認證、錯誤處理）從業務邏輯中抽離出來。
+
+]]></content>
+      <categories>
+        <category>前端架構</category>
+      </categories>
+      <tags>
+        <tag>API Design</tag>
+        <tag>Nuxt3</tag>
+        <tag>TypeScript</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>ASP.NET MVC PageGuard 與 RouteConstraint：動態頁面權限管線設計</title>
+    <url>/2026/05/17/PageGuardRouteConstraintPermission/</url>
+    <content><![CDATA[前言大型網站通常不是只有「登入」與「未登入」兩種頁面。
+真實平台會有更多分類：
+
+Public Page：首頁、註冊、FAQ
+Private Page：我的帳戶、Inbox、裝置確認
+Product Page：Sports、Casino、Lotto 等遊戲頁
+NoBlock Page：Live Chat、Pre Chat
+DepositOnly &#x2F; 特殊狀態頁
+
+再加上維護狀態、產品地區限制、Responsible Gambling 限制，頁面權限就不能只靠一個 [Authorize] 解決。
+這個專案用 PagePermissionDetector、RouteConstraint、PageGuardActionFilter 與 ResponsibleChain 組成一條後端頁面權限管線。
+相關檔案src/AgileBet.Cash.Portal.Web/Utilities/PagePermissionDetector.cssrc/AgileBet.Cash.Portal.Web/Routing/PublicPageRouteConstraint.cssrc/AgileBet.Cash.Portal.Web/Routing/PrivatePageRouteConstraint.cssrc/AgileBet.Cash.Portal.Web/Routing/ProductRouteConstraint.cssrc/AgileBet.Cash.Portal.Web/HttpActionFilter/PageGuardActionFilter.cssrc/AgileBet.Cash.Portal.Web/Helper/PageCheckHelper.cssrc/AgileBet.Cash.Portal.Web/Utilities/UserPagePermissionChecker.cs
+
+第一層：PagePermissionDetectorPagePermissionDetector 負責把 URL page 判斷成權限類型：
+public PagePermission DetectPagePermission(string page, string path)&#123;    if (string.IsNullOrEmpty(page))    &#123;        return PagePermission.Public;    &#125;    if (Check(privatePageRules, page, path))    &#123;        return PagePermission.Private;    &#125;    if (Check(publicPageRules, page, path))    &#123;        return PagePermission.Public;    &#125;    if (IsProductPage(page))    &#123;        return PagePermission.Product;    &#125;    if (Check(noBlockPageRules, page, path))    &#123;        return PagePermission.NoBlock;    &#125;    return PagePermission.None;&#125;
+
+這裡不是用 route name 判斷，而是用 page&#x2F;path 對應規則。
+例如 private page：
+private static readonly List&lt;PageRoutingModel&gt; privatePageRules =    new List&lt;PageRoutingModel&gt;()&#123;    new PageRoutingModel()    &#123;        PageName = &quot;my-account&quot;,        IgnorePath = new List&lt;string&gt;() &#123; &quot;sports&quot; &#125;    &#125;,    new PageRoutingModel() &#123; PageName = &quot;inbox&quot; &#125;,    new PageRoutingModel() &#123; PageName = &quot;privilege-club&quot; &#125;,    new PageRoutingModel() &#123; PageName = &quot;device-confirmation&quot; &#125;&#125;;
+
+Public page：
+new PageRoutingModel() &#123; PageName = &quot;home&quot; &#125;,new PageRoutingModel() &#123; PageName = &quot;user&quot; &#125;,new PageRoutingModel() &#123; PageName = &quot;faqs&quot; &#125;,new PageRoutingModel() &#123; PageName = &quot;support&quot; &#125;,new PageRoutingModel() &#123; PageName = &quot;sign-up&quot; &#125;,new PageRoutingModel() &#123; PageName = &quot;new-device-verify&quot; &#125;
+
+IgnorePath 是這裡很實用的細節。像 my-account 通常是 private，但某些 path 包含 sports 時要排除，避免過度攔截。
+Product Page 由設定驅動Product page 不是 hardcode list，而是從 AppConfigManager.RegionProducts 判斷：
+private bool IsProductPage(string page)&#123;    var prodSetting = AppConfigManager.RegionProducts        .FirstOrDefault(x =&gt;            x.Name.Equals(page) ||            (string.IsNullOrEmpty(x.RegexPath) ? false :                Regex.IsMatch(page, $&quot;&#123;x.RegexPath.Replace(&quot;|&quot;, &quot;$|&quot;)&#125;$&quot;,                    RegexOptions.IgnoreCase))        );    return prodSetting != null;&#125;
+
+這代表新增產品或 region product mapping 時，不一定要改 route 程式碼，而是可以透過 config 擴充。
+第二層：RouteConstraintMVC route 用 IRouteConstraint 決定該 URL 是否符合某種頁面類型。
+Public route：
+public bool Match(    HttpContextBase httpContext,    Route route,    string parameterName,    RouteValueDictionary values,    RouteDirection routeDirection)&#123;    var page = values[parameterName]?.ToString();    if (page == null)    &#123;        return false;    &#125;    if (values.ContainsKey(&quot;path&quot;))    &#123;        var path = values[&quot;path&quot;]?.ToString();        return Detector.DetectPagePermission(page, path) == PagePermission.Public;    &#125;    return false;&#125;
+
+Private route 特別排除 logout：
+if (page == null || page == &quot;logout&quot;)&#123;    return false;&#125;
+
+Product route 排除 sports 和 lobby：
+if (page == &quot;sports&quot;)&#123;    return false;&#125;if (path != null &amp;&amp; path.Contains(&quot;lobby&quot;))&#123;    return false;&#125;return Detector.DetectPagePermission(page, path) == PagePermission.Product;
+
+這些小規則看起來零碎，但正是大型站點 routing 的真實樣貌：不是所有頁面都能用一條泛用 route 吃掉。
+第三層：PageGuardActionFilter前面 RouteConstraint 解決的是 MVC route matching；API 或前端導頁時，仍需要後端檢查目標頁是否可進入。
+PageGuardActionFilter 會讀 x-destination-path：
+private Tuple&lt;string, string&gt; GetPageAndPath(HttpActionContext actionContext)&#123;    if (actionContext.Request.Headers.TryGetValues(&quot;x-destination-path&quot;,        out var destinationPathValues))    &#123;        var destinationPath = destinationPathValues.FirstOrDefault();        var page = destinationPath != null            ? destinationPath.ToString().Split(&#x27;/&#x27;).Skip(2).FirstOrDefault()            : &quot;&quot;;        return Tuple.Create(page, destinationPath);    &#125;    return Tuple.Create(string.Empty, string.Empty);&#125;
+
+也就是說前端可以在 API request 帶上即將前往的 path，後端再根據該 path 判斷是否允許。
+Access Gate：先判斷是否允許進站第一道關卡：
+var isAllowToAccess = trading.IsAllowedToAccess.HasValue    ? trading.IsAllowedToAccess.Value    : false;if ((isAllowToAccess || trading.IsCrawler) == false)&#123;    actionContext.Response =        actionContext.Request.CreateErrorResponse(HttpStatusCode.Forbidden,            new HttpError());&#125;
+
+這裡允許兩種身份：
+
+正常可訪問使用者
+crawler
+
+如果兩者都不是，直接 403。
+權限類型對應不同 Checkervar permission = detector.DetectPagePermission(page, path);switch (permission)&#123;    case PagePermission.Private:        var privateChecker =            new PrivatePageChecker(new ResponsibleGamblingChecker(null));        break;    case PagePermission.Public:        var publicChecker =            new PublicPageChecker(new ResponsibleGamblingChecker(null));        break;    case PagePermission.Product:        var productChecker =            new ProductPageChecker(new ResponsibleGamblingChecker(null));        break;&#125;
+
+每種頁面先跑自己的 checker，再接 Responsible Gambling checker。
+這是一個 Chain of Responsibility：
+PrivatePageChecker    -&gt; ResponsibleGamblingCheckerPublicPageChecker    -&gt; ResponsibleGamblingCheckerProductPageChecker    -&gt; ResponsibleGamblingChecker
+
+PageCheckHelper：實際權限檢查Private page：
+public Tuple&lt;HttpStatusCode, string&gt; CheckPrivatePage(SessionData session)&#123;    var trading = session.Trading;    if (checker.IsMaintenance(session))    &#123;        return Tuple.Create(HttpStatusCode.ServiceUnavailable, &quot;&quot;);    &#125;    if (!trading.IsAuthenticated || trading.ChangePasswordFlag)    &#123;        return Tuple.Create(HttpStatusCode.Unauthorized,            &quot;please login to continue&quot;);    &#125;    var (isValid, remark) = checker.IsAccountValidate(session);    if (isValid == false)    &#123;        return Tuple.Create(HttpStatusCode.Unauthorized,            ((int)remark).ToString());    &#125;    return Tuple.Create(HttpStatusCode.OK, &quot;&quot;);&#125;
+
+Product page：
+public Tuple&lt;HttpStatusCode, string&gt; CheckProductPage(    SessionData session,    string prod)&#123;    if (checker.IsMaintenance(session))    &#123;        return Tuple.Create(HttpStatusCode.ServiceUnavailable, &quot;&quot;);    &#125;    if (checker.IsProdForbidden(session, prod))    &#123;        return Tuple.Create(HttpStatusCode.Forbidden,            $&quot;prodforbidden=&#123;prod&#125;&quot;);    &#125;    return Tuple.Create(HttpStatusCode.OK, &quot;&quot;);&#125;
+
+Public page 只檢查 maintenance：
+public Tuple&lt;HttpStatusCode, string&gt; CheckPublicPage(SessionData session)&#123;    if (checker.IsMaintenance(session))    &#123;        return Tuple.Create(HttpStatusCode.ServiceUnavailable, &quot;&quot;);    &#125;    return Tuple.Create(HttpStatusCode.OK, &quot;&quot;);&#125;
+
+Responsible Gambling 作為最後一層ResponsibleGamblingChecker 不關心頁面是 Public、Private 還是 Product，只關心這個使用者狀態是否允許進入目標 path：
+if (permissionChecker.IsInDisallowPath(    setting.Session,    setting.DisAllowRgStatus,    setting.DestinationPath,    setting.ByPassPathChecker))&#123;    return new Tuple&lt;HttpStatusCode, string&gt;(        HttpStatusCode.Forbidden,        LimitHttpStatus.LimitAccess.ToString().ToLower());&#125;
+
+這個設計的好處是 Responsible Gambling 不需要散落到各種 checker 裡，它是一個獨立的最後關卡。
+if&#x2F;else 可以怎麼收斂這套設計的方向是對的，但目前有幾個地方容易隨規則增加而變成 if&#x2F;else 堆疊：
+
+PagePermissionDetector 用固定順序判斷 private &#x2F; public &#x2F; product &#x2F; no block
+RouteConstraint 各自處理 page&#x2F;path 解析與特例
+PageGuardActionFilter 用 switch 建立不同 checker chain
+PageCheckHelper 裡面有很多 guard clause
+
+我會保留 PageCheckHelper 的 guard clause。maintenance、login、account validate 都是線性關卡，直接 return 反而清楚。真正值得收斂的是「會隨規則新增而一直長大」的分派邏輯。
+1. PagePermissionDetector 改成規則列目前寫法是程式碼控制順序：
+if (Check(privatePageRules, page, path)) return PagePermission.Private;if (Check(publicPageRules, page, path)) return PagePermission.Public;if (IsProductPage(page)) return PagePermission.Product;if (Check(noBlockPageRules, page, path)) return PagePermission.NoBlock;
+
+可以改成 ordered rule list，讓順序與判斷集中在一個資料結構：
+private readonly IReadOnlyList&lt;PagePermissionRule&gt; rules = new[]&#123;    new PagePermissionRule(PagePermission.Private,        (page, path) =&gt; Check(privatePageRules, page, path)),    new PagePermissionRule(PagePermission.Public,        (page, path) =&gt; Check(publicPageRules, page, path)),    new PagePermissionRule(PagePermission.Product,        (page, path) =&gt; IsProductPage(page)),    new PagePermissionRule(PagePermission.NoBlock,        (page, path) =&gt; Check(noBlockPageRules, page, path)),&#125;;public PagePermission DetectPagePermission(string page, string path)&#123;    if (string.IsNullOrEmpty(page))    &#123;        return PagePermission.Public;    &#125;    return rules.FirstOrDefault(rule =&gt; rule.IsMatch(page, path))?.Permission        ?? PagePermission.None;&#125;
+
+這樣新增 DepositOnly 或特殊 page type 時，主要是加 rule，不是在 method 裡繼續加 if。
+2. Permission 到 checker chain 改成 factory mapPageGuardActionFilter 的 switch 可以改成 dictionary，把「PagePermission 對應哪條 chain」變成配置：
+private readonly IReadOnlyDictionary&lt;PagePermission, Func&lt;IPageChecker&gt;&gt; checkerFactories =    new Dictionary&lt;PagePermission, Func&lt;IPageChecker&gt;&gt;&#123;    [PagePermission.Private] = () =&gt;        new PrivatePageChecker(new ResponsibleGamblingChecker(null)),    [PagePermission.Public] = () =&gt;        new PublicPageChecker(new ResponsibleGamblingChecker(null)),    [PagePermission.Product] = () =&gt;        new ProductPageChecker(new ResponsibleGamblingChecker(null)),&#125;;if (!checkerFactories.TryGetValue(permission, out var createChecker))&#123;    return Allow();&#125;var checker = createChecker();var result = checker.Check(context);
+
+如果頁面類型越來越多，這個 map 還可以抽到 PageCheckerFactory，讓 action filter 只負責管線，不負責組裝細節。
+3. RouteConstraint 抽出共用 basePublic &#x2F; Private &#x2F; Product route 都在做相似的事：解 page、解 path、套特例、呼叫 detector。可以留下各自的特例，但把重複流程收到 base class：
+protected abstract PagePermission TargetPermission &#123; get; &#125;protected virtual bool ShouldSkip(string page, string path)&#123;    return false;&#125;public bool Match(...)&#123;    var routePage = GetPage(values, parameterName);    var routePath = GetPath(values);    if (string.IsNullOrEmpty(routePage) || ShouldSkip(routePage, routePath))    &#123;        return false;    &#125;    return Detector.DetectPagePermission(routePage, routePath) == TargetPermission;&#125;
+
+ProductRouteConstraint 只要 override ShouldSkip 處理 sports &#x2F; lobby，主流程不用重複寫。
+完整流程graph TD
+    A["Request with x-destination-path"] --> B["PageGuardActionFilter"]
+    B --> C["PagePermissionDetector"]
+    C --> D{"PagePermission"}
+    D -->|Public| E["PublicPageChecker"]
+    D -->|Private| F["PrivatePageChecker"]
+    D -->|Product| G["ProductPageChecker"]
+    D -->|NoBlock / DepositOnly| H["Pass"]
+    E --> I["ResponsibleGamblingChecker"]
+    F --> I
+    G --> I
+    I --> J{"Allowed?"}
+    J -->|Yes| K["Continue request"]
+    J -->|No| L["Return 401 / 403 / 503"]
+
+小結這套設計的核心不是單一技術，而是責任拆分：
+
+PagePermissionDetector：判斷頁面類型
+RouteConstraint：讓 MVC route 選對 controller
+PageGuardActionFilter：API 層集中做頁面權限檢查
+PageCheckHelper：封裝 maintenance &#x2F; login &#x2F; product forbidden
+ResponsibleGamblingChecker：補上法規與風控限制
+
+如果只用 [Authorize]，這些邏輯最後會全部塞進 Controller 或前端 router guard。這個專案把它們拆成後端管線，讓頁面權限可以被測試、被擴充，也能在前端繞過時仍然生效。
+]]></content>
+      <categories>
+        <category>後端架構</category>
+      </categories>
+      <tags>
+        <tag>ASP.NET MVC</tag>
+        <tag>Web API</tag>
+        <tag>ActionFilter</tag>
+        <tag>RouteConstraint</tag>
+        <tag>Authorization</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Pinia Writing Hint in Composition Api</title>
+    <url>/2022/12/25/PiniaWritingHint/</url>
+    <content><![CDATA[在 Composition Api 使用 Pinia 做狀態管理的時候,官方網站上面有寫說
+
+
+寫一陣子後才想到有遇過幾個問題
+怎麼樣算是沒有 refs or reactive , 並且怎樣寫才是正確的呢?
+先看一下我們定義的 State
+以 number , array ,object 為例子來講解一下我們使用的方法
+import &#123; defineStore &#125; from &#x27;pinia&#x27;;export const useCounter = defineStore(&#123;  id: &#x27;counter&#x27;,  state: () =&gt; (&#123;    n: 2,    decrementedTimes: 0,    numbers: [],    data: &#123;      user: &#x27;joseph&#x27;,      age: 13,      profile: &#123;        role: &#x27;aaa&#x27;,      &#125;,    &#125;,  &#125;),  getters: &#123;    double: (state) =&gt; state.n * 2,  &#125;,  actions: &#123;    increment(amount = 1) &#123;      this.n += amount;    &#125;,    setupUser(userName, profile) &#123;      this.data.user = userName;      this.data.profile.role = profile;    &#125;,    pushNumber(number) &#123;      this.numbers.push(number);    &#125;,  &#125;,&#125;);
+
+Sample我們用三個層面來探討
+
+Counter Store 建立實體
+
+import &#123; useCounter &#125; from &#x27;./stores/counter&#x27;;const counter = useCounter();
+
+
+Counter Store 解構方式取出 (錯誤方法)
+
+const &#123;  n: unRefCounts,  numbers: unRefNumbers,  data: unRefData,  double: unRefDouble,&#125; = useCounter();
+
+
+Counter Store 解構方式取出 (StoreToRefs)
+
+const &#123; n, numbers, data, double &#125; = storeToRefs(counter);
+
+Counter Store 建立實體這個最不需要討論 因為建立實體後 可以調用所有的 method 屬性跟 Getter 都會是雙向綁定的只是缺點是 每次使用都要 counter.xxx counter.xxx 有點麻煩
+import &#123; useCounter &#125; from &#x27;./stores/counter&#x27;;const counter = useCounter();
+
+
+
+Counter Store 解構方式取出 (錯誤方法)因為在 ES6 上面建立的解構的方法 所以一開始大家都會想要用這種方法片段的取出值
+const &#123;  n: unRefCounts,  numbers: unRefNumbers,  data: unRefData,  double: unRefDouble,&#125; = useCounter();
+
+
+
+大家可以看到 標黑色的部分 因為單純的 number or string 這些都是 call by value 所以透過解構的方法並不會雙向綁定但是物件跟陣列是會的
+為了避免混用 我們還是少用這種方法
+Counter Store 解構方式取出 (StoreToRefs)這是官方推薦的方法
+const &#123; n, numbers, data, double &#125; = storeToRefs(counter);
+
+這樣就可以把 n 直接做雙向綁定 只要操作的時候使用 n.value ++就可以
+但是要注意一件事情. storeToRefs 出來的值 如果再將其中的子屬性 assign 出去也不會有 two way binding 的效果
+const userName = data.value.user;
+
+
+
+那如果我們還是希望可以有子屬性有 two way binding 的效果可以參考以下範例
+ex: 使用者的資料
+data: &#123;        UpdateTime: 0,        Name: &quot;&quot;,        Status: &quot;Active&quot;,        Profile: &#123; Email: &quot;&quot;, Phone: 0 &#125;    &#125;
+
+因為有可能不是每次都要把所有使用者資料撈出來，會遇到一些寫法問題 請參考範例
+Code Sample
+
+Pinia 存取的結構:
+
+
+這裡有發現有幾種寫法就算 Pinia 狀態有改變，畫面上面的值沒有跟著連動
+Not Working Sample
+
+rootStore.data.Status直接把 rootStore 的屬性取出是無法做 reactive
+
+data.value.Profile.Phone透過 storeToRefs 拉出的屬性值注意只有屬性值不會 reactive
+
+rootStore.phoneNumber直接把 rootStore 的 Getter 取出是無法做 reactive
+
+
+為什麼會這樣呢?後面有回頭去看 Vue 3 reactive 用法
+其實 reactive 是使用 proxy 做的
+其實他文件上面有提到兩點很重要的
+
+When you assign or destructure a reactive object’s property to a local variable, the reactivity is “disconnected” because access to the local variable no longer triggers the get &#x2F; set proxy traps.意思是當你把 reactiv object 的屬性值單獨取出他就會 disconnected 因為 value update 不會被 proxy 的 get set 觸發到這就是對應到剛剛的問題 1 2 3
+The returned proxy from reactive(), although behaving just like the original, has a different identity if we compare it to the original using the &#x3D;&#x3D;&#x3D; operator.當你重新把 reactive object 在 assign 出去 他會視為是不同的物件
+
+reactive work in vue
+How to Fix It?
+使用 getter method 透過 storeToRefs 取出單一的屬性值Getters are exactly the equivalent of computed values for the state of a Store.Reference
+單獨把屬性值透過 computed 包裝起來
+使用 watchEffect
+
+以下是 working 的 sample
+const &#123; data, phoneNumber &#125; = storeToRefs(rootStore);const computedTime = computed(() =&gt; &#123;  return data.value.UpdateTime;&#125;);
+
+為什麼要特地說明這個呢? 因為在 vue 3 中 會很常使用 composition api, 並且把一些共用的邏輯抽成 composeble 的 code相對 Pinia 也是 可能會需要單獨取某一些值出來，所以特地記錄這塊
+]]></content>
+      <categories>
+        <category>前端開發</category>
+      </categories>
+      <tags>
+        <tag>Vue3</tag>
+        <tag>Pinia</tag>
+        <tag>Composition Api</tag>
       </tags>
   </entry>
   <entry>
@@ -6680,9 +7145,267 @@ Chain-of-Responsibility Pattern
       <tags>
         <tag>Architecture</tag>
         <tag>Redis</tag>
-        <tag>Responsible Gambling</tag>
         <tag>ActionFilter</tag>
+        <tag>Responsible Gambling</tag>
         <tag>Vue Router</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Xuenn.Trigger.EventSPI — 透過 RabbitMQ Topic 清除 Cache 資料</title>
+    <url>/2026/04/01/TriggerEventSpiRabbitMqCache/</url>
+    <content><![CDATA[
+本文介紹 Xuenn.Trigger.EventSPI 這個早期的 Cache 清除機制：呼叫端（資料修改端）透過傳遞 account id 與 topic，通知此服務對 Redis 中相關的 CacheState key 執行失效處理。
+
+
+
+
+1. 背景與設計思路在早期系統設計中，Cache 的失效策略採用「事件通知 + 主動清除」的方式：
+
+資料修改完成後，呼叫端發送一個包含 account id 的 TopicMessage 到 RabbitMQ
+Topic 格式帶有事件類型（如 DPTransStatus、WDTransStatus），讓下游知道是哪類資料變動
+EventSPI 作為 Cache 清除的中間層，訂閱這些 Topic，依規則對 Redis 的 CacheState key 執行 ExpireKey
+
+這屬於間接清除的做法——呼叫端不需要知道哪些 Redis key 存在，由 EventSPI 統一管理對應關係。
+
+2. 系統架構總覽
+
+
+
+
+元件
+說明
+
+
+
+Caller Service
+資料修改端，發送 TopicMessage（含 account id）至 EventSPI
+
+
+EventSPI
+ASP.NET Web API，接收請求並 Publish 訊息至 RabbitMQ
+
+
+RabbitMQ
+Topic Exchange（MessageCentralDev），依 BindingKey 路由訊息
+
+
+AccountListener
+Consumer，訂閱 *.Account.* pattern，依 ConsumerRules 執行
+
+
+Redis Cache
+儲存 &#123;CacheName&#125;:&#123;accountId&#125;:CacheState key，失效後觸發 re-fetch
+
+
+
+3. Topic 命名規則與 Cache Key 對應
+
+3.1 Topic 格式&#123;EventType&#125;.Account.&#123;accountId&#125;
+
+範例：
+
+
+
+Topic
+意義
+
+
+
+DPTransStatus.Account.12345
+帳號 12345 的存款交易狀態變動
+
+
+WDTransStatus.Account.12345
+帳號 12345 的提款交易狀態變動
+
+
+KYCDocStatus.Account.12345
+帳號 12345 的 KYC 文件狀態變動
+
+
+MemberStatus.Account.12345
+帳號 12345 的會員狀態變動
+
+
+PromoStatus.Account.12345
+帳號 12345 的促銷狀態變動
+
+
+MemberLogout.Account.12345
+帳號 12345 登出
+
+
+3.2 TopicMessage 資料結構public class TopicMessage&#123;    public string Guid   &#123; get; set; &#125;  // 唯一識別碼（用於 log 追蹤）    public string Topic  &#123; get; set; &#125;  // e.g. &quot;DPTransStatus.Account.12345&quot;    public string Action &#123; get; set; &#125;  // 操作說明    public Dictionary&lt;string, string&gt; Data &#123; get; set; &#125;    // Data[&quot;key&quot;] = accountId，e.g. &quot;12345&quot;&#125;
+
+3.3 Redis Cache Key 格式&#123;CacheName&#125;:&#123;accountId&#125;:CacheState
+
+範例（對應不同 Topic）：
+PendingTransaction:12345:CacheStateDepositTransactions:12345:CacheStateWithdrawalTransactions:12345:CacheStateMemberStatus:12345:CacheStateStar4KYCVerification:12345:CacheStateMemberPromotions:12345:CacheStateTradingSession:12345:CacheState
+
+
+設計慣例：key 加上 :CacheState 後綴，表示這是快取狀態控制 key，CacheData 為實際資料 key（由其他服務管理）。
+
+
+4. 完整流程說明（Sequence Diagram）
+
+步驟說明
+
+
+步驟
+元件
+動作
+
+
+
+①
+Caller → EventSPI
+HTTP POST /api/messagecental，帶入 &#123; Topic, Action, Data: &#123;key: accountId&#125; &#125;
+
+
+②
+EventSPI → RabbitMQ
+MQService.EmitMessage() 將訊息 Publish 至 Topic Exchange
+
+
+③
+RabbitMQ → Consumer
+BindingKey *.Account.* 匹配，訊息投遞至 AccountListener Queue
+
+
+④
+Consumer 內部
+RuleService.RuleFilterTrigger() 依 TopicFilter Regex 比對規則
+
+
+⑤
+Consumer 內部
+RedLockFactory.CreateLockAsync() 取得分散式鎖（避免並發重複執行）
+
+
+⑥
+Consumer → Redis
+呼叫 RedisService.ExpireKey()
+
+
+⑦
+Redis 內部
+db.KeyExpire(key, TTL=0) → CacheState key 立即失效
+
+
+⑧
+Redis → Consumer
+回傳 true（key 存在已失效）或 false（key 不存在）
+
+
+⑨
+Consumer 內部
+log.Messages() 記錄操作結果
+
+
+
+5. 核心實作程式碼5.1 發送端 — MessageCentralController呼叫端透過此 API 傳入 TopicMessage：
+// Controllers/MessageCentralController.cs[HttpPost]public IHttpActionResult Post([FromBody] TopicMessage topicMessage)&#123;    mqService.EmitMessage&lt;TopicMessage&gt;(        ConfigUtility.AppSettings.GetProducer(&quot;MessageCentral&quot;),        topicMessage);    return Ok();&#125;
+
+5.2 MQService — 發佈到 RabbitMQ// Utility/MQService.cspublic void EmitMessage&lt;T&gt;(ProducerBinding producer, T messageObj)&#123;    using (var advancedBus = RabbitHutch.CreateBus(rabbitMqConnection).Advanced)    &#123;        var exchange = advancedBus.ExchangeDeclare(            producer.ExchangeName, producer.ExchangeType);        var message = JsonConvert.SerializeObject(messageObj);        var body = Encoding.UTF8.GetBytes(message);        advancedBus.Publish(exchange, producer.RoutingKey, false,            new MessageProperties &#123; DeliveryMode = 2 &#125;, body);    &#125;&#125;
+
+5.3 Consumer 啟動 — Global.asax.cs應用程式啟動時初始化 Consumer：
+// Global.asax.cs — SetUpConsumer()case &quot;AccountListener&quot;:    mqService.ConsumeMessage(consumer.Name, RuleService.RuleFilterTrigger);    break;default:    mqService.ConsumeMessage(consumer.Name, RedisService.ExpireKey);    break;
+
+5.4 RuleService — 規則比對與 Redis 操作// Utility/RuleService.cspublic static void RuleFilterTrigger(string consumerName, TopicMessage message)&#123;    var rules = ConfigUtility.AppSettings.GetConsumerRules(consumerName);    // 用 Regex 比對 Topic    var matchRules = rules        .Where(rule =&gt; new Regex(rule.TopicFilter).IsMatch(message.Topic))        .ToList();    matchRules.ForEach(rule =&gt; &#123;        switch (rule.Action)        &#123;            case RuleAction.ExpireRedisKey:                // &#123;0&#125; = message.Data[&quot;key&quot;]（account id）                var redisKeyPattern = string.Format(rule.KeyPatten, message.Data[&quot;key&quot;]);                RedisService.ExpireKey(                    RedisService.AccountCacheConn,                    redisKeyPattern,                    rule._ExpirySeconds);   // 0 = 立即失效                break;            case RuleAction.AddToRedis:                // 將資料寫入 Redis（如 VIP 等級資料）                RedisService.AddValueIntoRedis(RedisService.VIPDB,                    string.Format(rule.KeyPatten, message.Data[&quot;key&quot;]),                    JsonConvert.SerializeObject(message.Data),                    rule._ExpirySeconds);                break;        &#125;    &#125;);&#125;
+
+5.5 RedisService.ExpireKey — 實際清除// Utility/RedisService.cspublic static bool ExpireKey(string dbname, string key, int expirySeconds)&#123;    var db = GetDataBase(dbname);    if (db.KeyExists(key))    &#123;        db.KeyExpire(key, TimeSpan.FromSeconds(expirySeconds));        // expirySeconds = 0 → 立即失效（等同 KeyDelete）        return true;    &#125;    return false;&#125;
+
+
+6. 設定檔（AppSettings.config）所有 Consumer &#x2F; Producer &#x2F; Rule 的對應關係都定義在 Configuration/AppSettings.config：
+&lt;!-- RabbitMQ Consumer 訂閱設定 --&gt;&lt;ConsumerBinding Name=&quot;AccountListener&quot;    ExchangeName=&quot;MessageCentralDev&quot;    ExchangeType=&quot;topic&quot;    QueueName=&quot;AccountListener&quot;    BindingKey=&quot;*.Account.*&quot;    Count=&quot;4&quot; /&gt;&lt;!-- ConsumerRule 範例：存款狀態變動 → 清除多個相關 Cache key --&gt;&lt;ConsumerRuleBinding Name=&quot;AccountListener&quot;    TopicFilter=&quot;DPTransStatus.Account.*&quot;    Action=&quot;ExpireRedisKey&quot;    KeyPatten=&quot;PendingTransaction:&#123;0&#125;:CacheState&quot; /&gt;&lt;ConsumerRuleBinding Name=&quot;AccountListener&quot;    TopicFilter=&quot;DPTransStatus.Account.*&quot;    Action=&quot;ExpireRedisKey&quot;    KeyPatten=&quot;DepositTransactions:&#123;0&#125;:CacheState&quot; /&gt;&lt;!-- ExpiryTime 有值 = 設定 TTL 分鐘數；無值 = 立即失效 --&gt;&lt;ConsumerRuleBinding Name=&quot;AccountListener&quot;    TopicFilter=&quot;PromoStatus.Account.*&quot;    Action=&quot;ExpireRedisKey&quot;    KeyPatten=&quot;MemberPromotions:&#123;0&#125;:CacheState&quot;    ExpiryTime=&quot;1&quot; /&gt;
+
+
+Count&#x3D;”4” 表示同時啟動 4 個 Consumer 並行消費，提升處理吞吐量。
+
+
+7. 分散式鎖（RedLock）機制在 MQService.ConsumeMessage() 的直接清除路徑中，使用 RedLock 防止並發競爭：
+using (var redLock = RedisService.RedisLockFactory    .CreateLockAsync(        message.Data[&quot;key&quot;],    // lock key        TimeSpan.FromSeconds(3), // expiry        TimeSpan.FromSeconds(3), // wait        TimeSpan.FromSeconds(1)  // retry interval    ).Result)&#123;    if (!redLock.IsAcquired)    &#123;        // 取鎖失敗，記錄後放棄（訊息會被重新投遞）        log.Messages(..., $&quot;Retry to expire Key after 1 sec&quot;);        return;    &#125;    callback(RedisService.AccountCacheConn, message.Data[&quot;key&quot;], 0);&#125;
+
+
+8. 各 Topic 對應的 Cache Key 清除清單
+
+
+Topic (EventType)
+會被清除的 Cache Key Pattern
+
+
+
+DPTransStatus.Account.*
+PendingTransaction:&#123;id&#125;:CacheState、PaymentInfo:&#123;id&#125;:CacheState、DepositTransactions:&#123;id&#125;:CacheState
+
+
+WDTransStatus.Account.*
+PendingTransaction:&#123;id&#125;:CacheState、PaymentInfo:&#123;id&#125;:CacheState、WithdrawalTransactions:&#123;id&#125;:CacheState
+
+
+KYCDocStatus.Account.*
+Star4KYCVerification:&#123;id&#125;:CacheState、MemberStatus:&#123;id&#125;:CacheState、MemeberKYCDocsStatus:&#123;id&#125;:CacheState
+
+
+MemberStatus.Account.*
+MemberStatus:&#123;id&#125;:CacheState
+
+
+ProfileVerification.Account.*
+Star4KYCVerification:&#123;id&#125;:CacheState
+
+
+PromoStatus.Account.*
+MemberPromotions:&#123;id&#125;:CacheState (TTL 1min)、QualifyingPromotions:&#123;id&#125;:CacheState (TTL 1min)、PromotionClaims:&#123;id&#125;:CacheState、MemberRewards:&#123;id&#125;:CacheState
+
+
+MemberLogout.Account.*
+TradingSession:&#123;id&#125;:CacheState、ProfileSession:&#123;id&#125;:CacheState
+
+
+Notifications.Account.*
+多個 Notification 相關 key
+
+
+LoginProtection.Account.*
+SuspiciousLogin:ForgotAccount:&#123;id&#125;
+
+
+IpTraces.Account.*
+AddToRedis: Iptrace:&#123;id&#125;（TTL 43200 min）
+
+
+SignupComplete.Account.*
+Log + MemberStatus:&#123;id&#125;:CacheState
+
+
+PreferLanguage.Account.*
+PendingTransaction、KYC、Deposit&#x2F;Withdrawal、Promotion 等多個 key
+
+
+
+9. 這個設計的特點與限制優點
+呼叫端解耦：資料修改端只需傳送 accountId + topic，不需知道 Redis key 的命名細節
+彈性設定：新增&#x2F;修改 Cache 清除規則只需改 AppSettings.config，不需改程式碼
+集中管理：所有 Cache 失效邏輯集中在 EventSPI，容易追蹤
+
+限制（早期設計的取捨）
+Topic 僅攜帶 accountId（Data[&quot;key&quot;]），無法針對更細粒度的資料（如單筆交易 id）做精確清除
+以 CacheState key 間接觸發失效，實際 CacheData 由其他讀取服務自行重建，需搭配對應的 Cache 讀取機制
+Consumer 並發數固定在設定檔（Count），無動態擴縮能力
+
+
+此架構為早期設計，後續系統可考慮使用更精細的 Cache Tag &#x2F; Cache Dependency 機制取代 Topic+accountId 的粗粒度清除方式。
+]]></content>
+      <categories>
+        <category>後端架構</category>
+      </categories>
+      <tags>
+        <tag>.NET</tag>
+        <tag>Redis</tag>
+        <tag>RabbitMQ</tag>
+        <tag>Cache Invalidation</tag>
+        <tag>EventSPI</tag>
       </tags>
   </entry>
   <entry>
@@ -7172,264 +7895,6 @@ Handler 註冊機制 — 開放封閉原則，新功能不改舊程式碼
         <tag>Vue.js</tag>
         <tag>Architecture</tag>
         <tag>TypeScript</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Xuenn.Trigger.EventSPI — 透過 RabbitMQ Topic 清除 Cache 資料</title>
-    <url>/2026/04/01/TriggerEventSpiRabbitMqCache/</url>
-    <content><![CDATA[
-本文介紹 Xuenn.Trigger.EventSPI 這個早期的 Cache 清除機制：呼叫端（資料修改端）透過傳遞 account id 與 topic，通知此服務對 Redis 中相關的 CacheState key 執行失效處理。
-
-
-
-
-1. 背景與設計思路在早期系統設計中，Cache 的失效策略採用「事件通知 + 主動清除」的方式：
-
-資料修改完成後，呼叫端發送一個包含 account id 的 TopicMessage 到 RabbitMQ
-Topic 格式帶有事件類型（如 DPTransStatus、WDTransStatus），讓下游知道是哪類資料變動
-EventSPI 作為 Cache 清除的中間層，訂閱這些 Topic，依規則對 Redis 的 CacheState key 執行 ExpireKey
-
-這屬於間接清除的做法——呼叫端不需要知道哪些 Redis key 存在，由 EventSPI 統一管理對應關係。
-
-2. 系統架構總覽
-
-
-
-
-元件
-說明
-
-
-
-Caller Service
-資料修改端，發送 TopicMessage（含 account id）至 EventSPI
-
-
-EventSPI
-ASP.NET Web API，接收請求並 Publish 訊息至 RabbitMQ
-
-
-RabbitMQ
-Topic Exchange（MessageCentralDev），依 BindingKey 路由訊息
-
-
-AccountListener
-Consumer，訂閱 *.Account.* pattern，依 ConsumerRules 執行
-
-
-Redis Cache
-儲存 &#123;CacheName&#125;:&#123;accountId&#125;:CacheState key，失效後觸發 re-fetch
-
-
-
-3. Topic 命名規則與 Cache Key 對應
-
-3.1 Topic 格式&#123;EventType&#125;.Account.&#123;accountId&#125;
-
-範例：
-
-
-
-Topic
-意義
-
-
-
-DPTransStatus.Account.12345
-帳號 12345 的存款交易狀態變動
-
-
-WDTransStatus.Account.12345
-帳號 12345 的提款交易狀態變動
-
-
-KYCDocStatus.Account.12345
-帳號 12345 的 KYC 文件狀態變動
-
-
-MemberStatus.Account.12345
-帳號 12345 的會員狀態變動
-
-
-PromoStatus.Account.12345
-帳號 12345 的促銷狀態變動
-
-
-MemberLogout.Account.12345
-帳號 12345 登出
-
-
-3.2 TopicMessage 資料結構public class TopicMessage&#123;    public string Guid   &#123; get; set; &#125;  // 唯一識別碼（用於 log 追蹤）    public string Topic  &#123; get; set; &#125;  // e.g. &quot;DPTransStatus.Account.12345&quot;    public string Action &#123; get; set; &#125;  // 操作說明    public Dictionary&lt;string, string&gt; Data &#123; get; set; &#125;    // Data[&quot;key&quot;] = accountId，e.g. &quot;12345&quot;&#125;
-
-3.3 Redis Cache Key 格式&#123;CacheName&#125;:&#123;accountId&#125;:CacheState
-
-範例（對應不同 Topic）：
-PendingTransaction:12345:CacheStateDepositTransactions:12345:CacheStateWithdrawalTransactions:12345:CacheStateMemberStatus:12345:CacheStateStar4KYCVerification:12345:CacheStateMemberPromotions:12345:CacheStateTradingSession:12345:CacheState
-
-
-設計慣例：key 加上 :CacheState 後綴，表示這是快取狀態控制 key，CacheData 為實際資料 key（由其他服務管理）。
-
-
-4. 完整流程說明（Sequence Diagram）
-
-步驟說明
-
-
-步驟
-元件
-動作
-
-
-
-①
-Caller → EventSPI
-HTTP POST /api/messagecental，帶入 &#123; Topic, Action, Data: &#123;key: accountId&#125; &#125;
-
-
-②
-EventSPI → RabbitMQ
-MQService.EmitMessage() 將訊息 Publish 至 Topic Exchange
-
-
-③
-RabbitMQ → Consumer
-BindingKey *.Account.* 匹配，訊息投遞至 AccountListener Queue
-
-
-④
-Consumer 內部
-RuleService.RuleFilterTrigger() 依 TopicFilter Regex 比對規則
-
-
-⑤
-Consumer 內部
-RedLockFactory.CreateLockAsync() 取得分散式鎖（避免並發重複執行）
-
-
-⑥
-Consumer → Redis
-呼叫 RedisService.ExpireKey()
-
-
-⑦
-Redis 內部
-db.KeyExpire(key, TTL=0) → CacheState key 立即失效
-
-
-⑧
-Redis → Consumer
-回傳 true（key 存在已失效）或 false（key 不存在）
-
-
-⑨
-Consumer 內部
-log.Messages() 記錄操作結果
-
-
-
-5. 核心實作程式碼5.1 發送端 — MessageCentralController呼叫端透過此 API 傳入 TopicMessage：
-// Controllers/MessageCentralController.cs[HttpPost]public IHttpActionResult Post([FromBody] TopicMessage topicMessage)&#123;    mqService.EmitMessage&lt;TopicMessage&gt;(        ConfigUtility.AppSettings.GetProducer(&quot;MessageCentral&quot;),        topicMessage);    return Ok();&#125;
-
-5.2 MQService — 發佈到 RabbitMQ// Utility/MQService.cspublic void EmitMessage&lt;T&gt;(ProducerBinding producer, T messageObj)&#123;    using (var advancedBus = RabbitHutch.CreateBus(rabbitMqConnection).Advanced)    &#123;        var exchange = advancedBus.ExchangeDeclare(            producer.ExchangeName, producer.ExchangeType);        var message = JsonConvert.SerializeObject(messageObj);        var body = Encoding.UTF8.GetBytes(message);        advancedBus.Publish(exchange, producer.RoutingKey, false,            new MessageProperties &#123; DeliveryMode = 2 &#125;, body);    &#125;&#125;
-
-5.3 Consumer 啟動 — Global.asax.cs應用程式啟動時初始化 Consumer：
-// Global.asax.cs — SetUpConsumer()case &quot;AccountListener&quot;:    mqService.ConsumeMessage(consumer.Name, RuleService.RuleFilterTrigger);    break;default:    mqService.ConsumeMessage(consumer.Name, RedisService.ExpireKey);    break;
-
-5.4 RuleService — 規則比對與 Redis 操作// Utility/RuleService.cspublic static void RuleFilterTrigger(string consumerName, TopicMessage message)&#123;    var rules = ConfigUtility.AppSettings.GetConsumerRules(consumerName);    // 用 Regex 比對 Topic    var matchRules = rules        .Where(rule =&gt; new Regex(rule.TopicFilter).IsMatch(message.Topic))        .ToList();    matchRules.ForEach(rule =&gt; &#123;        switch (rule.Action)        &#123;            case RuleAction.ExpireRedisKey:                // &#123;0&#125; = message.Data[&quot;key&quot;]（account id）                var redisKeyPattern = string.Format(rule.KeyPatten, message.Data[&quot;key&quot;]);                RedisService.ExpireKey(                    RedisService.AccountCacheConn,                    redisKeyPattern,                    rule._ExpirySeconds);   // 0 = 立即失效                break;            case RuleAction.AddToRedis:                // 將資料寫入 Redis（如 VIP 等級資料）                RedisService.AddValueIntoRedis(RedisService.VIPDB,                    string.Format(rule.KeyPatten, message.Data[&quot;key&quot;]),                    JsonConvert.SerializeObject(message.Data),                    rule._ExpirySeconds);                break;        &#125;    &#125;);&#125;
-
-5.5 RedisService.ExpireKey — 實際清除// Utility/RedisService.cspublic static bool ExpireKey(string dbname, string key, int expirySeconds)&#123;    var db = GetDataBase(dbname);    if (db.KeyExists(key))    &#123;        db.KeyExpire(key, TimeSpan.FromSeconds(expirySeconds));        // expirySeconds = 0 → 立即失效（等同 KeyDelete）        return true;    &#125;    return false;&#125;
-
-
-6. 設定檔（AppSettings.config）所有 Consumer &#x2F; Producer &#x2F; Rule 的對應關係都定義在 Configuration/AppSettings.config：
-&lt;!-- RabbitMQ Consumer 訂閱設定 --&gt;&lt;ConsumerBinding Name=&quot;AccountListener&quot;    ExchangeName=&quot;MessageCentralDev&quot;    ExchangeType=&quot;topic&quot;    QueueName=&quot;AccountListener&quot;    BindingKey=&quot;*.Account.*&quot;    Count=&quot;4&quot; /&gt;&lt;!-- ConsumerRule 範例：存款狀態變動 → 清除多個相關 Cache key --&gt;&lt;ConsumerRuleBinding Name=&quot;AccountListener&quot;    TopicFilter=&quot;DPTransStatus.Account.*&quot;    Action=&quot;ExpireRedisKey&quot;    KeyPatten=&quot;PendingTransaction:&#123;0&#125;:CacheState&quot; /&gt;&lt;ConsumerRuleBinding Name=&quot;AccountListener&quot;    TopicFilter=&quot;DPTransStatus.Account.*&quot;    Action=&quot;ExpireRedisKey&quot;    KeyPatten=&quot;DepositTransactions:&#123;0&#125;:CacheState&quot; /&gt;&lt;!-- ExpiryTime 有值 = 設定 TTL 分鐘數；無值 = 立即失效 --&gt;&lt;ConsumerRuleBinding Name=&quot;AccountListener&quot;    TopicFilter=&quot;PromoStatus.Account.*&quot;    Action=&quot;ExpireRedisKey&quot;    KeyPatten=&quot;MemberPromotions:&#123;0&#125;:CacheState&quot;    ExpiryTime=&quot;1&quot; /&gt;
-
-
-Count&#x3D;”4” 表示同時啟動 4 個 Consumer 並行消費，提升處理吞吐量。
-
-
-7. 分散式鎖（RedLock）機制在 MQService.ConsumeMessage() 的直接清除路徑中，使用 RedLock 防止並發競爭：
-using (var redLock = RedisService.RedisLockFactory    .CreateLockAsync(        message.Data[&quot;key&quot;],    // lock key        TimeSpan.FromSeconds(3), // expiry        TimeSpan.FromSeconds(3), // wait        TimeSpan.FromSeconds(1)  // retry interval    ).Result)&#123;    if (!redLock.IsAcquired)    &#123;        // 取鎖失敗，記錄後放棄（訊息會被重新投遞）        log.Messages(..., $&quot;Retry to expire Key after 1 sec&quot;);        return;    &#125;    callback(RedisService.AccountCacheConn, message.Data[&quot;key&quot;], 0);&#125;
-
-
-8. 各 Topic 對應的 Cache Key 清除清單
-
-
-Topic (EventType)
-會被清除的 Cache Key Pattern
-
-
-
-DPTransStatus.Account.*
-PendingTransaction:&#123;id&#125;:CacheState、PaymentInfo:&#123;id&#125;:CacheState、DepositTransactions:&#123;id&#125;:CacheState
-
-
-WDTransStatus.Account.*
-PendingTransaction:&#123;id&#125;:CacheState、PaymentInfo:&#123;id&#125;:CacheState、WithdrawalTransactions:&#123;id&#125;:CacheState
-
-
-KYCDocStatus.Account.*
-Star4KYCVerification:&#123;id&#125;:CacheState、MemberStatus:&#123;id&#125;:CacheState、MemeberKYCDocsStatus:&#123;id&#125;:CacheState
-
-
-MemberStatus.Account.*
-MemberStatus:&#123;id&#125;:CacheState
-
-
-ProfileVerification.Account.*
-Star4KYCVerification:&#123;id&#125;:CacheState
-
-
-PromoStatus.Account.*
-MemberPromotions:&#123;id&#125;:CacheState (TTL 1min)、QualifyingPromotions:&#123;id&#125;:CacheState (TTL 1min)、PromotionClaims:&#123;id&#125;:CacheState、MemberRewards:&#123;id&#125;:CacheState
-
-
-MemberLogout.Account.*
-TradingSession:&#123;id&#125;:CacheState、ProfileSession:&#123;id&#125;:CacheState
-
-
-Notifications.Account.*
-多個 Notification 相關 key
-
-
-LoginProtection.Account.*
-SuspiciousLogin:ForgotAccount:&#123;id&#125;
-
-
-IpTraces.Account.*
-AddToRedis: Iptrace:&#123;id&#125;（TTL 43200 min）
-
-
-SignupComplete.Account.*
-Log + MemberStatus:&#123;id&#125;:CacheState
-
-
-PreferLanguage.Account.*
-PendingTransaction、KYC、Deposit&#x2F;Withdrawal、Promotion 等多個 key
-
-
-
-9. 這個設計的特點與限制優點
-呼叫端解耦：資料修改端只需傳送 accountId + topic，不需知道 Redis key 的命名細節
-彈性設定：新增&#x2F;修改 Cache 清除規則只需改 AppSettings.config，不需改程式碼
-集中管理：所有 Cache 失效邏輯集中在 EventSPI，容易追蹤
-
-限制（早期設計的取捨）
-Topic 僅攜帶 accountId（Data[&quot;key&quot;]），無法針對更細粒度的資料（如單筆交易 id）做精確清除
-以 CacheState key 間接觸發失效，實際 CacheData 由其他讀取服務自行重建，需搭配對應的 Cache 讀取機制
-Consumer 並發數固定在設定檔（Count），無動態擴縮能力
-
-
-此架構為早期設計，後續系統可考慮使用更精細的 Cache Tag &#x2F; Cache Dependency 機制取代 Topic+accountId 的粗粒度清除方式。
-]]></content>
-      <categories>
-        <category>後端架構</category>
-      </categories>
-      <tags>
-        <tag>.NET</tag>
-        <tag>Redis</tag>
-        <tag>RabbitMQ</tag>
-        <tag>Cache Invalidation</tag>
-        <tag>EventSPI</tag>
       </tags>
   </entry>
   <entry>
@@ -8178,10 +8643,10 @@ MFA:ActiveSession 在同一 AccountId 重複登入時覆蓋舊記錄（踢單機
         <category>前端架構</category>
       </categories>
       <tags>
-        <tag>MFA</tag>
-        <tag>TypeScript</tag>
         <tag>Vue3</tag>
         <tag>Composable</tag>
+        <tag>MFA</tag>
+        <tag>TypeScript</tag>
         <tag>身份驗證</tag>
         <tag>前端架構</tag>
       </tags>
@@ -8207,6 +8672,150 @@ Reference
       <tags>
         <tag>Vue3</tag>
         <tag>Vue Life Cycle</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯</title>
+    <url>/2026/04/06/WatcherUtilAopPerformance/</url>
+    <content><![CDATA[問題：效能監控程式碼到處散落一般做法是在每個方法手動埋計時：
+// 到處複製貼上，業務邏輯被監控代碼淹沒var start = DateTime.Now;try &#123;    result = db.GetSomething(key);    var ms = (DateTime.Now - start).TotalMilliseconds;    log.Performance(&quot;REDIS&quot;, &quot;GetSomething&quot;, ms.ToString(), &quot;&quot;);&#125; catch (Exception ex) &#123;    log.Exception(ex);&#125;
+
+這違反了 單一職責原則（SRP），監控邏輯和業務邏輯耦合在一起。
+
+
+解法：WatcherUtil — 用 Delegate 包裝flowchart TB
+    W[WatcherUtil]
+    W --> T1[記錄 startTime]
+    T1 --> BIZ[執行委派 Action 或 Func 業務程式碼不感知外層監控]
+    BIZ --> T2[計算 elapsed]
+    T2 --> L[log Performance]
+
+核心實作// WatcherUtil.cspublic class WatcherUtil&#123;    private readonly ISysLog log;    public WatcherUtil(ISysLog outLog)    &#123;        log = outLog;    &#125;    // 同步 void    public void Watch(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        func();        FunctionEnd(source, funcName, startTime);    &#125;    // 非同步 void    public async Task Watch(PerformanceSource source, string funcName, Func&lt;Task&gt; func)    &#123;        DateTime startTime = DateTime.Now;        await func();        FunctionEnd(source, funcName, startTime);    &#125;    // 同步有回傳值    public TResult Watch&lt;TResult&gt;(PerformanceSource source, string funcName, Func&lt;TResult&gt; func)    &#123;        DateTime startTime = DateTime.Now;        TResult t = func();        FunctionEnd(source, funcName, startTime);        return t;    &#125;    // 附例外處理的進階版    public void WatchAdvance(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        try        &#123;            func();            FunctionEnd(source, funcName, startTime);        &#125;        catch (Exception ex)        &#123;            log.Exception($&quot;&#123;funcName&#125; throwing error&quot;, ex.Message);        &#125;    &#125;    private void FunctionEnd(PerformanceSource source, string funcName, DateTime startTime)    &#123;        double timeSpan = (DateTime.Now - startTime).TotalMilliseconds;        log.Performance(source, funcName, timeSpan.ToString(&quot;0&quot;), &quot;&quot;);    &#125;&#125;
+
+PerformanceSource — 分類監控來源public enum PerformanceSource&#123;    REDIS,        // Redis 操作    DLL,          // 內部 DLL 呼叫    NUGETPACKAGE, // NuGet 套件呼叫    REQUEST,      // HTTP 外部請求    KAFKA         // Kafka 訊息發送&#125;
+
+每筆 Performance log 都會帶上來源分類，讓 log 平台可以按維度聚合分析。
+呼叫方式對比使用前// CacheLayerManager — 每個方法手動埋時間DateTime start = DateTime.Now;cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);double ms = (DateTime.Now - start).TotalMilliseconds;log.Performance(PerformanceSource.REDIS, &quot;FetchFromRedis&quot;, ms.ToString(), &quot;&quot;);
+
+使用後// 業務邏輯完全乾淨，監控是外層關心的事watcher.WatchAdvance(PerformanceSource.REDIS, $&quot;FetchFromRedis_&#123;cacheName&#125;&quot;, () =&gt;&#123;    cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));    result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);&#125;);
+
+實際使用案例flowchart LR
+    subgraph CLM["CacheLayerManager"]
+        A1[Watch REDIS GetDataAsync]
+        A2[WatchAdvance REDIS FetchFromRedis]
+        A3[Watch REDIS RedLockAction]
+    end
+    subgraph ASM["AccountStateManager"]
+        B1[Watch NUGETPACKAGE CreateAccountState]
+        B2[Watch NUGETPACKAGE GenerateToken]
+        B3[Watch NUGETPACKAGE GetAccountState]
+    end
+    subgraph KH["KafkaHelper"]
+        C1[Watch KAFKA SendAsync topic]
+    end
+    subgraph LM["LoginManager"]
+        D1[Watch DLL AuthenticateWithPlatform]
+    end
+    LOG["Performance Log log.Performance"]
+    A1 --> LOG
+    A2 --> LOG
+    A3 --> LOG
+    B1 --> LOG
+    B2 --> LOG
+    B3 --> LOG
+    C1 --> LOG
+    D1 --> LOG
+
+全專案共超過 20+ 個監控點，全部只用同一個 WatcherUtil。
+Watch vs WatchAdvance 差異
+
+
+項目
+Watch
+WatchAdvance
+
+
+
+例外
+直接往外拋，呼叫者處理
+捕捉後 log.Exception，不往外拋
+
+
+適用
+關鍵路徑，必須讓上層知道錯誤
+讀取／可降級場景（例如 cache miss 不影響主流程）
+
+
+行為示意
+例外流向 caller
+例外在工具內記錄後結束
+
+
+這是什麼設計模式？這是 Decorator Pattern 與 AOP（Aspect-Oriented Programming） 的輕量實作：在不修改業務方法本體的前提下，於執行前後加上計時與記錄。
+
+
+
+面向
+傳統 AOP 框架（如 PostSharp）
+WatcherUtil
+
+
+
+寫法
+Attribute + 織入 IL
+watcher.Watch(source, name, () =&gt; &#123; ... &#125;)
+
+
+依賴
+需框架、編譯期或執行期織入
+單一類別 + Action &#x2F; Func
+
+
+彈性
+宣告式，改動需重新編譯／部署策略
+呼叫端明確包一層，易讀易搜
+
+
+不需要任何 AOP 框架，利用 C# Action／Func delegate，就能以較小代價達到類似「橫切關注點」的效果。
+Log 輸出格式[Performance] source=REDIS | method=FetchFromRedis_TradingSession | time=3ms[Performance] source=NUGETPACKAGE | method=SingleSignOnService_GenerateToken | time=12ms[Performance] source=KAFKA | method=SendAsync_AP.FE.MEMBER_LOGIN | time=45ms[Performance] source=DLL | method=AuthenticateWithPlatform | time=230ms
+
+這些 log 可以直接接入 ELK &#x2F; Grafana，按 source、method 做 P95&#x2F;P99 分析。
+小結
+
+
+特性
+說明
+
+
+
+零侵入
+業務邏輯不需要加任何 attribute 或繼承
+
+
+泛型支援
+Watch&lt;TResult&gt; 支援有回傳值的函式
+
+
+async 支援
+Watch(Func&lt;Task&gt;) 原生支援 async&#x2F;await
+
+
+例外策略
+Watch vs WatchAdvance 兩種策略可選
+
+
+可測試
+ISysLog 可輕易 Mock，單元測試友善
+
+
+]]></content>
+      <categories>
+        <category>後端架構</category>
+      </categories>
+      <tags>
+        <tag>.NET</tag>
+        <tag>Design Pattern</tag>
+        <tag>AOP</tag>
       </tags>
   </entry>
   <entry>
@@ -8689,147 +9298,315 @@ regionTheme, logoUrl
       </tags>
   </entry>
   <entry>
-    <title>WatcherUtil — 用 Delegate 實現 AOP 效能監控，不污染業務邏輯</title>
-    <url>/2026/04/06/WatcherUtilAopPerformance/</url>
-    <content><![CDATA[問題：效能監控程式碼到處散落一般做法是在每個方法手動埋計時：
-// 到處複製貼上，業務邏輯被監控代碼淹沒var start = DateTime.Now;try &#123;    result = db.GetSomething(key);    var ms = (DateTime.Now - start).TotalMilliseconds;    log.Performance(&quot;REDIS&quot;, &quot;GetSomething&quot;, ms.ToString(), &quot;&quot;);&#125; catch (Exception ex) &#123;    log.Exception(ex);&#125;
+    <title>Vue 3 WebView Native Bridge 設計：同時支援 Android window.App 與 iOS WKWebView</title>
+    <url>/2026/05/18/WebViewNativeBridge/</url>
+    <content><![CDATA[前言WebView 專案最容易長歪的地方，是前端到處直接呼叫：
+window.App.nativeRedirect(&#x27;lobby&#x27;);window.App.logout();window.App.webviewRedirect(&#x27;deposit&#x27;, &#x27;&#x27;, &#x27;&#x27;);
 
-這違反了 單一職責原則（SRP），監控邏輯和業務邏輯耦合在一起。
+短期看起來很快，長期會出現幾個問題：
 
+Web 瀏覽器環境沒有 window.App，直接噴錯
+Android 與 iOS bridge API 不一定長一樣
+有些 native method 是 fire-and-forget，有些會回傳資料
+同一個功能在 RWD 與 WebView 需要不同 fallback
+App team 改 method 或部分版本未支援時，前端會直接壞掉
 
-解法：WatcherUtil — 用 Delegate 包裝flowchart TB
-    W[WatcherUtil]
-    W --> T1[記錄 startTime]
-    T1 --> BIZ[執行委派 Action 或 Func 業務程式碼不感知外層監控]
-    BIZ --> T2[計算 elapsed]
-    T2 --> L[log Performance]
+這個專案用 webviewUtil.ts 與 nativeBridge.ts 把 native bridge 包成一層 utility，讓呼叫點先檢查能力，再決定走 Native 還是 Web fallback。
+相關檔案client/packages/common/utils/webviewUtil.tsclient/packages/common/utils/nativeBridge.tsclient/packages/common/utils/appEventsHelper.tsclient/packages/common/stores/account-security.tsclient/packages/star4webview/src/pages/NewDeviceVerifyPage.vueclient/packages/star4webview/src/layout/HeaderFooterLayout.vue
 
-核心實作// WatcherUtil.cspublic class WatcherUtil&#123;    private readonly ISysLog log;    public WatcherUtil(ISysLog outLog)    &#123;        log = outLog;    &#125;    // 同步 void    public void Watch(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        func();        FunctionEnd(source, funcName, startTime);    &#125;    // 非同步 void    public async Task Watch(PerformanceSource source, string funcName, Func&lt;Task&gt; func)    &#123;        DateTime startTime = DateTime.Now;        await func();        FunctionEnd(source, funcName, startTime);    &#125;    // 同步有回傳值    public TResult Watch&lt;TResult&gt;(PerformanceSource source, string funcName, Func&lt;TResult&gt; func)    &#123;        DateTime startTime = DateTime.Now;        TResult t = func();        FunctionEnd(source, funcName, startTime);        return t;    &#125;    // 附例外處理的進階版    public void WatchAdvance(PerformanceSource source, string funcName, Action func)    &#123;        DateTime startTime = DateTime.Now;        try        &#123;            func();            FunctionEnd(source, funcName, startTime);        &#125;        catch (Exception ex)        &#123;            log.Exception($&quot;&#123;funcName&#125; throwing error&quot;, ex.Message);        &#125;    &#125;    private void FunctionEnd(PerformanceSource source, string funcName, DateTime startTime)    &#123;        double timeSpan = (DateTime.Now - startTime).TotalMilliseconds;        log.Performance(source, funcName, timeSpan.ToString(&quot;0&quot;), &quot;&quot;);    &#125;&#125;
+第一層：最基本的能力檢查checkWebviewMethod 是最基礎的保護：
+export function checkWebviewMethod(methodName) &#123;  return typeof window.App !== &#x27;undefined&#x27; &amp;&amp; typeof window.App[methodName] !== &#x27;undefined&#x27;;&#125;
 
-PerformanceSource — 分類監控來源public enum PerformanceSource&#123;    REDIS,        // Redis 操作    DLL,          // 內部 DLL 呼叫    NUGETPACKAGE, // NuGet 套件呼叫    REQUEST,      // HTTP 外部請求    KAFKA         // Kafka 訊息發送&#125;
+這個函式看起來很小，但價值很高。
+它避免所有呼叫點直接假設 window.App 一定存在：
+if (checkWebviewMethod(&#x27;logout&#x27;)) &#123;  window.App.logout();&#125;
 
-每筆 Performance log 都會帶上來源分類，讓 log 平台可以按維度聚合分析。
-呼叫方式對比使用前// CacheLayerManager — 每個方法手動埋時間DateTime start = DateTime.Now;cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);double ms = (DateTime.Now - start).TotalMilliseconds;log.Performance(PerformanceSource.REDIS, &quot;FetchFromRedis&quot;, ms.ToString(), &quot;&quot;);
+這對共用 package 很重要，因為同一份 common code 同時會跑在：
 
-使用後// 業務邏輯完全乾淨，監控是外層關心的事watcher.WatchAdvance(PerformanceSource.REDIS, $&quot;FetchFromRedis_&#123;cacheName&#125;&quot;, () =&gt;&#123;    cacheData = redisObjectStore.Get(GetCacheDataKey(cacheName, key));    result = JsonConvert.DeserializeObject&lt;T&gt;(cacheData.jsonStr);&#125;);
+Desktop Web
+Mobile Web
+App WebView
+Storybook &#x2F; test environment
 
-實際使用案例flowchart LR
-    subgraph CLM["CacheLayerManager"]
-        A1[Watch REDIS GetDataAsync]
-        A2[WatchAdvance REDIS FetchFromRedis]
-        A3[Watch REDIS RedLockAction]
+沒有這層檢查，common code 很容易在非 WebView 環境直接 crash。
+Android 與 iOS Bridge 差異Android WebView 常見 bridge 形式：
+window.App.getDeviceInfo();window.App.nativeRedirect(&#x27;lobby&#x27;);
+
+iOS WKWebView 常見 bridge 形式：
+window.webkit.messageHandlers.getDeviceInfo.postMessage(&#123;&#125;);
+
+因此 nativeBridge.ts 把「檢查 method」分成兩種。
+有回傳資料的 method：
+export function checkWebviewMethodWithResponseData(  methodName: string,  iosHandlerName?: string,): boolean &#123;  const userAgent = navigator.userAgent;  const iosHandler = iosHandlerName || methodName;  if (isIOS(userAgent)) &#123;    return !!window.webkit?.messageHandlers?.[iosHandler];  &#125;  if (isAndroid(userAgent)) &#123;    return checkWebviewMethod(methodName);  &#125;  return false;&#125;
+
+這個函式的重點是：iOS 不查 window.App，而是查 window.webkit.messageHandlers。
+同一個功能在不同平台可能不是同一個 bridge 入口，這也是 WebView utility 需要存在的原因。
+統一呼叫入口：callNativeMethodcallNativeMethod 把 iOS 與 Android 的呼叫方式包起來：
+export async function callNativeMethod&lt;T&gt;(  methodName: string,  params?: unknown,  iosHandlerName?: string,): Promise&lt;T | null&gt; &#123;  const userAgent = navigator.userAgent;  const iosHandler = iosHandlerName || methodName;  if (isIOS(userAgent) &amp;&amp; window.webkit?.messageHandlers?.[iosHandler]) &#123;    try &#123;      const result = await window.webkit.messageHandlers[iosHandler].postMessage(params ?? &#123;&#125;);      return result as T;    &#125; catch (error) &#123;      console.warn(`Failed to call iOS native method $&#123;iosHandler&#125;:`, error);      return null;    &#125;  &#125;  if (isAndroid(userAgent) &amp;&amp; checkWebviewMethod(methodName)) &#123;    try &#123;      const result =        params !== undefined ? window.App[methodName](params) : window.App[methodName]();      return result as T;    &#125; catch (error) &#123;      console.warn(`Failed to call Android native method $&#123;methodName&#125;:`, error);      return null;    &#125;  &#125;  return null;&#125;
+
+這裡有幾個設計重點：
+
+回傳 Promise&lt;T | null&gt;，呼叫方一定要處理 method 不存在
+iOS 與 Android 都用 try&#x2F;catch 包住
+iOS handler name 可以和 Android method name 不同
+不支援的平台回傳 null，而不是 throw
+
+這樣可以讓上層流程寫得比較乾淨：
+const result = await callNativeMethod&lt;boolean&gt;(&#x27;checkAppSchemeAction&#x27;, &#123;  scheme: appSchemeName,&#125;);return result ?? false;
+
+Case 1：取得 Native Device InfoTrusted Device 功能需要取得裝置資訊：
+export async function getDeviceInfo(): Promise&lt;WebviewDeviceInfo | null&gt; &#123;  const result = await callNativeMethod&lt;string | WebviewDeviceInfo&gt;(&#x27;getDeviceInfo&#x27;);  if (!result) return null;  if (typeof result === &#x27;string&#x27;) &#123;    try &#123;      return JSON.parse(result) as WebviewDeviceInfo;    &#125; catch &#123;      console.warn(&#x27;Failed to parse device info JSON&#x27;);      return null;    &#125;  &#125;  return result as WebviewDeviceInfo;&#125;
+
+這段處理了 App bridge 常見的資料格式不一致：
+
+有些 native 版本直接回 object
+有些 native 版本回 JSON string
+
+前端不把這個差異丟給 feature code，而是在 bridge utility 裡做 parse 與 fallback。
+在 account-security.ts 中使用：
+if (checkWebviewMethodWithResponseData(&#x27;getDeviceInfo&#x27;)) &#123;  const webviewDeviceInfo = await getDeviceInfo();  if (webviewDeviceInfo) &#123;    fingerPrintId = webviewDeviceInfo.fingerPrintId || fingerPrintId;    deviceModel = webviewDeviceInfo.deviceModel || deviceModel;    screenResolution = webviewDeviceInfo.screenResolution || screenResolution;    deviceLanguage = webviewDeviceInfo.deviceLanguage || deviceLanguage;    countryCode = webviewDeviceInfo.countryCode || countryCode;    deviceType = webviewDeviceInfo.deviceType;  &#125;&#125;
+
+這裡的 fallback 很關鍵：
+deviceModel = webviewDeviceInfo.deviceModel || deviceModel;
+
+如果 App 沒回某個欄位，仍然保留 Web 環境原本可取得的資料，不會把 request 組壞。
+Case 2：WebView Redirect 與 Web FallbackredirectWrapper 把 WebView 與一般 Web 導頁合併：
+export function redirectWrapper(router, path, openWindow = false, type = &#x27;Star&#x27;, referUrl = &#x27;&#x27;) &#123;  if (checkWebviewMethod(&#x27;webviewRedirect&#x27;)) &#123;    window.App.webviewRedirect(type, path, referUrl);  &#125; else &#123;    if (openWindow) &#123;      window.open(`/$&#123;window.gv.lan&#125;/$&#123;path&#125;`);    &#125; else &#123;      router.push(`/$&#123;window.gv.lan&#125;/$&#123;path&#125;`);    &#125;  &#125;&#125;
+
+在 WebView：
+window.App.webviewRedirect(type, path, referUrl);
+
+在一般 Web：
+router.push(`/$&#123;window.gv.lan&#125;/$&#123;path&#125;`);
+
+這種寫法避免 feature component 裡到處寫：
+if (isWebView) &#123;  // native&#125; else &#123;  // router&#125;
+
+webviewRedirect 的語意不是單一路徑webviewUtil.ts 裡的註解其實很有價值，因為它說明 webviewRedirect 不是單純 router path，而是 App 與 Web 約定好的 command：
+App.webviewRedirect(&#x27;Browser&#x27;, path, &#x27;&#x27;, &#x27;&#x27;)App.webviewRedirect(&#x27;Star&#x27;, path, referUrl)App.webviewRedirect(&#x27;PCH&#x27;, path, referUrl)App.webviewRedirect(&#x27;profileVerification&#x27;, &#x27;&#x27;, &#x27;&#x27;)App.webviewRedirect(&#x27;faq&#x27;, &#x27;&#x27;, &#x27;&#x27;)App.webviewRedirect(&#x27;deposit&#x27;, &#x27;&#x27;, &#x27;&#x27;)App.webviewRedirect(&#x27;withdrawal&#x27;, &#x27;&#x27;, &#x27;&#x27;)App.webviewRedirect(&#x27;termsConditions&#x27;, &#x27;&#x27;, &#x27;&#x27;)App.webviewRedirect(&#x27;responsibleGambling&#x27;, &#x27;&#x27;, &#x27;&#x27;)App.webviewRedirect(&#x27;profile&#x27;, &#x27;&#x27;, &#x27;&#x27;)App.webviewRedirect(&#x27;withdrawalTransHistory&#x27;, &#x27;&#x27;, &#x27;&#x27;)
+
+這代表 bridge API 的第一個參數其實有 routing command 的味道。
+如果把這些呼叫散落在 component，很快就會變成 App&#x2F;Web 約定難以追蹤。集中放在 utility 或封裝成 domain function 會更安全。
+Case 3：New Device Verify 成功後通知 App在 New Device 驗證流程中，WebView 完成 MFA 後會拿到 grantId：
+function handleVerified(result: &#123;  success: boolean;  passport: string;  recDomain: Array&lt;&#123; domain: string &#125;&gt;;  grantId?: string;  reachLimitTrustedDevice?: boolean;&#125;) &#123;  if (result.grantId &amp;&amp; checkWebviewMethod(&#x27;verifyNewDeviceSuccess&#x27;)) &#123;    window.App.verifyNewDeviceSuccess(result.grantId, result.reachLimitTrustedDevice);  &#125; else &#123;    window.location.href = `$&#123;rootStore.gv.appScheme&#125;$&#123;AppSchemePath.Login&#125;`;  &#125;&#125;
+
+這段的設計邏輯是：
+
+WebView 完成驗證
+後端回 grantId
+如果 App 支援 verifyNewDeviceSuccess，把 grantId 交給 App
+App 再用 grantId 兌換完整 login response
+如果 method 不存在，fallback 到 app scheme login
+
+這是前後端與 Native App 三方協作的典型場景。
+Web 不直接拿完整 session，而是把短效 grant 交回 App，讓 App 走原本的登入完成流程。
+Case 4：WebView Header TitleHeaderFooterLayout.vue 會把頁面 title 傳給 App：
+if (checkWebviewMethod(&#x27;webViewTitle&#x27;)) &#123;  window.App.webViewTitle(title);&#125;
+
+這類 method 屬於 UI sync：
+
+Web 決定目前頁面 title
+App native shell 負責顯示 header
+Web 只在 method 存在時通知 App
+
+這種小同步很多，但如果沒有統一能力檢查，也很容易在瀏覽器測試時炸掉。
+Case 5：Native Redirect在 WebView router 或 Sports direct launch 中：
+if (checkWebviewMethod(&#x27;nativeRedirect&#x27;)) &#123;  window.App.nativeRedirect(&#x27;lobby&#x27;);&#125;
+
+或：
+window.App.nativeRedirect(&#x27;sbk&#x27;);
+
+nativeRedirect 通常不是普通 URL，而是 App 底部 tab 或 native module 的 navigation command。
+這類行為不能用 web router 模擬，所以最安全的策略是：
+
+有 native method 就交給 App
+沒有 native method 就不做 native redirect，改走 Web fallback 或結束流程
+
+Bridge 設計原則從這個專案可以整理出幾個原則：
+1. 任何 window.App 呼叫前都要 checkif (checkWebviewMethod(&#x27;logout&#x27;)) &#123;  window.App.logout();&#125;
+
+這是最低限度的保護。
+2. Android 與 iOS bridge 要分開抽象Android：
+window.App[methodName](params)
+
+iOS：
+window.webkit.messageHandlers[handlerName].postMessage(params)
+
+如果只封裝 Android，iOS 後續會長出一堆特殊 case。
+3. 回傳值要允許 nullPromise&lt;T | null&gt;
+
+Native method 可能不存在、失敗、版本太舊、回傳格式錯誤。前端應該把這些都當成正常分支。
+4. Feature code 不應該理解所有 native 細節Feature code 應該像這樣：
+const webviewDeviceInfo = await getDeviceInfo();
+
+而不是：
+if (isIOS) &#123;  window.webkit...&#125; else if (isAndroid) &#123;  window.App...&#125;
+
+平台差異應該收斂在 bridge utility。
+5. Web fallback 要明確例如：
+if (checkWebviewMethod(&#x27;webviewRedirect&#x27;)) &#123;  window.App.webviewRedirect(type, path, referUrl);&#125; else &#123;  router.push(`/$&#123;window.gv.lan&#125;/$&#123;path&#125;`);&#125;
+
+不是所有 native method 都能 fallback，但能 fallback 的應該在 utility 層處理。
+整體架構圖graph TD
+    A["Feature codecomponent / store / page"] --> B{"需要呼叫 Native 嗎？"}
+    B -->|一般導頁| C["redirectWrapper"]
+    B -->|需要回傳資料| D["nativeBridge.callNativeMethod"]
+    B -->|單純通知 App| E["checkWebviewMethod + window.App.method"]
+
+    C --> F{"webviewRedirect exists?"}
+    F -->|Yes| G["window.App.webviewRedirect(type, path, referUrl)"]
+    F -->|No| H["router.push / window.open"]
+
+    D --> I{"Platform"}
+    I -->|iOS| J["window.webkit.messageHandlers[handler].postMessage(params)"]
+    I -->|Android| K["window.App[methodName](params)"]
+    I -->|Browser / unsupported| L["return null"]
+
+    E --> M{"method exists?"}
+    M -->|Yes| N["window.App.method(...)"]
+    M -->|No| O["skip or fallback"]
+
+這張圖可以把整篇文章的核心濃縮成一句話：feature code 不直接理解平台差異，而是把平台差異交給 bridge layer。
+iOS &#x2F; Android 呼叫序列圖sequenceDiagram
+    participant Feature as Feature Code
+    participant Bridge as nativeBridge.ts
+    participant UA as UserAgent Check
+    participant IOS as iOS WKWebView
+    participant Android as Android window.App
+
+    Feature->>Bridge: callNativeMethod("getDeviceInfo")
+    Bridge->>UA: isIOS / isAndroid
+    alt iOS
+        Bridge->>IOS: messageHandlers.getDeviceInfo.postMessage({})
+        IOS-->>Bridge: device info / JSON string
+    else Android
+        Bridge->>Android: window.App.getDeviceInfo()
+        Android-->>Bridge: device info / JSON string
+    else Unsupported
+        Bridge-->>Feature: null
     end
-    subgraph ASM["AccountStateManager"]
-        B1[Watch NUGETPACKAGE CreateAccountState]
-        B2[Watch NUGETPACKAGE GenerateToken]
-        B3[Watch NUGETPACKAGE GetAccountState]
+    Bridge-->>Feature: WebviewDeviceInfo | null
+
+這個設計讓 feature code 可以只處理資料結果：
+const deviceInfo = await getDeviceInfo();
+
+不用在每個 feature 裡重複寫 isIOS、isAndroid、window.webkit、window.App。
+New Device Verify 三方流程New Device Verify 是這套 Bridge 最典型的場景，因為它不是單純 Web 導頁，而是 Web、後端、Native App 三方協作。
+sequenceDiagram
+    participant App as Native App
+    participant WebView as WebView Page
+    participant API as Web MFA API
+    participant SPI as App Login SPI
+
+    App->>WebView: Open new-device-verify with verificationId/accountId
+    WebView->>WebView: parse query params
+    WebView->>API: trigger / verify MFA
+    API-->>WebView: grantId + reachLimitTrustedDevice
+    alt App supports verifyNewDeviceSuccess
+        WebView->>App: window.App.verifyNewDeviceSuccess(grantId, reachLimitTrustedDevice)
+        App->>SPI: exchange login grant
+        SPI-->>App: LoginResponse(token/session/profile)
+    else method unavailable
+        WebView->>App: redirect by app scheme login
     end
-    subgraph KH["KafkaHelper"]
-        C1[Watch KAFKA SendAsync topic]
-    end
-    subgraph LM["LoginManager"]
-        D1[Watch DLL AuthenticateWithPlatform]
-    end
-    LOG["Performance Log log.Performance"]
-    A1 --> LOG
-    A2 --> LOG
-    A3 --> LOG
-    B1 --> LOG
-    B2 --> LOG
-    B3 --> LOG
-    C1 --> LOG
-    D1 --> LOG
 
-全專案共超過 20+ 個監控點，全部只用同一個 WatcherUtil。
-Watch vs WatchAdvance 差異
+這裡最關鍵的是 grantId 的責任邊界：
 
+WebView 負責完成 MFA
+Web API 負責簽發短效 grant
+Native App 負責把 grant 兌換成正式 login session
 
-項目
-Watch
-WatchAdvance
+WebView 不直接保存完整 login session，這樣可以維持 App 原本的登入主控權，也能降低 WebView token 外洩的風險。
+Bridge Method 分類這個專案裡的 native method 大致可以分成幾類：
 
 
 
-例外
-直接往外拋，呼叫者處理
-捕捉後 log.Exception，不往外拋
-
-
-適用
-關鍵路徑，必須讓上層知道錯誤
-讀取／可降級場景（例如 cache miss 不影響主流程）
-
-
-行為示意
-例外流向 caller
-例外在工具內記錄後結束
-
-
-這是什麼設計模式？這是 Decorator Pattern 與 AOP（Aspect-Oriented Programming） 的輕量實作：在不修改業務方法本體的前提下，於執行前後加上計時與記錄。
-
-
-
-面向
-傳統 AOP 框架（如 PostSharp）
-WatcherUtil
-
-
-
-寫法
-Attribute + 織入 IL
-watcher.Watch(source, name, () =&gt; &#123; ... &#125;)
-
-
-依賴
-需框架、編譯期或執行期織入
-單一類別 + Action &#x2F; Func
-
-
-彈性
-宣告式，改動需重新編譯／部署策略
-呼叫端明確包一層，易讀易搜
-
-
-不需要任何 AOP 框架，利用 C# Action／Func delegate，就能以較小代價達到類似「橫切關注點」的效果。
-Log 輸出格式[Performance] source=REDIS | method=FetchFromRedis_TradingSession | time=3ms[Performance] source=NUGETPACKAGE | method=SingleSignOnService_GenerateToken | time=12ms[Performance] source=KAFKA | method=SendAsync_AP.FE.MEMBER_LOGIN | time=45ms[Performance] source=DLL | method=AuthenticateWithPlatform | time=230ms
-
-這些 log 可以直接接入 ELK &#x2F; Grafana，按 source、method 做 P95&#x2F;P99 分析。
-小結
-
-
+類型
+範例
 特性
-說明
 
 
 
-零侵入
-業務邏輯不需要加任何 attribute 或繼承
+Navigation
+nativeRedirect, webviewRedirect, externalBrowser
+多半沒有回傳值，語意像 command
 
 
-泛型支援
-Watch&lt;TResult&gt; 支援有回傳值的函式
+UI Sync
+webViewTitle, updateUI, showSnackBar
+Web 通知 App shell 更新 UI
 
 
-async 支援
-Watch(Func&lt;Task&gt;) 原生支援 async&#x2F;await
+Auth &#x2F; Session
+logout, verifyNewDeviceSuccess
+會影響登入狀態，需要非常保守
 
 
-例外策略
-Watch vs WatchAdvance 兩種策略可選
+Device Data
+getDeviceInfo, checkAppSchemeAction
+需要回傳值，iOS &#x2F; Android 差異最大
 
 
-可測試
-ISysLog 可輕易 Mock，單元測試友善
+Feature Entry
+startChatbotWithParam, chatNowEvent, jumioLostEmail
+通常綁特定產品功能
 
 
+分類後會更清楚：不是所有 native method 都該用同一種呼叫策略。
+
+command 型 method 可以用 checkWebviewMethod
+data 型 method 應該用 callNativeMethod&lt;T&gt;
+redirect 型 method 應該提供 Web fallback
+auth 型 method 必須檢查存在且避免重複呼叫
+
+失敗情境與處理策略Method 不存在if (!checkWebviewMethod(&#x27;webviewRedirect&#x27;)) &#123;  router.push(`/$&#123;window.gv.lan&#125;/$&#123;path&#125;`);&#125;
+
+這通常發生在：
+
+使用者用瀏覽器開啟
+App 版本太舊
+Android &#x2F; iOS method 名稱不一致
+測試環境沒有注入 bridge
+
+策略是：能 fallback 就 fallback，不能 fallback 就靜默跳過或導向安全頁。
+Native 回傳格式不一致getDeviceInfo 同時支援 object 與 JSON string：
+if (typeof result === &#x27;string&#x27;) &#123;  return JSON.parse(result) as WebviewDeviceInfo;&#125;return result as WebviewDeviceInfo;
+
+這是 WebView 常見現實：不同 App 版本或平台可能回傳不同型別。Bridge layer 應該吸收這個差異，而不是讓每個 feature 自己 parse。
+Native method throw exceptioncallNativeMethod 用 try&#x2F;catch 包住：
+try &#123;  const result = window.App[methodName](params);  return result as T;&#125; catch (error) &#123;  console.warn(...);  return null;&#125;
+
+回傳 null 比 throw 更適合 bridge layer，因為 Native method 失敗通常是環境能力問題，不應讓整個 Vue app crash。
+可以再演進的方向目前 checkWebviewMethod 回傳 boolean，但 method payload 與 response type 還是靠呼叫方記得。若後續 bridge method 越來越多，可以再演進成 registry：
+type NativeBridgeMethodMap = &#123;  getDeviceInfo: &#123;    params: void;    response: WebviewDeviceInfo;  &#125;;  checkAppSchemeAction: &#123;    params: &#123; scheme: string &#125;;    response: boolean;  &#125;;  verifyNewDeviceSuccess: &#123;    params: &#123; grantId: string; reachLimitTrustedDevice?: boolean &#125;;    response: void;  &#125;;&#125;;
+
+再包一層 typed caller：
+callNative&lt;&#x27;getDeviceInfo&#x27;&gt;(&#x27;getDeviceInfo&#x27;);
+
+這樣可以把「method name、params、response」都收斂成型別契約，減少 App&#x2F;Web 協作時的口頭約定。
+小結這套 WebView Native Bridge 的價值不在於某個函式很複雜，而在於它建立了一個邊界：
+Feature Component / Store    |    vwebviewUtil / nativeBridge    |    +-- Android window.App    |    +-- iOS window.webkit.messageHandlers    |    +-- Web fallback
+
+幾個值得借鑑的點：
+
+checkWebviewMethod 防止非 WebView crash
+checkWebviewMethodWithResponseData 處理 iOS &#x2F; Android 差異
+callNativeMethod&lt;T&gt; 統一回傳型別與錯誤處理
+getDeviceInfo 處理 object &#x2F; JSON string 兩種回傳
+redirectWrapper 把 native redirect 與 web router fallback 放在同一層
+New Device Verify 用 grantId 回傳 App，保留 App 登入流程主控權
+
+WebView 架構最怕「到處直接呼叫 native」。一旦專案長大，Bridge utility 不是選配，而是前端與 App 協作的防火牆。
 ]]></content>
       <categories>
-        <category>後端架構</category>
+        <category>前端架構</category>
       </categories>
       <tags>
-        <tag>.NET</tag>
-        <tag>Design Pattern</tag>
-        <tag>AOP</tag>
+        <tag>Vue3</tag>
+        <tag>iOS</tag>
+        <tag>WebView</tag>
+        <tag>Native Bridge</tag>
+        <tag>Android</tag>
       </tags>
   </entry>
   <entry>
@@ -9012,10 +9789,10 @@ Components 只關心「要請求什麼資料」，不關心「請求過程中發
         <category>前端架構</category>
       </categories>
       <tags>
-        <tag>Nuxt3</tag>
-        <tag>TypeScript</tag>
         <tag>Vue3</tag>
         <tag>Composable</tag>
+        <tag>Nuxt3</tag>
+        <tag>TypeScript</tag>
         <tag>Fetch</tag>
         <tag>Interceptor</tag>
       </tags>

@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-04LWQBG1HE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-04LWQBG1HE');
+</script>
+<!-- End Google Analytics -->
+
+  
+  <title>Vue 3 After Login Action 設計：未登入導頁後如何恢復原本動作 | Joseph&#39;s Work Note</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="前言很多產品流程都有這種情境：  使用者還沒登入 使用者點了一個需要登入的操作 系統要求登入 登入成功後，使用者期待「剛剛那個動作」繼續執行  例如：  未登入時點遊戲，登入後直接啟動該遊戲 未登入時點促銷 CTA，登入後回到該促銷 未登入時點收藏，登入後完成收藏  如果沒有統一設計，常見做法會變成每個頁面自己處理： 1234if (!isLogin) &#123;  openLoginDialo">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Vue 3 After Login Action 設計：未登入導頁後如何恢復原本動作">
+<meta property="og:url" content="https://josephmtsai.github.io/2026/05/18/AfterLoginAction/index.html">
+<meta property="og:site_name" content="Joseph&#39;s Work Note">
+<meta property="og:description" content="前言很多產品流程都有這種情境：  使用者還沒登入 使用者點了一個需要登入的操作 系統要求登入 登入成功後，使用者期待「剛剛那個動作」繼續執行  例如：  未登入時點遊戲，登入後直接啟動該遊戲 未登入時點促銷 CTA，登入後回到該促銷 未登入時點收藏，登入後完成收藏  如果沒有統一設計，常見做法會變成每個頁面自己處理： 1234if (!isLogin) &#123;  openLoginDialo">
+<meta property="og:locale" content="zh_TW">
+<meta property="article:published_time" content="2026-05-18T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-05-19T03:27:17.912Z">
+<meta property="article:author" content="Joseph M Tsai">
+<meta property="article:tag" content="Vue3">
+<meta property="article:tag" content="Composable">
+<meta property="article:tag" content="SessionStorage">
+<meta property="article:tag" content="Login Flow">
+<meta property="article:tag" content="Frontend Architecture">
+<meta name="twitter:card" content="summary">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Joseph&#39;s Work Note</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        <a id="nav-search-btn" class="nav-icon" title="搜尋"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜尋"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://Josephmtsai.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-AfterLoginAction" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/05/18/AfterLoginAction/" class="article-date">
+  <time class="dt-published" datetime="2026-05-18T16:00:00.000Z" itemprop="datePublished">2026-05-19</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Vue 3 After Login Action 設計：未登入導頁後如何恢復原本動作
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>很多產品流程都有這種情境：</p>
+<ol>
+<li>使用者還沒登入</li>
+<li>使用者點了一個需要登入的操作</li>
+<li>系統要求登入</li>
+<li>登入成功後，使用者期待「剛剛那個動作」繼續執行</li>
+</ol>
+<p>例如：</p>
+<ul>
+<li>未登入時點遊戲，登入後直接啟動該遊戲</li>
+<li>未登入時點促銷 CTA，登入後回到該促銷</li>
+<li>未登入時點收藏，登入後完成收藏</li>
+</ul>
+<p>如果沒有統一設計，常見做法會變成每個頁面自己處理：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (!isLogin) &#123;</span><br><span class="line">  <span class="title function_">openLoginDialog</span>();</span><br><span class="line">  <span class="comment">// <span class="doctag">TODO:</span> login 後要回來做什麼？</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這很快會失控。</p>
+<p>這個專案用 <code>useAfterLoginAction</code> 把「登入後恢復動作」封裝成 composable，目前主要應用在 game launch。</p>
+<h2 id="相關檔案"><a href="#相關檔案" class="headerlink" title="相關檔案"></a>相關檔案</h2><figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">client/packages/common/composables/useAfterLoginAction.ts</span><br><span class="line">client/packages/common/utils/gameLaunchCheck.ts</span><br><span class="line">client/packages/common/stores/root.ts</span><br><span class="line">client/packages/common/composables/useProduct.ts</span><br></pre></td></tr></table></figure>
+
+<h2 id="核心概念"><a href="#核心概念" class="headerlink" title="核心概念"></a>核心概念</h2><p>After Login Action 的核心是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">Before Login</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">Save intended action to sessionStorage</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">Open login dialog</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">Login success</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">Root store checks login status</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">Replay saved action</span><br></pre></td></tr></table></figure>
+
+<p>這讓原本中斷的使用者行為可以在登入後接續。</p>
+<h2 id="Action-Name-設計"><a href="#Action-Name-設計" class="headerlink" title="Action Name 設計"></a>Action Name 設計</h2><p>目前 composable 裡定義：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">enum</span> <span class="title class_">ActionNameEnum</span> &#123;</span><br><span class="line">  <span class="title class_">LaunchGame</span> = <span class="string">&#x27;launchGame&#x27;</span>,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>現在只有 <code>LaunchGame</code>，但這個 enum 預留了擴充空間。</p>
+<p>未來如果要支援其他行為，可以加入：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">enum</span> <span class="title class_">ActionNameEnum</span> &#123;</span><br><span class="line">  <span class="title class_">LaunchGame</span> = <span class="string">&#x27;launchGame&#x27;</span>,</span><br><span class="line">  <span class="title class_">ClaimPromotion</span> = <span class="string">&#x27;claimPromotion&#x27;</span>,</span><br><span class="line">  <span class="title class_">AddFavorite</span> = <span class="string">&#x27;addFavorite&#x27;</span>,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>重點是 action name 不應該散落成 magic string，而是集中在 composable。</p>
+<h2 id="保存動作：openLoginToContinueDialog"><a href="#保存動作：openLoginToContinueDialog" class="headerlink" title="保存動作：openLoginToContinueDialog"></a>保存動作：openLoginToContinueDialog</h2><p>使用者未登入時，呼叫：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">openLoginToContinueDialog</span>(<span class="params">actionName, data</span>) &#123;</span><br><span class="line">  <span class="keyword">if</span> (isLogin) &#123;</span><br><span class="line">    <span class="keyword">return</span>;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  eventBus.<span class="title function_">emit</span>(<span class="string">&#x27;triggerLogin&#x27;</span>, <span class="string">&#x27;loginToContinue&#x27;</span>);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">const</span> expirationTime = <span class="keyword">new</span> <span class="title class_">Date</span>().<span class="title function_">getTime</span>() + <span class="number">5</span> * <span class="number">60</span> * <span class="number">1000</span>;</span><br><span class="line">  <span class="variable language_">sessionStorage</span>.<span class="title function_">setItem</span>(</span><br><span class="line">    <span class="string">&#x27;afterLoginActionData&#x27;</span>,</span><br><span class="line">    <span class="title class_">JSON</span>.<span class="title function_">stringify</span>(&#123; actionName, data, expirationTime &#125;),</span><br><span class="line">  );</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這裡做了三件事：</p>
+<ol>
+<li>如果已登入，直接 return</li>
+<li>用 event bus 開啟 login dialog</li>
+<li>把 action payload 存到 <code>sessionStorage</code></li>
+</ol>
+<p>存起來的資料長這樣：</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;actionName&quot;</span><span class="punctuation">:</span> <span class="string">&quot;launchGame&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;prod&quot;</span><span class="punctuation">:</span> <span class="string">&quot;casino&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;launchKey&quot;</span><span class="punctuation">:</span> <span class="string">&quot;xxx&quot;</span></span><br><span class="line">  <span class="punctuation">&#125;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;expirationTime&quot;</span><span class="punctuation">:</span> <span class="number">1716000000000</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<h2 id="為什麼用-sessionStorage"><a href="#為什麼用-sessionStorage" class="headerlink" title="為什麼用 sessionStorage"></a>為什麼用 sessionStorage</h2><p>這裡選 <code>sessionStorage</code>，不是 <code>localStorage</code>。</p>
+<p>理由很清楚：</p>
+<ul>
+<li>after-login action 只屬於目前這個 tab</li>
+<li>使用者關掉 tab 後不應該保留</li>
+<li>不應跨 tab 共享，避免 A tab 點遊戲，B tab 登入後啟動錯誤遊戲</li>
+<li>比 memory state 更能承受 login dialog &#x2F; route change 造成的 component unmount</li>
+</ul>
+<p>這是介於 memory state 與 long-lived storage 之間剛好的選擇。</p>
+<h2 id="5-分鐘過期時間"><a href="#5-分鐘過期時間" class="headerlink" title="5 分鐘過期時間"></a>5 分鐘過期時間</h2><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> expirationTime = <span class="keyword">new</span> <span class="title class_">Date</span>().<span class="title function_">getTime</span>() + <span class="number">5</span> * <span class="number">60</span> * <span class="number">1000</span>;</span><br></pre></td></tr></table></figure>
+
+<p>這個 timeout 很重要。</p>
+<p>如果沒有過期時間，使用者可能：</p>
+<ol>
+<li>點遊戲</li>
+<li>打開 login dialog</li>
+<li>放著不登入</li>
+<li>幾十分鐘後登入</li>
+<li>系統突然啟動很久以前點過的遊戲</li>
+</ol>
+<p>這會讓使用者很困惑。</p>
+<p>5 分鐘代表：這是一個短期 intent，不是永久任務。</p>
+<h2 id="讀取資料：computed-sessionStorage"><a href="#讀取資料：computed-sessionStorage" class="headerlink" title="讀取資料：computed + sessionStorage"></a>讀取資料：computed + sessionStorage</h2><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> afterLoginActionData = <span class="title function_">computed</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">  <span class="keyword">const</span> afterLoginActionStorage = <span class="variable language_">sessionStorage</span>.<span class="title function_">getItem</span>(<span class="string">&#x27;afterLoginActionData&#x27;</span>);</span><br><span class="line">  <span class="keyword">return</span> afterLoginActionStorage ? <span class="title class_">JSON</span>.<span class="title function_">parse</span>(afterLoginActionStorage) : <span class="literal">null</span>;</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<p>這裡每次讀取 computed 都會從 <code>sessionStorage</code> parse 最新資料。</p>
+<p>因為 action 可能在不同 component &#x2F; store 裡被寫入，直接從 storage 讀可以避免 composable instance 之間狀態不同步。</p>
+<h2 id="清除資料"><a href="#清除資料" class="headerlink" title="清除資料"></a>清除資料</h2><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">removeAfterLoginActionData</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="variable language_">sessionStorage</span>.<span class="title function_">removeItem</span>(<span class="string">&#x27;afterLoginActionData&#x27;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>並且在 component unmount 時清掉：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="title function_">onBeforeUnmount</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">  <span class="title function_">removeAfterLoginActionData</span>();</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<p>這代表這個 composable 的生命週期偏保守：如果所在頁面被銷毀，就不保留 pending action。</p>
+<p>LoginForm 也會使用它：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// if not login, remove afterLoginActionData in sessionStorage</span></span><br><span class="line"><span class="title function_">useAfterLoginAction</span>();</span><br></pre></td></tr></table></figure>
+
+<p>這確保 login form mount&#x2F;unmount 時會帶到清理邏輯。</p>
+<h2 id="檢查是否可以執行"><a href="#檢查是否可以執行" class="headerlink" title="檢查是否可以執行"></a>檢查是否可以執行</h2><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">checkAfterLoginStatus</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="keyword">if</span> (!afterLoginActionData.<span class="property">value</span>) &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">const</span> currentTime = <span class="keyword">new</span> <span class="title class_">Date</span>().<span class="title function_">getTime</span>();</span><br><span class="line">  <span class="keyword">if</span> (!isLogin || dialogQueue.<span class="property">length</span> || currentTime &gt; afterLoginActionData.<span class="property">value</span>.<span class="property">expirationTime</span>) &#123;</span><br><span class="line">    <span class="title function_">removeAfterLoginActionData</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> <span class="literal">true</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這裡有三個 gate：</p>
+<h3 id="1-必須已登入"><a href="#1-必須已登入" class="headerlink" title="1. 必須已登入"></a>1. 必須已登入</h3><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">!isLogin</span><br></pre></td></tr></table></figure>
+
+<p>登入沒完成就不能 replay。</p>
+<h3 id="2-系統-Dialog-Queue-必須為空"><a href="#2-系統-Dialog-Queue-必須為空" class="headerlink" title="2. 系統 Dialog Queue 必須為空"></a>2. 系統 Dialog Queue 必須為空</h3><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dialogQueue.<span class="property">length</span></span><br></pre></td></tr></table></figure>
+
+<p>如果登入後還有 Change Password、Terms、Verify Email 這些 system dialog，不能立刻啟動遊戲。</p>
+<p>這個細節非常重要。</p>
+<p>登入成功不代表使用者已經可以自由操作，系統級流程要先完成。</p>
+<h3 id="3-不能過期"><a href="#3-不能過期" class="headerlink" title="3. 不能過期"></a>3. 不能過期</h3><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">currentTime &gt; afterLoginActionData.<span class="property">value</span>.<span class="property">expirationTime</span></span><br></pre></td></tr></table></figure>
+
+<p>過期就移除，避免舊 intent 被執行。</p>
+<h2 id="執行動作：doActionAfterLogin"><a href="#執行動作：doActionAfterLogin" class="headerlink" title="執行動作：doActionAfterLogin"></a>執行動作：doActionAfterLogin</h2><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">doActionAfterLogin</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="keyword">if</span> (!<span class="title function_">checkAfterLoginStatus</span>()) &#123;</span><br><span class="line">    <span class="keyword">return</span>;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">switch</span> (afterLoginActionData.<span class="property">value</span>.<span class="property">actionName</span>) &#123;</span><br><span class="line">    <span class="keyword">case</span> <span class="title class_">ActionNameEnum</span>.<span class="property">LaunchGame</span>: &#123;</span><br><span class="line">      <span class="keyword">const</span> params = afterLoginActionData.<span class="property">value</span>.<span class="property">data</span>;</span><br><span class="line">      <span class="keyword">const</span> &#123; launchGameByProd &#125; = <span class="title function_">useProduct</span>(params.<span class="property">prod</span>);</span><br><span class="line"></span><br><span class="line">      <span class="title function_">launchGameByProd</span>(params);</span><br><span class="line">      <span class="title function_">removeAfterLoginActionData</span>();</span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>目前唯一實作的是 <code>LaunchGame</code>：</p>
+<ol>
+<li>取出保存的 params</li>
+<li>根據 <code>params.prod</code> 建立 <code>useProduct</code></li>
+<li>呼叫 <code>launchGameByProd(params)</code></li>
+<li>清除 storage</li>
+</ol>
+<p>這裡的清除時機也很重要：<strong>成功進入 action 分支後就清掉</strong>，避免使用者重整或 login status 再檢查時重複啟動。</p>
+<h2 id="與-GameLaunchCheck-的整合"><a href="#與-GameLaunchCheck-的整合" class="headerlink" title="與 GameLaunchCheck 的整合"></a>與 GameLaunchCheck 的整合</h2><p>在 <code>gameLaunchCheck.ts</code> 中，遊戲啟動前會檢查登入狀態：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (!store.<span class="property">uv</span>.<span class="property">sessionD</span>.<span class="property">login</span>) &#123;</span><br><span class="line">  <span class="keyword">const</span> &#123; fullGameData &#125; = <span class="variable language_">this</span>.<span class="property">options</span>;</span><br><span class="line">  <span class="title function_">openLoginToContinueDialog</span>(<span class="title class_">ActionNameEnum</span>.<span class="property">LaunchGame</span>, fullGameData);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>完整行為是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">User clicks game</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">GameLaunchCheck.GeneralCheck</span><br><span class="line">    |</span><br><span class="line">    +-- not login</span><br><span class="line">          |</span><br><span class="line">          v</span><br><span class="line">        save fullGameData to sessionStorage</span><br><span class="line">          |</span><br><span class="line">          v</span><br><span class="line">        eventBus.emit(&#x27;triggerLogin&#x27;, &#x27;loginToContinue&#x27;)</span><br></pre></td></tr></table></figure>
+
+<p>登入後，<code>root.ts</code> 會呼叫：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">async</span> <span class="title function_">checkLoginStatus</span>(<span class="params"></span>) &#123;</span><br><span class="line">  <span class="keyword">const</span> &#123; doActionAfterLogin, removeAfterLoginActionData &#125; = <span class="title function_">useAfterLoginAction</span>();</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (!<span class="variable language_">this</span>.<span class="property">uv</span>.<span class="property">sessionD</span>.<span class="property">loginId</span>) &#123;</span><br><span class="line">    <span class="title function_">removeAfterLoginActionData</span>();</span><br><span class="line">    <span class="keyword">return</span>;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> (!param) &#123;</span><br><span class="line">    <span class="keyword">await</span> <span class="variable language_">this</span>.<span class="title function_">checkLoginSystemDialogDisplay</span>();</span><br><span class="line">    <span class="title function_">doActionAfterLogin</span>();</span><br><span class="line">    <span class="keyword">return</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這裡的順序是：</p>
+<ol>
+<li>如果沒有 loginId，清掉 pending action</li>
+<li>如果沒有 <code>_a</code> error param</li>
+<li>先檢查登入後系統 dialog</li>
+<li>再執行 after-login action</li>
+</ol>
+<p>這個順序避免「登入後需要改密碼，但遊戲先啟動」的問題。</p>
+<h2 id="為什麼透過-root-store-執行"><a href="#為什麼透過-root-store-執行" class="headerlink" title="為什麼透過 root store 執行"></a>為什麼透過 root store 執行</h2><p><code>doActionAfterLogin</code> 註解寫得很直接：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// doActionAfterLoginGlobally, only usage in roots store</span></span><br></pre></td></tr></table></figure>
+
+<p>原因是 after-login action 屬於全局流程，不應綁死在某個頁面：</p>
+<ul>
+<li>Login dialog 可能從任何頁面打開</li>
+<li>登入成功後可能 route 沒變，也可能 route 已變</li>
+<li>系統 dialog 狀態在 root &#x2F; global store 才看得到</li>
+<li>game launch 需要 global user variables</li>
+</ul>
+<p>所以把 replay 放在 root store 比放在原本點擊的 component 更穩。</p>
+<h2 id="Event-Bus-開-Login-Dialog"><a href="#Event-Bus-開-Login-Dialog" class="headerlink" title="Event Bus 開 Login Dialog"></a>Event Bus 開 Login Dialog</h2><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">eventBus.<span class="title function_">emit</span>(<span class="string">&#x27;triggerLogin&#x27;</span>, <span class="string">&#x27;loginToContinue&#x27;</span>);</span><br></pre></td></tr></table></figure>
+
+<p>這表示 <code>useAfterLoginAction</code> 不直接 import LoginDialog，也不直接改 login store 的 UI state。</p>
+<p>它只發出事件：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">I need login to continue</span><br></pre></td></tr></table></figure>
+
+<p>由外層 UI 決定如何顯示 login dialog。</p>
+<p>這種做法讓 composable 保持在「流程層」，避免和具體 UI component 耦合。</p>
+<h2 id="擴充其他-Action-的方式"><a href="#擴充其他-Action-的方式" class="headerlink" title="擴充其他 Action 的方式"></a>擴充其他 Action 的方式</h2><p>目前註解中保留了一個 page-level API：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// function doActionAfterLoginOnPage(</span></span><br><span class="line"><span class="comment">//   actionName: string,</span></span><br><span class="line"><span class="comment">//   action?: (data: any) =&gt; void,</span></span><br><span class="line"><span class="comment">//   params?: any,</span></span><br><span class="line"><span class="comment">// )</span></span><br></pre></td></tr></table></figure>
+
+<p>如果未來要擴充，例如 claim promotion，可以走兩種設計。</p>
+<h3 id="方案一：全局-action"><a href="#方案一：全局-action" class="headerlink" title="方案一：全局 action"></a>方案一：全局 action</h3><p>適合任何頁面都能觸發的動作：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">enum</span> <span class="title class_">ActionNameEnum</span> &#123;</span><br><span class="line">  <span class="title class_">LaunchGame</span> = <span class="string">&#x27;launchGame&#x27;</span>,</span><br><span class="line">  <span class="title class_">ClaimPromotion</span> = <span class="string">&#x27;claimPromotion&#x27;</span>,</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在 <code>doActionAfterLogin</code> 加 case：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">case</span> <span class="title class_">ActionNameEnum</span>.<span class="property">ClaimPromotion</span>:</span><br><span class="line">  <span class="title function_">claimPromotion</span>(afterLoginActionData.<span class="property">value</span>.<span class="property">data</span>);</span><br><span class="line">  <span class="title function_">removeAfterLoginActionData</span>();</span><br><span class="line">  <span class="keyword">break</span>;</span><br></pre></td></tr></table></figure>
+
+<h3 id="方案二：頁面-action"><a href="#方案二：頁面-action" class="headerlink" title="方案二：頁面 action"></a>方案二：頁面 action</h3><p>適合只有特定頁面知道怎麼執行的動作：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title function_">doActionAfterLoginOnPage</span>(<span class="string">&#x27;claimPromotion&#x27;</span>, claimPromo, params);</span><br></pre></td></tr></table></figure>
+
+<p>不過這種方式要小心 route change 後 component 是否還存在。</p>
+<h2 id="邊界情境"><a href="#邊界情境" class="headerlink" title="邊界情境"></a>邊界情境</h2><h3 id="使用者打開-login-dialog-後取消"><a href="#使用者打開-login-dialog-後取消" class="headerlink" title="使用者打開 login dialog 後取消"></a>使用者打開 login dialog 後取消</h3><p>資料會暫時留在 <code>sessionStorage</code>，但 5 分鐘後過期。</p>
+<p>如果 LoginForm unmount，也會清除。</p>
+<h3 id="使用者登入失敗"><a href="#使用者登入失敗" class="headerlink" title="使用者登入失敗"></a>使用者登入失敗</h3><p><code>root.checkLoginStatus</code> 如果沒有 <code>loginId</code>：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="title function_">removeAfterLoginActionData</span>();</span><br><span class="line"><span class="keyword">return</span>;</span><br></pre></td></tr></table></figure>
+
+<p>不會 replay。</p>
+<h3 id="登入後有系統-Dialog"><a href="#登入後有系統-Dialog" class="headerlink" title="登入後有系統 Dialog"></a>登入後有系統 Dialog</h3><figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dialogQueue.<span class="property">length</span></span><br></pre></td></tr></table></figure>
+
+<p>如果有 dialog，action 會被清掉並不執行。</p>
+<p>這是保守策略：避免在尚未完成必要登入後流程時啟動遊戲。</p>
+<h3 id="使用者跨-tab-登入"><a href="#使用者跨-tab-登入" class="headerlink" title="使用者跨 tab 登入"></a>使用者跨 tab 登入</h3><p>因為使用 <code>sessionStorage</code>，pending action 不會跨 tab 共享。</p>
+<p>這是正確行為。A tab 的「點遊戲」不應該讓 B tab 登入後啟動遊戲。</p>
+<h2 id="可以優化的地方"><a href="#可以優化的地方" class="headerlink" title="可以優化的地方"></a>可以優化的地方</h2><p>目前 <code>openLoginToContinueDialog</code> 裡使用：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> &#123; isLogin &#125; = rootStore;</span><br><span class="line"><span class="keyword">const</span> &#123; dialogQueue &#125; = systemDialogQueueStore;</span><br></pre></td></tr></table></figure>
+
+<p>這是在 composable 初始化時解構出來的值。如果 store state 後續更新，這種解構在某些情境下可能不是 reactive ref。</p>
+<p>更穩的寫法可以用 <code>storeToRefs</code> 或直接讀 store：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (rootStore.<span class="property">isLogin</span>) &#123;</span><br><span class="line">  <span class="keyword">return</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>以及：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (!rootStore.<span class="property">isLogin</span> || systemDialogQueueStore.<span class="property">dialogQueue</span>.<span class="property">length</span> || expired) &#123;</span><br><span class="line">  ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>不過目前實際主要由 root store 在登入狀態更新後呼叫，所以未必會立即出問題。若未來 after-login action 擴充到更多頁面，這點值得整理。</p>
+<h2 id="完整流程圖"><a href="#完整流程圖" class="headerlink" title="完整流程圖"></a>完整流程圖</h2><pre class="mermaid">graph TD
+    A["User clicks protected action<br/>e.g. launch game"] --> B["GameLaunchCheck.GeneralCheck"]
+    B --> C{"Is user logged in?"}
+    C -->|Yes| D["Continue normal launch checks"]
+    C -->|No| E["openLoginToContinueDialog"]
+    E --> F["eventBus.emit('triggerLogin', 'loginToContinue')"]
+    E --> G["sessionStorage.setItem('afterLoginActionData')"]
+    F --> H["Login dialog opens"]
+    H --> I{"Login success?"}
+    I -->|No| J["root.checkLoginStatus removes pending action"]
+    I -->|Yes| K["root.checkLoginStatus"]
+    K --> L["checkLoginSystemDialogDisplay"]
+    L --> M["doActionAfterLogin"]
+    M --> N{"Valid pending action?"}
+    N -->|No| O["Remove / skip"]
+    N -->|Yes| P["switch actionName"]
+    P --> Q["LaunchGame: useProduct(prod).launchGameByProd(params)"]
+    Q --> R["removeAfterLoginActionData"]</pre>
+
+<p>這個流程最重要的是兩個檢查點：</p>
+<ul>
+<li>未登入時只保存 intent，不直接執行 action</li>
+<li>登入後也不是馬上執行，而是先確認系統 Dialog、登入狀態、過期時間</li>
+</ul>
+<h2 id="Sequence-Diagram：從點遊戲到登入後啟動"><a href="#Sequence-Diagram：從點遊戲到登入後啟動" class="headerlink" title="Sequence Diagram：從點遊戲到登入後啟動"></a>Sequence Diagram：從點遊戲到登入後啟動</h2><pre class="mermaid">sequenceDiagram
+    participant User as User
+    participant Game as GameLaunchCheck
+    participant ALA as useAfterLoginAction
+    participant Bus as eventBus
+    participant Login as Login Dialog
+    participant Root as root store
+    participant Product as useProduct
+
+    User->>Game: Click game
+    Game->>Game: Check login state
+    alt Not logged in
+        Game->>ALA: openLoginToContinueDialog("launchGame", fullGameData)
+        ALA->>Bus: emit("triggerLogin", "loginToContinue")
+        ALA->>ALA: sessionStorage.setItem(afterLoginActionData)
+        Bus->>Login: Open login dialog
+        User->>Login: Submit credentials
+        Login-->>Root: Login status updated
+        Root->>Root: checkLoginSystemDialogDisplay()
+        Root->>ALA: doActionAfterLogin()
+        ALA->>ALA: checkAfterLoginStatus()
+        ALA->>Product: launchGameByProd(savedParams)
+        ALA->>ALA: removeAfterLoginActionData()
+    else Logged in
+        Game->>Product: Continue launch flow
+    end</pre>
+
+<p>這張圖可以放在文章中段，幫讀者理解為什麼 replay action 不放在原本的 component，而是放在 root store。</p>
+<h2 id="State-Machine：Pending-Action-的生命週期"><a href="#State-Machine：Pending-Action-的生命週期" class="headerlink" title="State Machine：Pending Action 的生命週期"></a>State Machine：Pending Action 的生命週期</h2><pre class="mermaid">stateDiagram-v2
+    [*] --> Empty
+    Empty --> Pending: save action to sessionStorage
+    Pending --> Expired: currentTime > expirationTime
+    Pending --> Cancelled: login failed / loginId missing
+    Pending --> Blocked: system dialog queue not empty
+    Pending --> Executed: login success + no dialog + not expired
+    Executed --> Empty: removeAfterLoginActionData
+    Expired --> Empty: removeAfterLoginActionData
+    Cancelled --> Empty: removeAfterLoginActionData
+    Blocked --> Empty: removeAfterLoginActionData</pre>
+
+<p>這個 state machine 補上了文章前面比較隱性的設計：pending action 不是一直存在，它只有很短的生命週期。</p>
+<h2 id="afterLoginActionData-Schema"><a href="#afterLoginActionData-Schema" class="headerlink" title="afterLoginActionData Schema"></a>afterLoginActionData Schema</h2><p>目前 storage 裡的資料可以視為這個 schema：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">interface</span> <span class="title class_">AfterLoginActionData</span>&lt;T = <span class="built_in">unknown</span>&gt; &#123;</span><br><span class="line">  <span class="attr">actionName</span>: <span class="title class_">ActionNameEnum</span>;</span><br><span class="line">  <span class="attr">data</span>: T;</span><br><span class="line">  <span class="attr">expirationTime</span>: <span class="built_in">number</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">interface</span> <span class="title class_">LaunchGameActionData</span> &#123;</span><br><span class="line">  <span class="attr">prod</span>: <span class="built_in">string</span>;</span><br><span class="line">  <span class="attr">launchKey</span>?: <span class="built_in">string</span>;</span><br><span class="line">  <span class="attr">fullGameData</span>?: <span class="built_in">unknown</span>;</span><br><span class="line">  [<span class="attr">key</span>: <span class="built_in">string</span>]: <span class="built_in">unknown</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>實際保存：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="variable language_">sessionStorage</span>.<span class="title function_">setItem</span>(</span><br><span class="line">  <span class="string">&#x27;afterLoginActionData&#x27;</span>,</span><br><span class="line">  <span class="title class_">JSON</span>.<span class="title function_">stringify</span>(&#123; actionName, data, expirationTime &#125;),</span><br><span class="line">);</span><br></pre></td></tr></table></figure>
+
+<p>如果未來 action 變多，建議讓不同 action 對應不同 payload 型別：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> <span class="title class_">AfterLoginActionPayloadMap</span> = &#123;</span><br><span class="line">  <span class="attr">launchGame</span>: <span class="title class_">LaunchGameActionData</span>;</span><br><span class="line">  <span class="attr">claimPromotion</span>: <span class="title class_">ClaimPromotionActionData</span>;</span><br><span class="line">  <span class="attr">addFavorite</span>: <span class="title class_">AddFavoriteActionData</span>;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>這樣 <code>doActionAfterLogin</code> 裡的 switch case 可以更安全。</p>
+<h2 id="為什麼要等-System-Dialog-Queue"><a href="#為什麼要等-System-Dialog-Queue" class="headerlink" title="為什麼要等 System Dialog Queue"></a>為什麼要等 System Dialog Queue</h2><p>登入成功後不代表使用者可以馬上回到原本動作。系統可能還需要顯示：</p>
+<ul>
+<li>Change Password</li>
+<li>Terms and Conditions</li>
+<li>Verify Email</li>
+<li>Idle Logout recovery</li>
+<li>Welcome dialog</li>
+</ul>
+<p>因此 <code>checkAfterLoginStatus</code> 檢查：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (!isLogin || dialogQueue.<span class="property">length</span> || currentTime &gt; afterLoginActionData.<span class="property">value</span>.<span class="property">expirationTime</span>) &#123;</span><br><span class="line">  <span class="title function_">removeAfterLoginActionData</span>();</span><br><span class="line">  <span class="keyword">return</span> <span class="literal">false</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>這個設計是保守的：只要有 system dialog，就清掉 pending action。</p>
+<p>另一種策略是保留 pending action，等 dialog 全部結束後再 replay。但那會讓流程更複雜，因為要監聽 queue 變化，也要避免使用者在 dialog 中改變狀態。以遊戲啟動這種高風險動作來說，直接清掉是比較穩的選擇。</p>
+<h2 id="和-Route-Redirect-的差異"><a href="#和-Route-Redirect-的差異" class="headerlink" title="和 Route Redirect 的差異"></a>和 Route Redirect 的差異</h2><p>很多人會用 URL query 做 after-login redirect：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/login?redirect=/casino/game/abc</span><br></pre></td></tr></table></figure>
+
+<p>但這個專案使用 storage action，而不是單純 redirect URL，原因是「啟動遊戲」不一定等於導頁。</p>
+<p>啟動遊戲可能包含：</p>
+<ul>
+<li>product launch check</li>
+<li>responsible gambling check</li>
+<li>partner launch key</li>
+<li>window.open &#x2F; iframe &#x2F; native launch</li>
+<li>event tracking</li>
+<li>maintenance dialog</li>
+</ul>
+<p>所以保存的是 action payload，而不是 URL。</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="punctuation">&#123;</span></span><br><span class="line">  <span class="attr">&quot;actionName&quot;</span><span class="punctuation">:</span> <span class="string">&quot;launchGame&quot;</span><span class="punctuation">,</span></span><br><span class="line">  <span class="attr">&quot;data&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span></span><br><span class="line">    <span class="attr">&quot;prod&quot;</span><span class="punctuation">:</span> <span class="string">&quot;casino&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;launchKey&quot;</span><span class="punctuation">:</span> <span class="string">&quot;gameName&quot;</span><span class="punctuation">,</span></span><br><span class="line">    <span class="attr">&quot;fullGameData&quot;</span><span class="punctuation">:</span> <span class="punctuation">&#123;</span><span class="punctuation">&#125;</span></span><br><span class="line">  <span class="punctuation">&#125;</span></span><br><span class="line"><span class="punctuation">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>這就是 deferred action 和 redirect URL 最大的差異。</p>
+<h2 id="Error-Handling-與資料安全"><a href="#Error-Handling-與資料安全" class="headerlink" title="Error Handling 與資料安全"></a>Error Handling 與資料安全</h2><p>目前 computed 直接 parse：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">return</span> afterLoginActionStorage ? <span class="title class_">JSON</span>.<span class="title function_">parse</span>(afterLoginActionStorage) : <span class="literal">null</span>;</span><br></pre></td></tr></table></figure>
+
+<p>如果 storage 被手動改壞，<code>JSON.parse</code> 可能 throw。未來可補強成：</p>
+<figure class="highlight ts"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">const</span> afterLoginActionData = <span class="title function_">computed</span>(<span class="function">() =&gt;</span> &#123;</span><br><span class="line">  <span class="keyword">const</span> raw = <span class="variable language_">sessionStorage</span>.<span class="title function_">getItem</span>(<span class="string">&#x27;afterLoginActionData&#x27;</span>);</span><br><span class="line">  <span class="keyword">if</span> (!raw) <span class="keyword">return</span> <span class="literal">null</span>;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">try</span> &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="title class_">JSON</span>.<span class="title function_">parse</span>(raw);</span><br><span class="line">  &#125; <span class="keyword">catch</span> &#123;</span><br><span class="line">    <span class="title function_">removeAfterLoginActionData</span>();</span><br><span class="line">    <span class="keyword">return</span> <span class="literal">null</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<p>這不是目前必要 bug，但如果要把 after-login action 擴大成通用機制，這種保護會更穩。</p>
+<h2 id="擴充流程圖：多-Action-Dispatch"><a href="#擴充流程圖：多-Action-Dispatch" class="headerlink" title="擴充流程圖：多 Action Dispatch"></a>擴充流程圖：多 Action Dispatch</h2><pre class="mermaid">graph TD
+    A["doActionAfterLogin"] --> B{"checkAfterLoginStatus"}
+    B -->|false| C["return"]
+    B -->|true| D{"actionName"}
+    D -->|launchGame| E["useProduct(params.prod).launchGameByProd(params)"]
+    D -->|claimPromotion| F["promoStore.claimPromotion(params)"]
+    D -->|addFavorite| G["gameCollectionStore.add(params)"]
+    D -->|unknown| H["remove invalid action"]
+    E --> I["removeAfterLoginActionData"]
+    F --> I
+    G --> I
+    H --> I</pre>
+
+<p>目前只有 <code>launchGame</code>，但這張圖可以說明未來怎麼擴充，而不會讓 login flow 被各頁面各自發明。</p>
+<h2 id="小結"><a href="#小結" class="headerlink" title="小結"></a>小結</h2><p>After Login Action 的本質是保存使用者 intent：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">User intent</span><br><span class="line">    -&gt; temporary storage</span><br><span class="line">    -&gt; login</span><br><span class="line">    -&gt; validate state</span><br><span class="line">    -&gt; replay</span><br></pre></td></tr></table></figure>
+
+<p>這套設計值得借鑑的地方：</p>
+<ul>
+<li>用 <code>sessionStorage</code> 保存 tab-scoped intent</li>
+<li>用 expiration time 避免舊動作被意外執行</li>
+<li>用 Event Bus 打開 login dialog，避免 composable 綁 UI</li>
+<li>登入後由 root store 全局 replay</li>
+<li>replay 前檢查 login state、system dialog queue、expiration</li>
+<li>目前先支援 LaunchGame，保留後續 action 擴充點</li>
+</ul>
+<p>好的 after-login flow 會讓使用者覺得「登入只是流程的一部分」，而不是「我剛剛想做的事情被打斷了」。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://josephmtsai.github.io/2026/05/18/AfterLoginAction/" data-id="cmpc2o2ds0005su4eblnz6t8p" data-title="Vue 3 After Login Action 設計：未登入導頁後如何恢復原本動作" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Frontend-Architecture/" rel="tag">Frontend Architecture</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Login-Flow/" rel="tag">Login Flow</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SessionStorage/" rel="tag">SessionStorage</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/05/18/WebViewNativeBridge/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">Vue 3 WebView Native Bridge 設計：同時支援 Android window.App 與 iOS WKWebView</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤雲</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/NET/" style="font-size: 20px;">.NET</a> <a href="/tags/NET-Framework/" style="font-size: 10px;">.NET Framework</a> <a href="/tags/AOP/" style="font-size: 10px;">AOP</a> <a href="/tags/API-Design/" style="font-size: 11.11px;">API Design</a> <a href="/tags/ASP-NET/" style="font-size: 11.11px;">ASP.NET</a> <a href="/tags/ASP-NET-MVC/" style="font-size: 10px;">ASP.NET MVC</a> <a href="/tags/ActionFilter/" style="font-size: 11.11px;">ActionFilter</a> <a href="/tags/Android/" style="font-size: 10px;">Android</a> <a href="/tags/App-Debug/" style="font-size: 10px;">App Debug</a> <a href="/tags/Architecture/" style="font-size: 18.89px;">Architecture</a> <a href="/tags/Asp-net/" style="font-size: 10px;">Asp.net</a> <a href="/tags/Attack/" style="font-size: 10px;">Attack</a> <a href="/tags/Authentication/" style="font-size: 10px;">Authentication</a> <a href="/tags/Authorization/" style="font-size: 10px;">Authorization</a> <a href="/tags/Axios/" style="font-size: 10px;">Axios</a> <a href="/tags/CMS/" style="font-size: 10px;">CMS</a> <a href="/tags/CSharp/" style="font-size: 11.11px;">CSharp</a> <a href="/tags/Cache/" style="font-size: 12.22px;">Cache</a> <a href="/tags/Cache-Invalidation/" style="font-size: 10px;">Cache Invalidation</a> <a href="/tags/Clean-Architecture/" style="font-size: 10px;">Clean Architecture</a> <a href="/tags/Composable/" style="font-size: 12.22px;">Composable</a> <a href="/tags/Composition-Api/" style="font-size: 10px;">Composition Api</a> <a href="/tags/Cron/" style="font-size: 10px;">Cron</a> <a href="/tags/Debug/" style="font-size: 12.22px;">Debug</a> <a href="/tags/Debugger/" style="font-size: 10px;">Debugger</a> <a href="/tags/Design-Pattern/" style="font-size: 11.11px;">Design Pattern</a> <a href="/tags/DistributedSystem/" style="font-size: 10px;">DistributedSystem</a> <a href="/tags/DotNet/" style="font-size: 11.11px;">DotNet</a> <a href="/tags/ELK/" style="font-size: 13.33px;">ELK</a> <a href="/tags/ESLint/" style="font-size: 10px;">ESLint</a> <a href="/tags/Elasticsearch/" style="font-size: 11.11px;">Elasticsearch</a> <a href="/tags/Enum/" style="font-size: 10px;">Enum</a> <a href="/tags/Error-Handling/" style="font-size: 11.11px;">Error Handling</a> <a href="/tags/EventSPI/" style="font-size: 10px;">EventSPI</a> <a href="/tags/Feature-Flag/" style="font-size: 10px;">Feature Flag</a> <a href="/tags/Fetch/" style="font-size: 10px;">Fetch</a> <a href="/tags/Frontend-Architecture/" style="font-size: 10px;">Frontend Architecture</a> <a href="/tags/Git/" style="font-size: 11.11px;">Git</a> <a href="/tags/GitFlow/" style="font-size: 11.11px;">GitFlow</a> <a href="/tags/Gzip/" style="font-size: 10px;">Gzip</a> <a href="/tags/Hangfire/" style="font-size: 11.11px;">Hangfire</a> <a href="/tags/Incident/" style="font-size: 10px;">Incident</a> <a href="/tags/Interceptor/" style="font-size: 10px;">Interceptor</a> <a href="/tags/JavaScript/" style="font-size: 10px;">JavaScript</a> <a href="/tags/Kibana/" style="font-size: 10px;">Kibana</a> <a href="/tags/LazyCache/" style="font-size: 10px;">LazyCache</a> <a href="/tags/Logging/" style="font-size: 10px;">Logging</a> <a href="/tags/Login-Flow/" style="font-size: 10px;">Login Flow</a> <a href="/tags/MFA/" style="font-size: 11.11px;">MFA</a> <a href="/tags/MessageHub/" style="font-size: 10px;">MessageHub</a> <a href="/tags/Micro-Frontend/" style="font-size: 10px;">Micro Frontend</a> <a href="/tags/MobileApp/" style="font-size: 12.22px;">MobileApp</a> <a href="/tags/MongoDB/" style="font-size: 10px;">MongoDB</a> <a href="/tags/Monitoring/" style="font-size: 12.22px;">Monitoring</a> <a href="/tags/Native-Bridge/" style="font-size: 10px;">Native Bridge</a> <a href="/tags/Nuxt3/" style="font-size: 13.33px;">Nuxt3</a> <a href="/tags/Performance/" style="font-size: 13.33px;">Performance</a> <a href="/tags/Pinia/" style="font-size: 11.11px;">Pinia</a> <a href="/tags/Pre-Commit/" style="font-size: 10px;">Pre-Commit</a> <a href="/tags/Prerender/" style="font-size: 10px;">Prerender</a> <a href="/tags/QA-Testing/" style="font-size: 10px;">QA Testing</a> <a href="/tags/Queue/" style="font-size: 10px;">Queue</a> <a href="/tags/RabbitMQ/" style="font-size: 10px;">RabbitMQ</a> <a href="/tags/Rate-Limiting/" style="font-size: 10px;">Rate Limiting</a> <a href="/tags/RateLimit/" style="font-size: 10px;">RateLimit</a> <a href="/tags/Recording/" style="font-size: 10px;">Recording</a> <a href="/tags/Redis/" style="font-size: 16.67px;">Redis</a> <a href="/tags/Responsible-Gambling/" style="font-size: 11.11px;">Responsible Gambling</a> <a href="/tags/Revert/" style="font-size: 10px;">Revert</a> <a href="/tags/RouteConstraint/" style="font-size: 10px;">RouteConstraint</a> <a href="/tags/SEO/" style="font-size: 10px;">SEO</a> <a href="/tags/SSO/" style="font-size: 10px;">SSO</a> <a href="/tags/Safari/" style="font-size: 10px;">Safari</a> <a href="/tags/Security/" style="font-size: 14.44px;">Security</a> <a href="/tags/Session/" style="font-size: 12.22px;">Session</a> <a href="/tags/SessionStorage/" style="font-size: 10px;">SessionStorage</a> <a href="/tags/Tailwind-CSS/" style="font-size: 10px;">Tailwind CSS</a> <a href="/tags/TypeScript/" style="font-size: 15.56px;">TypeScript</a> <a href="/tags/Vite/" style="font-size: 10px;">Vite</a> <a href="/tags/Vue/" style="font-size: 12.22px;">Vue</a> <a href="/tags/Vue-Life-Cycle/" style="font-size: 10px;">Vue Life Cycle</a> <a href="/tags/Vue-Router/" style="font-size: 10px;">Vue Router</a> <a href="/tags/Vue-js/" style="font-size: 13.33px;">Vue.js</a> <a href="/tags/Vue3/" style="font-size: 17.78px;">Vue3</a> <a href="/tags/Web-API/" style="font-size: 10px;">Web API</a> <a href="/tags/Web-Debug/" style="font-size: 10px;">Web Debug</a> <a href="/tags/WebView/" style="font-size: 10px;">WebView</a> <a href="/tags/Webpack/" style="font-size: 10px;">Webpack</a> <a href="/tags/Workflow/" style="font-size: 10px;">Workflow</a> <a href="/tags/iOS/" style="font-size: 11.11px;">iOS</a> <a href="/tags/v-html/" style="font-size: 10px;">v-html</a> <a href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" style="font-size: 10px;">前端架構</a> <a href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" style="font-size: 10px;">身份驗證</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">彙整</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/04/">四月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">三月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/02/">二月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">三月 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/08/">八月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">五月 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">十月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/04/">四月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/03/">三月 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/12/">十二月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/07/">七月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/06/">六月 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/05/">五月 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/05/18/AfterLoginAction/">Vue 3 After Login Action 設計：未登入導頁後如何恢復原本動作</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/18/WebViewNativeBridge/">Vue 3 WebView Native Bridge 設計：同時支援 Android window.App 與 iOS WKWebView</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/17/AccountStateCrossChannelSession/">ASP.NET AccountState 設計：跨 Channel 登入狀態同步與踢出機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/17/PageGuardRouteConstraintPermission/">ASP.NET MVC PageGuard 與 RouteConstraint：動態頁面權限管線設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/17/ResponsibleGamblingProtection/">Responsible Gambling 後端防護設計：Self Exclusion / Time Out 不是前端按鈕</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/HashBasedJobStaggering/">用 Job Name Hash 防止 Thundering Herd：30 支排程 Job 的自動錯開機制</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/MultiQueueResourceIsolation/">Hangfire Multi-Queue 資源隔離：讓重量級 Job 不拖垮整個排程系統</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/21/VueMfaVerificationFlow/">Vue 3 新裝置 MFA 驗證架構：從登入攔截到 WebView 完成驗證的完整設計</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/14/ELKSharing/">ELK 實戰指南 — Index 架構、Log Pattern 與 Case Study</a>
+          </li>
+        
+          <li>
+            <a href="/2026/04/10/nuxt3-centralized-fetch-interceptor/">Nuxt 3 實戰：用 Composable 封裝集中式請求攔截器</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分類</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Debug/">Debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/Troubleshooting/">Troubleshooting</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/">前端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%89%8D%E7%AB%AF%E9%96%8B%E7%99%BC/">前端開發</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%B7%A5%E7%A8%8B%E5%AF%A6%E8%B8%90/">工程實踐</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E5%BE%8C%E7%AB%AF%E6%9E%B6%E6%A7%8B/">後端架構</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%88%E8%83%BD%E8%AA%BF%E6%A0%A1/">效能調校</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E8%B3%87%E5%AE%89%E4%BA%8B%E4%BB%B6/">資安事件</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">標籤</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET/" rel="tag">.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/NET-Framework/" rel="tag">.NET Framework</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/AOP/" rel="tag">AOP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/API-Design/" rel="tag">API Design</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET/" rel="tag">ASP.NET</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ASP-NET-MVC/" rel="tag">ASP.NET MVC</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ActionFilter/" rel="tag">ActionFilter</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Android/" rel="tag">Android</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/App-Debug/" rel="tag">App Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Architecture/" rel="tag">Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Asp-net/" rel="tag">Asp.net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Attack/" rel="tag">Attack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authentication/" rel="tag">Authentication</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Authorization/" rel="tag">Authorization</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Axios/" rel="tag">Axios</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CMS/" rel="tag">CMS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/CSharp/" rel="tag">CSharp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache/" rel="tag">Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cache-Invalidation/" rel="tag">Cache Invalidation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Clean-Architecture/" rel="tag">Clean Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composable/" rel="tag">Composable</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Composition-Api/" rel="tag">Composition Api</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Cron/" rel="tag">Cron</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debug/" rel="tag">Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Debugger/" rel="tag">Debugger</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Design-Pattern/" rel="tag">Design Pattern</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DistributedSystem/" rel="tag">DistributedSystem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/DotNet/" rel="tag">DotNet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ELK/" rel="tag">ELK</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESLint/" rel="tag">ESLint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Elasticsearch/" rel="tag">Elasticsearch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Enum/" rel="tag">Enum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Error-Handling/" rel="tag">Error Handling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EventSPI/" rel="tag">EventSPI</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Feature-Flag/" rel="tag">Feature Flag</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Fetch/" rel="tag">Fetch</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Frontend-Architecture/" rel="tag">Frontend Architecture</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Git/" rel="tag">Git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GitFlow/" rel="tag">GitFlow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Gzip/" rel="tag">Gzip</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hangfire/" rel="tag">Hangfire</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Incident/" rel="tag">Incident</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Interceptor/" rel="tag">Interceptor</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/JavaScript/" rel="tag">JavaScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Kibana/" rel="tag">Kibana</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LazyCache/" rel="tag">LazyCache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Logging/" rel="tag">Logging</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Login-Flow/" rel="tag">Login Flow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MFA/" rel="tag">MFA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MessageHub/" rel="tag">MessageHub</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Micro-Frontend/" rel="tag">Micro Frontend</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MobileApp/" rel="tag">MobileApp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MongoDB/" rel="tag">MongoDB</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Monitoring/" rel="tag">Monitoring</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Native-Bridge/" rel="tag">Native Bridge</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Nuxt3/" rel="tag">Nuxt3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Performance/" rel="tag">Performance</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pinia/" rel="tag">Pinia</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Pre-Commit/" rel="tag">Pre-Commit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Prerender/" rel="tag">Prerender</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/QA-Testing/" rel="tag">QA Testing</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Queue/" rel="tag">Queue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RabbitMQ/" rel="tag">RabbitMQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Rate-Limiting/" rel="tag">Rate Limiting</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RateLimit/" rel="tag">RateLimit</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Recording/" rel="tag">Recording</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Redis/" rel="tag">Redis</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Responsible-Gambling/" rel="tag">Responsible Gambling</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Revert/" rel="tag">Revert</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RouteConstraint/" rel="tag">RouteConstraint</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SEO/" rel="tag">SEO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SSO/" rel="tag">SSO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Safari/" rel="tag">Safari</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Security/" rel="tag">Security</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Session/" rel="tag">Session</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SessionStorage/" rel="tag">SessionStorage</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Tailwind-CSS/" rel="tag">Tailwind CSS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TypeScript/" rel="tag">TypeScript</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vite/" rel="tag">Vite</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue/" rel="tag">Vue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Life-Cycle/" rel="tag">Vue Life Cycle</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-Router/" rel="tag">Vue Router</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue-js/" rel="tag">Vue.js</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Vue3/" rel="tag">Vue3</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-API/" rel="tag">Web API</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Web-Debug/" rel="tag">Web Debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/WebView/" rel="tag">WebView</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Webpack/" rel="tag">Webpack</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Workflow/" rel="tag">Workflow</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/iOS/" rel="tag">iOS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/v-html/" rel="tag">v-html</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%89%8D%E7%AB%AF%E6%9E%B6%E6%A7%8B/" rel="tag">前端架構</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BA%AB%E4%BB%BD%E9%A9%97%E8%AD%89/" rel="tag">身份驗證</a></li></ul>
+    </div>
+  </div>
+
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+        <a rel="license noopener" target="_blank" href="http://creativecommons.org/licenses/by-nc-nd/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png" /></a></br>
+All website licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" target="_blank">CC BY-NC-ND 4.0</a></br>
+      
+      &copy; 2026 Joseph M Tsai<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+  <script src='https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js'></script>
+  <script>
+    if (window.mermaid) {
+      mermaid.initialize({startOnLoad: true, theme: 'default'});
+    }
+  </script>
+
+  </div>
+</body>
+</html>
